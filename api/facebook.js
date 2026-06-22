@@ -379,7 +379,7 @@ function heroRow(d,cur,prev,ser){
   var reachRate=s.followers?Math.min(100,s.views/s.followers*100):0;
   var gauge='<div class="gauge-card" data-tip="Tổng Views trong kỳ. Vòng cung = Reach rate (Views ÷ Follower)."><div class="gc-h">Tổng Views · '+s.nPosts+' bài</div><div class="gauge-wrap">'+gaugeBig(reachRate,40,nf(s.views),'Reach '+pc(reachRate)+'% · ER '+s.engRate+'%')+'</div><div class="gc-sub">'+nf(s.eng)+' tương tác · TB '+nf(s.avgEngPerPost)+'/bài · mục tiêu reach 40%</div></div>';
   var k=[
-    card('Views',nf(s.views),deltaChip(sumKey(cur,'views'),sumKey(prev,'views')),spark(vv,'var(--accent)'),'Tổng lượt xem bài (thay Impressions từ 11/2025).'),
+    card('Clicks',nf(s.clicks),deltaChip(sumKey(cur,'clicks'),sumKey(prev,'clicks')),spark(vv,'var(--accent)'),'Tổng lượt click vào bài/link. Click Rate = Clicks ÷ Views = '+s.clickRate+'%.'),
     card('Reactions',nf(s.reactions),deltaChip(sumKey(cur,'reactions'),sumKey(prev,'reactions')),'','Tổng cảm xúc (6 loại).'),
     card('Comments',nf(s.comments),deltaChip(sumKey(cur,'comments'),sumKey(prev,'comments')),'','Tổng bình luận.'),
     card('Shares',nf(s.shares),deltaChip(sumKey(cur,'shares'),sumKey(prev,'shares')),'','Tổng lượt chia sẻ — tín hiệu lan toả mạnh.'),
