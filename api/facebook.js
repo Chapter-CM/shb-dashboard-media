@@ -255,6 +255,18 @@ function radialGauge(pct,target){
     +'<text x="110" y="104" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="44" font-weight="700">'+pc(p)+'%</text>'
     +'<text x="110" y="130" text-anchor="middle" fill="rgba(255,255,255,.78)" font-size="12" font-weight="600">Mục tiêu '+target+'%</text></svg>';
 }
+function gaugeBig(pct,target,main,sub){
+  var p=Math.max(0,Math.min(100,pct||0)),cx=110,cy=110,r=88,sw=18,A0=-135,SPAN=270;
+  var valEnd=A0+p/100*SPAN,tickA=A0+Math.max(0,Math.min(100,target))/100*SPAN;
+  var ti=gPolar(cx,cy,r,tickA),to=gPolar(cx,cy,r+11,tickA);
+  var fs=main.length>8?24:main.length>6?30:38;
+  return '<svg width="220" height="200" viewBox="0 0 220 200"><defs><linearGradient id="ggv" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#e7e0ff"/></linearGradient><filter id="glow2"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>'
+    +'<path d="'+gArc(cx,cy,r,A0,A0+SPAN)+'" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="'+sw+'" stroke-linecap="round"/>'
+    +'<path d="'+gArc(cx,cy,r,A0,valEnd)+'" fill="none" stroke="url(#ggv)" stroke-width="'+sw+'" stroke-linecap="round" filter="url(#glow2)"/>'
+    +'<line x1="'+ti[0].toFixed(1)+'" y1="'+ti[1].toFixed(1)+'" x2="'+to[0].toFixed(1)+'" y2="'+to[1].toFixed(1)+'" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>'
+    +'<text x="110" y="102" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="'+fs+'" font-weight="700">'+esc(main)+'</text>'
+    +'<text x="110" y="128" text-anchor="middle" fill="rgba(255,255,255,.82)" font-size="11.5" font-weight="600">'+esc(sub)+'</text></svg>';
+}
 function spark(vals,color){
   if(!vals||vals.length<2)return '';var W=118,H=30,max=Math.max.apply(null,vals),min=Math.min.apply(null,vals);
   var pts=vals.map(function(v,i){return (i/(vals.length-1)*W).toFixed(1)+','+(H-(v-min)/(max-min||1)*(H-4)-2).toFixed(1);}).join(' ');
@@ -284,11 +296,7 @@ function erOf(p){return p.views?engOf(p)/p.views*100:0;}
 function process(posts){
   if(!posts.length)return {empty:true};
   var F=_filter||{};
-  var arr=posts.filter(function(p){
-    if(F.type&&p.type!==F.type)return false;
-    if(F.topic&&p.topic!==F.topic)return false;
-    return true;
-  });
+  var arr=posts.filter(function(p){return matchFilter(p,F);});
   if(!arr.length)return {empty:true};
   var sum={nPosts:arr.length,views:0,comments:0,shares:0,clicks:0,replies:0,pageReplies:0,react:{like:0,love:0,haha:0,wow:0,sad:0,angry:0},firstSum:0,velEarly:0,eng:0,noEng:0};
   arr.forEach(function(p){
@@ -322,9 +330,21 @@ function process(posts){
   // tiers by ER
   var tiers={hot:[],warm:[],cold:[]};rows.forEach(function(r){if(r.er>=avgEr*1.2)tiers.hot.push(r);else if(r.er>=avgEr*.8)tiers.warm.push(r);else tiers.cold.push(r);});
   return {sum:sum,heat:heat,bestH:bestH,bestD:bestD,byType:agg('type'),byTopic:agg('topic'),rows:rows,tiers:tiers,
-    opts:{type:uniq(posts,'type'),topic:uniq(posts,'topic')},filterActive:Object.keys(F).some(function(k){return F[k];})};
+    opts:{type:uniq(posts,'type'),topic:uniq(posts,'topic'),slot:distinct(posts,function(p){return slotOf(p.ts);}),dayType:distinct(posts,function(p){return dayTypeOf(p.ts);}),media:distinct(posts,mediaOf)},filterActive:Object.keys(F).some(function(k){return F[k];})};
 }
 function uniq(posts,key){var s={};posts.forEach(function(p){if(p[key])s[p[key]]=1;});return Object.keys(s).sort();}
+function slotOf(ts){var h=new Date(ts).getHours();return h<5?'Đêm (0–5h)':h<12?'Sáng (5–12h)':h<18?'Chiều (12–18h)':'Tối (18–24h)';}
+function dayTypeOf(ts){var d=new Date(ts).getDay();return (d===0||d===6)?'Cuối tuần':'Ngày thường';}
+function mediaOf(p){return p.video?'Video / Reel':'Ảnh / Text / Link';}
+function distinct(posts,fn){var s={};posts.forEach(function(p){s[fn(p)]=1;});return Object.keys(s);}
+function matchFilter(p,F){
+  if(F.type&&p.type!==F.type)return false;
+  if(F.topic&&p.topic!==F.topic)return false;
+  if(F.slot&&slotOf(p.ts)!==F.slot)return false;
+  if(F.dayType&&dayTypeOf(p.ts)!==F.dayType)return false;
+  if(F.media&&mediaOf(p)!==F.media)return false;
+  return true;
+}
 function windowPosts(days,back){if(!days)return back?[]:DATA.posts;var now=Date.now(),hi=now-back*days*864e5,lo=hi-days*864e5;return DATA.posts.filter(function(p){return p.ts<=hi&&p.ts>lo;});}
 function windowSeries(days){if(!days)return DATA.series;return DATA.series.slice(Math.max(0,DATA.series.length-days));}
 
@@ -356,7 +376,8 @@ function heroRow(d,cur,prev,ser){
   var s=d.sum;
   function card(label,val,dH,spH,tip){return '<div class="kpi" data-tip="'+esc(tip)+'"><div class="kl">'+label+'</div><div class="kv">'+val+'</div><div class="krow">'+(dH||'<span class="delta flat"></span>')+(spH||'')+'</div></div>';}
   var fv=ser.map(function(b){return b.followers;}),vv=ser.map(function(b){return b.views;});
-  var gauge='<div class="gauge-card" data-tip="Engagement Rate = tổng tương tác ÷ views. Mục tiêu '+TARGET_ER+'%."><div class="gc-h">Engagement Rate · mục tiêu '+TARGET_ER+'%</div><div class="gauge-wrap">'+radialGauge(s.engRate,TARGET_ER)+'</div><div class="gc-sub">'+nf(s.eng)+' tương tác / '+nf(s.views)+' views · '+s.nPosts+' bài</div></div>';
+  var reachRate=s.followers?Math.min(100,s.views/s.followers*100):0;
+  var gauge='<div class="gauge-card" data-tip="Tổng Views trong kỳ. Vòng cung = Reach rate (Views ÷ Follower)."><div class="gc-h">Tổng Views · '+s.nPosts+' bài</div><div class="gauge-wrap">'+gaugeBig(reachRate,40,nf(s.views),'Reach '+pc(reachRate)+'% · ER '+s.engRate+'%')+'</div><div class="gc-sub">'+nf(s.eng)+' tương tác · TB '+nf(s.avgEngPerPost)+'/bài · mục tiêu reach 40%</div></div>';
   var k=[
     card('Views',nf(s.views),deltaChip(sumKey(cur,'views'),sumKey(prev,'views')),spark(vv,'var(--accent)'),'Tổng lượt xem bài (thay Impressions từ 11/2025).'),
     card('Reactions',nf(s.reactions),deltaChip(sumKey(cur,'reactions'),sumKey(prev,'reactions')),'','Tổng cảm xúc (6 loại).'),
@@ -402,11 +423,12 @@ function timingPanel(d){
   return '<div class="panel"><div class="panel-h" data-tip="Tương tác theo Thứ × Giờ. Ô đậm = giờ vàng đăng bài.">Best time · cao điểm <b style="color:var(--accent)">'+DOWF[d.bestD]+' '+d.bestH+'h</b></div><div class="heat">'+hh+grid+'</div></div>';
 }
 function mixSection(d){
-  function bars(list,tipName){var max=Math.max.apply(null,list.map(function(x){return x.eng;}).concat([1]));
-    return list.map(function(x){return '<div class="rrow"><span class="rlbl">'+esc(x.name)+' <span style="color:var(--faint)">('+x.n+')</span></span><div class="rbar"><span style="width:'+(x.eng/max*100).toFixed(1)+'%;background:var(--grad)"></span></div><span class="rval">'+x.er+'%</span></div>';}).join('');}
-  return '<section id="s-mix"><div class="eyebrow">Phân tích nội dung</div><div class="row2">'
-    +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate theo định dạng bài.">Theo định dạng</div>'+bars(d.byType)+'</div>'
-    +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate theo chủ đề.">Theo chủ đề</div>'+bars(d.byTopic)+'</div>'
+  var F=_filter||{};
+  function bars(list,key){var max=Math.max.apply(null,list.map(function(x){return x.eng;}).concat([1]));
+    return list.map(function(x){var on=F[key]===x.name;return '<div class="rrow" style="cursor:pointer;'+(on?'background:var(--accent-bg);border-radius:8px':'')+'" onclick="setFilter(\''+key+'\',\''+jsq(x.name)+'\')" data-tip="Bấm để lọc chéo theo mục này (bấm lại để bỏ)"><span class="rlbl">'+esc(x.name)+' <span style="color:var(--faint)">('+x.n+')</span></span><div class="rbar"><span style="width:'+(x.eng/max*100).toFixed(1)+'%;background:var(--grad)"></span></div><span class="rval">'+x.er+'%</span></div>';}).join('');}
+  return '<section id="s-mix"><div class="eyebrow">Phân tích nội dung — bấm để lọc chéo</div><div class="row2">'
+    +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate theo định dạng bài. Bấm để lọc.">Theo định dạng</div>'+bars(d.byType,'type')+'</div>'
+    +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate theo chủ đề. Bấm để lọc.">Theo chủ đề</div>'+bars(d.byTopic,'topic')+'</div>'
     +'</div></section>';
 }
 function contentSection(d){
@@ -470,13 +492,13 @@ function dictSection(){
 
 /* ── filter bar / nav / masthead ── */
 function filterStatusBar(){var F=_filter||{};var active=Object.keys(F).filter(function(k){return F[k];});if(!active.length)return '';
-  var L={type:'Định dạng',topic:'Chủ đề'};var chips=active.map(function(k){return '<span class="f-chip">'+L[k]+': <b>'+esc(F[k])+'</b> <span class="cx" onclick="clearFilter(\''+k+'\')">×</span></span>';}).join('');
+  var L={type:'Định dạng',topic:'Chủ đề',media:'Media',slot:'Khung giờ',dayType:'Ngày'};var chips=active.map(function(k){return '<span class="f-chip">'+L[k]+': <b>'+esc(F[k])+'</b> <span class="cx" onclick="clearFilter(\''+k+'\')">×</span></span>';}).join('');
   return '<div class="filter-status"><span class="lbl">Đang lọc</span>'+chips+'<button class="f-clear-all" onclick="clearAllFilters()">× Xóa tất cả</button></div>';}
 function filterBar(d){var F=_filter||{},o=d.opts||{};
   function sel(key,allLabel){var list=o[key]||[];if(!list.length)return '';var cur=F[key]||'';return '<select onchange="setFilter(\''+key+'\',this.value)"><option value="">'+allLabel+'</option>'+list.map(function(v){return '<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(v)+'</option>';}).join('')+'</select>';}
   function topicSel(){var list=o.topic||[],cur=F.topic||'';var label=cur||'Tất cả chủ đề';var opts='<div class="csel-opt'+(cur?'':' on')+'" onclick="pickTopic(\'\')">Tất cả chủ đề</div>'+list.map(function(v){return '<div class="csel-opt'+(v===cur?' on':'')+'" onclick="pickTopic(\''+jsq(v)+'\')">'+esc(v)+'</div>';}).join('');
     return '<div class="csel"><div class="csel-btn" onclick="openTopicSel(event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div><div class="csel-dd" id="topic-dd" style="display:none"><input class="csel-inp" placeholder="🔍 Tìm chủ đề…" oninput="filterTopicSel(this.value)" onclick="event.stopPropagation()"><div class="csel-list" id="topic-list">'+opts+'</div></div></div>';}
-  return '<div class="fbar"><span class="flbl">Lọc</span>'+topicSel()+sel('type','Mọi định dạng')+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa lọc</button>':'')+'</div>';}
+  return '<div class="fbar"><span class="flbl">Lọc</span>'+topicSel()+sel('type','Mọi định dạng')+sel('media','Mọi loại media')+sel('slot','Mọi khung giờ')+sel('dayType','Mọi ngày')+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa tất cả</button>':'')+'</div>';}
 function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-react">Cảm xúc</a><a href="#s-engage">Engagement</a><a href="#s-time">Best time</a><a href="#s-content">Nội dung</a><a href="#s-mix">Phân tích</a><a href="#s-aud">Audience</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
 function masthead(mode){
   var mBtn=mode==='ex'?'<button class="mode-btn alt" onclick="setMode(\'op\')" data-tip="Bảng điều hành đầy đủ">Bảng điều hành</button>':'<button class="mode-btn" onclick="setMode(\'ex\')" data-tip="Tóm tắt cho lãnh đạo">Tóm tắt lãnh đạo</button>';
