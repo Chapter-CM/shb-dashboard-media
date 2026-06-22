@@ -196,6 +196,63 @@ tăng trưởng — thứ API không bao giờ trả trực tiếp.
 
 ## 5. Layout & Design — tái dụng nguyên hệ email-tracker
 
+### 5.0 Nghiên cứu thị trường (top tool + UX research)
+
+Đã khảo sát các dashboard marketing/social hàng đầu 2025–2026 (Sprout Social,
+Hootsuite+Talkwalker, Brandwatch, Sprinklr, Meta Business Suite, Databox,
+Geckoboard, Whatagraph, Looker Studio, Klipfolio, Emplifi) + nghiên cứu UX
+(Nielsen Norman, Smashing, UXPin). **5 nguyên tắc hội tụ** áp dụng cho ta:
+
+1. **Inverted pyramid + F-pattern.** Người dùng quét ngang trên cùng rồi xuống
+   trái. → KPI quan trọng nhất đặt **top, trên màn hình đầu** (above the fold).
+2. **6–8 KPI cốt lõi, KHÔNG dàn đều 30 số.** Tạo phân cấp bằng *kích cỡ – màu –
+   vị trí*. Mỗi KPI: số lớn + nhãn + mũi tên trend + sparkline + so kỳ trước.
+3. **Bento grid** — khối module gọn, dễ quét, mobile-friendly.
+4. **3 tầng chiều dọc:** trên = KPI tổng quan · giữa = biểu đồ xu hướng/time-series
+   · dưới = bảng chi tiết (progressive disclosure — đào sâu khi cần).
+5. **Tabs theo định dạng** (Meta Business Suite: Posts / Reels / Video) +
+   **so sánh kỳ vs kỳ** + **benchmark vs trung bình của chính mình**.
+
+> Tin tốt: email-tracker **đã** hiện thực gần hết bộ này (gauge, KPI card +
+> sparkline, area chart, tier, bảng search/pagination, cửa sổ `cl` vs `pl`, 2
+> view operational/executive, cross-filter). Ta kế thừa một bộ khung
+> best-in-class và chỉ cần sắp lại theo inverted pyramid + thêm tabs định dạng.
+
+### 5.1 Layout chốt (theo inverted pyramid)
+
+```
+┌─ MASTHEAD ── [SHB ▸] [ Email | Facebook ] ···· [7d 30d 90d] [◐ theme] [⌘K] [Operational|Executive] [● cập nhật 2h trước]
+├─ FILTER BAR ── [Khoảng ngày] [Loại bài ▾] [Topic/Chiến dịch ▾] [Định dạng ▾]
+│
+├─ TẦNG 1 · ABOVE THE FOLD ───────────────────────────────────────────
+│   ┌──────────────┐  ┌── HERO KPI (6–8, bento) ──────────────────────┐
+│   │  RADIAL GAUGE │  │ Views │ Reactions │ Comments │ Shares          │
+│   │  Engagement   │  │ New Followers │ Engagement Rate │ Click Rate   │
+│   │  Rate vs mục  │  │ (mỗi card: số lớn + ▲% vs kỳ trước + spark)    │
+│   └──────────────┘  └────────────────────────────────────────────────┘
+│
+├─ TẦNG 2 · XU HƯỚNG (giữa) ──────────────────────────────────────────
+│   [ Area chart: Views/Engagement theo thời gian (snapshot) ]
+│   [ Heatmap giờ×ngày: best time ]   [ Donut: sentiment reactions ]
+│
+├─ TẦNG 3 · HIỆU QUẢ NỘI DUNG (tabs) ─────────────────────────────────
+│   ( Posts | Reels/Video )  bảng sort + search + pagination
+│   → click 1 dòng = drill xuống chi tiết bài
+│
+├─ TẦNG 4 · PHÂN TÍCH ────────────────────────────────────────────────
+│   [ Theo loại bài ] [ Theo topic ] [ Content mix ] [ Engagement velocity ]
+│
+├─ TẦNG 5 · AUDIENCE / PAGE ──────────────────────────────────────────
+│   [ Follower growth (snapshot) ] [ Demographics nếu có ]
+│
+└─ TẦNG 6 · HEALTH ── tuổi snapshot · field lỗi · cảnh báo deprecation
+```
+
+**Executive view** (rút gọn cho lãnh đạo): gauge + 4 hero KPI + 1 area chart +
+top-5 posts + 1 insight callout. Bấm `Operational|Executive` để đổi (`_mode`).
+
+### 5.2 Tái dụng nguyên hệ email-tracker
+
 **Design tokens (đọc trực tiếp từ `api/dashboard.js`, dùng y nguyên):**
 ```
 --bg:#0b0916  --accent:#8b7bff  --accent-2:#5b8cff
