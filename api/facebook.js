@@ -46,7 +46,43 @@ function genMock() {
   for (var d = 89; d >= 0; d--) { f += ri(20, 160); series.push({ ms: now - d * DAY, followers: f, views: ri(6000, 22000), eng: ri(400, 1800) }); }
   return { posts: posts, series: series, page: { followers: f, name: 'SHB Fanpage' } };
 }
-const DATA = genMock();
+// ── DATA LOADER: Supabase nếu có env, ngược lại fallback MOCK ──────────────
+const https = require('https');
+function sbGet(path) {
+  return new Promise(function (resolve, reject) {
+    var base = (process.env.SUPABASE_URL || '').replace(/\/$/, ''), key = process.env.SUPABASE_SERVICE_KEY || '';
+    https.get(base + path, { headers: { apikey: key, Authorization: 'Bearer ' + key, Accept: 'application/json' } }, function (r) {
+      var b = ''; r.on('data', function (c) { b += c; }); r.on('end', function () { try { resolve(JSON.parse(b)); } catch (e) { reject(e); } });
+    }).on('error', reject);
+  });
+}
+function mapSupabase(rows, snaps) {
+  var posts = rows.map(function (r) {
+    return {
+      id: r.post_id, msg: r.message || '(không có nội dung)', ts: new Date(r.created_time).getTime(),
+      type: r.type || 'Text', topic: r.topic || 'Khác', permalink: r.permalink || '#', views: r.views || 0,
+      react: { like: r.like_count || 0, love: r.love_count || 0, haha: r.haha_count || 0, wow: r.wow_count || 0, sad: r.sad_count || 0, angry: r.angry_count || 0 },
+      comments: r.comments || 0, replies: r.replies || 0, pageReplies: r.page_replies || 0,
+      shares: r.shares || 0, clicks: r.clicks || 0, firstCommentMin: r.first_comment_min || 0,
+      video: r.video || null, vel: r.vel || { h1: 0, h3: 0, h6: 0, h24: 0 }
+    };
+  });
+  var series = (snaps || []).map(function (s) { return { ms: new Date(s.captured_at).getTime(), followers: s.followers || 0, views: s.views || 0, eng: s.engagement || 0 }; });
+  if (!series.length) series = genMock().series;
+  var followers = series.length ? series[series.length - 1].followers : 0;
+  return { posts: posts, series: series, page: { followers: followers, name: 'SHB Fanpage' } };
+}
+async function loadData() {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) return genMock();
+  try {
+    var r = await Promise.all([
+      sbGet('/rest/v1/fb_posts?select=*&order=created_time.desc&limit=500'),
+      sbGet('/rest/v1/fb_page_snapshots?select=*&order=captured_at.asc&limit=400')
+    ]);
+    if (!Array.isArray(r[0]) || !r[0].length) return genMock();
+    return mapSupabase(r[0], r[1]);
+  } catch (e) { console.error('[fb loadData]', e && e.message); return genMock(); }
+}
 
 // ── CSS (tokens + class y hệt email-tracker, + class nâng cấp) ────────────
 const CSS = `
@@ -216,6 +252,7 @@ tbody tr[onclick]{cursor:pointer}td.num,th.num{text-align:right;font-family:var(
 
 // ── HANDLER ───────────────────────────────────────────────────────────────
 module.exports = async (req, res) => {
+  const DATA = await loadData();
   const safe = JSON.stringify(DATA).replace(/<\/script>/gi, '<\\/script>');
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send('<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8">'
