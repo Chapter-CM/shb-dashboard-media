@@ -1,6 +1,6 @@
 {
   "crons": [
-    { "path": "/api/fetch", "schedule": "0 */2 * * *" }
+    { "path": "/api/fetch", "schedule": "0 1 * * *" }
   ],
   "rewrites": [
     { "source": "/", "destination": "/api/facebook" }
