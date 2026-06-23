@@ -146,13 +146,36 @@ tăng trưởng — thứ API không bao giờ trả trực tiếp.
 | Link clicks | ✅⚠️ | `post_clicks` (insights — **xác nhận còn sống sau 06/2026**) |
 | Click type breakdown | ✅⚠️ | `post_clicks_by_type` (xác nhận) |
 
-### VIDEO & REELS  *(vùng biến động)*
+### VIDEO & REELS  *(vùng biến động — hậu 15/06/2026)*
 | Chỉ số | Khả thi | Cách lấy |
 |---|:--:|---|
-| Video Views (ngưỡng giây) | ✅⚠️ | 3-sec views đã bỏ 06/2026 → **Media Views**. Xác nhận string |
-| Avg Watch Time | ✅⚠️ | Video insights (avg watch time) |
-| Completion Rate | 🟡⚠️ | Tính từ watch-time / độ dài video |
-| Reels Views + Replays | ✅⚠️ | Reels insights riêng (metric mới) |
+| Video Media Views | ✅⚠️ | `/{VIDEO_ID}/video_insights?metric=total_video_views` — **thay 3-sec views** (deprecated 06/2026). Tổng lượt xem video |
+| **Người xem video (unique)** | ✅⚠️ | `total_video_views_unique` — số người xem duy nhất = "Người xem" của video |
+| Autoplay Views | ✅⚠️ | `total_video_views_autoplayed` — lượt autoplay (cuộn qua, thụ động) |
+| Click-to-play Views | ✅⚠️ | `total_video_views_clicked_to_play` — lượt xem chủ động (bấm play) |
+| Avg Watch Time | ✅⚠️ | `total_video_avg_time_watched` (ms → đổi ra giây khi hiển thị) |
+| Total Watch Time | ✅⚠️ | `total_video_view_time` (ms) — tổng thời gian xem tích luỹ |
+| Xem hết video (unique) | ✅⚠️ | `total_video_complete_views_unique` — người xem đến cuối |
+| Completion Rate | 🟡 | Tính: `complete_views_unique ÷ views_unique`. Không cần API thêm |
+| Retention Curve | ✅⚠️ | `total_video_retention_graph` — mảng % người còn xem theo từng % video |
+| Reels Views | ✅⚠️ | Reels có metric riêng (tên chính xác xác nhận tại Graph v23+) |
+| Reels Replays | ✅⚠️ | Reels insights — số lần xem lại |
+
+> **Cách fetch video insights:** Gọi `/{POST_ID}/video_insights?metric=...` (không phải `/insights`) cho post dạng Video/Reel. Tolerant error — nếu lỗi metric thì ghi vào `errors[]`, không làm hỏng cả lần fetch (đã áp dụng cùng pattern).
+
+### LIVESTREAM
+| Chỉ số | Khả thi | Cách lấy |
+|---|:--:|---|
+| Danh sách buổi live | ✅ | `GET /{PAGE_ID}/live_videos?fields=id,title,status,live_status,created_time` |
+| **Peak Concurrent Viewers** | ✅⚠️ | `/{LIVE_VIDEO_ID}/live_video_insights?metric=peak_concurrent_viewers` — đỉnh người xem đồng thời |
+| **Tổng Views (trong + sau live)** | ✅⚠️ | `total_video_views` qua `live_video_insights` |
+| **Người xem duy nhất (live)** | ✅⚠️ | `total_video_views_unique` qua `live_video_insights` |
+| Thời lượng broadcast | 🟡 | `updated_time − created_time` khi `live_status = VOD` |
+| Live Reactions | ✅ | Edge expansion trên live video object (cùng cơ chế post thường, ổn định) |
+| Live Comments | ✅ | `comments.summary(true)` — edge expansion ổn định |
+| VOD sau broadcast | 🟡 | Khi live kết thúc, video tồn tại như regular video → có đủ `video_insights` |
+| Scheduled live (sắp phát) | ✅ | `live_status = SCHEDULED_LIVE` trong `live_videos` feed |
+| Tần suất live / tháng | 🟡 | Đếm buổi từ `created_time` trong kỳ |
 
 ### ENGAGEMENT TỔNG HỢP
 | Chỉ số | Khả thi | Cách lấy |

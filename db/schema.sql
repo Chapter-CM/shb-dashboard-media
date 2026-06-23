@@ -11,7 +11,8 @@ create table if not exists fb_posts (
   type              text,                 -- Ảnh | Video | Reel | Text | Link (đã chuẩn hoá)
   permalink         text,
   topic             text,
-  views             bigint  default 0,    -- Views (thay Impressions 11/2025)
+  views             bigint  default 0,    -- Views = tổng lượt xem (thay Impressions 11/2025)
+  media_viewers     bigint  default 0,    -- Unique people who saw = Người xem (thay Reach 06/2026)
   like_count        int     default 0,
   love_count        int     default 0,
   haha_count        int     default 0,

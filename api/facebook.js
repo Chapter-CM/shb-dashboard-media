@@ -31,13 +31,15 @@ function genMock() {
     var comments = ri(Math.round(base * 2), Math.round(base * 12)), shares = ri(Math.round(base), Math.round(base * 10));
     var clicks = ri(Math.round(base * 4), Math.round(base * 20));
     var eng = like + love + haha + wow + sad + angry + comments + shares;
+    var mediaViewers = Math.round(views * (.62 + rnd() * .16));
     posts.push({
       id: 'p' + i, msg: samples[ri(0, samples.length - 1)] + (rnd() > .5 ? ' #' + topics[ri(0, 5)] : ''),
       ts: ts, type: type, topic: topics[ri(0, 5)], permalink: '#',
-      views: views, react: { like: like, love: love, haha: haha, wow: wow, sad: sad, angry: angry },
+      views: views, mediaViewers: mediaViewers,
+      react: { like: like, love: love, haha: haha, wow: wow, sad: sad, angry: angry },
       comments: comments, replies: ri(0, comments), pageReplies: ri(0, Math.min(comments, ri(0, comments))),
       shares: shares, clicks: clicks, firstCommentMin: ri(2, 180),
-      video: isVid ? { mediaViews: views, avgWatch: ri(6, 42), completion: ri(18, 72), replays: ri(0, Math.round(base * 6)) } : null,
+      video: isVid ? { mediaViews: views, viewers: Math.round(views * (.7 + rnd() * .15)), avgWatch: ri(6, 42), completion: ri(18, 72), replays: ri(0, Math.round(base * 6)) } : null,
       vel: { h1: Math.round(eng * (.18 + rnd() * .12)), h3: Math.round(eng * (.38 + rnd() * .12)), h6: Math.round(eng * (.55 + rnd() * .12)), h24: Math.round(eng * (.82 + rnd() * .12)) }
     });
   }
@@ -60,7 +62,7 @@ function mapSupabase(rows, snaps) {
   var posts = rows.map(function (r) {
     return {
       id: r.post_id, msg: r.message || '(không có nội dung)', ts: new Date(r.created_time).getTime(),
-      type: r.type || 'Text', topic: r.topic || 'Khác', permalink: r.permalink || '#', views: r.views || 0,
+      type: r.type || 'Text', topic: r.topic || 'Khác', permalink: r.permalink || '#', views: r.views || 0, mediaViewers: r.media_viewers || 0,
       react: { like: r.like_count || 0, love: r.love_count || 0, haha: r.haha_count || 0, wow: r.wow_count || 0, sad: r.sad_count || 0, angry: r.angry_count || 0 },
       comments: r.comments || 0, replies: r.replies || 0, pageReplies: r.page_replies || 0,
       shares: r.shares || 0, clicks: r.clicks || 0, firstCommentMin: r.first_comment_min || 0,
@@ -335,9 +337,9 @@ function process(posts){
   var F=_filter||{};
   var arr=posts.filter(function(p){return matchFilter(p,F);});
   if(!arr.length)return {empty:true};
-  var sum={nPosts:arr.length,views:0,comments:0,shares:0,clicks:0,replies:0,pageReplies:0,react:{like:0,love:0,haha:0,wow:0,sad:0,angry:0},firstSum:0,velEarly:0,eng:0,noEng:0};
+  var sum={nPosts:arr.length,views:0,mediaViewers:0,comments:0,shares:0,clicks:0,replies:0,pageReplies:0,react:{like:0,love:0,haha:0,wow:0,sad:0,angry:0},firstSum:0,velEarly:0,eng:0,noEng:0};
   arr.forEach(function(p){
-    sum.views+=p.views;sum.comments+=p.comments;sum.shares+=p.shares;sum.clicks+=p.clicks;
+    sum.views+=p.views;sum.mediaViewers+=(p.mediaViewers||0);sum.comments+=p.comments;sum.shares+=p.shares;sum.clicks+=p.clicks;
     sum.replies+=p.replies;sum.pageReplies+=p.pageReplies;sum.firstSum+=p.firstCommentMin;
     Object.keys(p.react).forEach(function(k){sum.react[k]+=p.react[k];});
     var e=engOf(p);sum.eng+=e;if(e===0)sum.noEng++;sum.velEarly+=p.vel.h1;
@@ -356,6 +358,7 @@ function process(posts){
   sum.avgFirst=Math.round(sum.firstSum/arr.length);
   sum.velocity=sum.eng?pc(sum.velEarly/sum.eng*100):0;
   sum.followers=DATA.page.followers;
+  sum.reachRate=sum.followers?pc(sum.mediaViewers/sum.followers*100):0;
   // best time heatmap: 7 days x 24h, weighted by engagement
   var heat=[];for(var i=0;i<7;i++){heat.push(new Array(24).fill(0));}
   arr.forEach(function(p){var d=new Date(p.ts);heat[(d.getDay()+6)%7][d.getHours()]+=engOf(p);});
@@ -413,15 +416,15 @@ function heroRow(d,cur,prev,ser){
   var s=d.sum;
   function card(label,val,dH,spH,tip){return '<div class="kpi" data-tip="'+esc(tip)+'"><div class="kl">'+label+'</div><div class="kv">'+val+'</div><div class="krow">'+(dH||'<span class="delta flat"></span>')+(spH||'')+'</div></div>';}
   var fv=ser.map(function(b){return b.followers;}),vv=ser.map(function(b){return b.views;});
-  var reachRate=s.followers?Math.min(100,s.views/s.followers*100):0;
-  var gauge='<div class="gauge-card" data-tip="Tổng Views trong kỳ. Vòng cung = Reach rate (Views ÷ Follower)."><div class="gc-h">Tổng Views · '+s.nPosts+' bài</div><div class="gauge-wrap">'+gaugeBig(reachRate,40,nf(s.views),'Reach '+pc(reachRate)+'% · ER '+s.engRate+'%')+'</div><div class="gc-sub">'+nf(s.eng)+' tương tác · TB '+nf(s.avgEngPerPost)+'/bài · mục tiêu reach 40%</div></div>';
+  var reachRate=s.followers?Math.min(100,s.mediaViewers/s.followers*100):0;
+  var gauge='<div class="gauge-card" data-tip="Tổng Views trong kỳ (tổng lượt xem). Vòng cung = Reach rate = Người xem duy nhất ÷ Follower."><div class="gc-h">Tổng Views · '+s.nPosts+' bài</div><div class="gauge-wrap">'+gaugeBig(reachRate,40,nf(s.views),'Reach '+pc(reachRate)+'% · ER '+s.engRate+'%')+'</div><div class="gc-sub">'+nf(s.mediaViewers)+' người xem · '+nf(s.eng)+' tương tác · mục tiêu reach 40%</div></div>';
   var k=[
-    card('Clicks',nf(s.clicks),deltaChip(sumKey(cur,'clicks'),sumKey(prev,'clicks')),spark(vv,'var(--accent)'),'Tổng lượt click vào bài/link. Click Rate = Clicks ÷ Views = '+s.clickRate+'%.'),
+    card('Người xem',nf(s.mediaViewers),deltaChip(sumKey(cur,'mediaViewers'),sumKey(prev,'mediaViewers')),'','Media Viewers — số người duy nhất đã thấy bài (thay Reach từ 15/06/2026). Reach Rate = '+pc(reachRate)+'%.'),
     card('Reactions',nf(s.reactions),deltaChip(sumKey(cur,'reactions'),sumKey(prev,'reactions')),'','Tổng cảm xúc (6 loại).'),
     card('Comments',nf(s.comments),deltaChip(sumKey(cur,'comments'),sumKey(prev,'comments')),'','Tổng bình luận.'),
     card('Shares',nf(s.shares),deltaChip(sumKey(cur,'shares'),sumKey(prev,'shares')),'','Tổng lượt chia sẻ — tín hiệu lan toả mạnh.'),
     card('Follower',nf(s.followers),'',spark(fv,'var(--good)'),'Tổng follower hiện tại (cần snapshot để có growth).'),
-    card('TB tương tác/bài',nf(s.avgEngPerPost),'','','Trung bình tương tác mỗi bài trong kỳ.')
+    card('Clicks',nf(s.clicks),deltaChip(sumKey(cur,'clicks'),sumKey(prev,'clicks')),spark(vv,'var(--accent)'),'Tổng lượt click vào bài/link. Click Rate = Clicks ÷ Views = '+s.clickRate+'%.')
   ].join('');
   return '<div class="hero-row">'+gauge+'<div class="kpi-col">'+k+'</div></div>';
 }
@@ -479,7 +482,7 @@ function contentSection(d){
         +'<tr class="drill" id="dr-'+p.id+'" style="display:none"><td colspan="8"><div class="drill-in">'
         +'<div class="dd">Đăng lúc<b>'+fmtTime(p.ts)+'</b></div><div class="dd">Chủ đề<b>'+esc(p.topic)+'</b></div>'
         +'<div class="dd">Clicks<b>'+nf(p.clicks)+'</b></div><div class="dd">Velocity 1h<b>'+pc(p.vel.h1/Math.max(1,r.eng)*100)+'%</b></div>'
-        +(p.video?'<div class="dd">Watch TB<b>'+p.video.avgWatch+'s</b></div><div class="dd">Completion<b>'+p.video.completion+'%</b></div><div class="dd">Replays<b>'+nf(p.video.replays)+'</b></div>':'')
+        +(p.video?'<div class="dd">Người xem<b>'+nf(p.video.viewers||0)+'</b></div><div class="dd">Watch TB<b>'+p.video.avgWatch+'s</b></div><div class="dd">Completion<b>'+p.video.completion+'%</b></div><div class="dd">Replays<b>'+nf(p.video.replays)+'</b></div>':'')
         +'<div class="dd">Admin reply<b>'+p.pageReplies+'/'+p.comments+'</b></div><div class="dd">Comment đầu<b>'+p.firstCommentMin+'p</b></div>'
         +'</div></td></tr>';}});
   var id='posts';

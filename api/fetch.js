@@ -86,12 +86,15 @@ module.exports = async (req, res) => {
         } catch (e) { out.errors.push('insights ' + p.id + ': ' + e.message); }
       }
       var views = ins.post_impressions_unique || ins.post_impressions || ins.post_views || 0;
+      // Media Viewers = unique people who saw (Reach replacement post-06/2026).
+      // Tên metric chính xác biến động — thử nhiều tên, dùng cái đầu tiên có giá trị.
+      var mediaViewers = ins.media_viewers || ins.post_media_viewers || ins.post_views_unique || 0;
       var clicks = ins.post_clicks || 0;
       var reactionsTotal = REACT.reduce(function (a, t) { return a + react[t]; }, 0);
       var engagement = reactionsTotal + comments + shares;
       rows.push({
         post_id: p.id, page_id: PAGE_ID, message: p.message || '', created_time: p.created_time,
-        type: mapType(p), permalink: p.permalink_url || '', topic: topicOf(p.message), views: views,
+        type: mapType(p), permalink: p.permalink_url || '', topic: topicOf(p.message), views: views, media_viewers: mediaViewers,
         like_count: react.like, love_count: react.love, haha_count: react.haha, wow_count: react.wow, sad_count: react.sad, angry_count: react.angry,
         comments: comments, shares: shares, clicks: clicks, updated_at: new Date().toISOString()
       });
