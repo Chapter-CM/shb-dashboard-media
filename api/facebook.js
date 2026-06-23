@@ -489,7 +489,10 @@ function mixSection(d){
     +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate theo chủ đề. Bấm để lọc.">Theo chủ đề</div>'+bars(d.byTopic,'topic')+'</div>'
     +'</div></section>';
 }
+function setCtab(t){_ctab=t;paint();}
 function contentSection(d){
+  var v=d.video;
+  // ── tab: Tất cả bài ──
   regTable({id:'posts',rows:d.rows,pageSize:12,cols:8,
     search:function(r,q){return norm(r.p.msg).indexOf(q)>-1||norm(r.p.topic).indexOf(q)>-1;},
     sortVal:function(r,k){return k==='ts'?r.p.ts:k==='views'?r.p.views:k==='react'?reactTotal(r.p.react):k==='cmt'?r.p.comments:k==='share'?r.p.shares:k==='er'?r.er:r.eng;},
@@ -503,12 +506,37 @@ function contentSection(d){
         +(p.video?'<div class="dd">Người xem<b>'+nf(p.video.viewers||0)+'</b></div><div class="dd">Watch TB<b>'+p.video.avgWatch+'s</b></div><div class="dd">Completion<b>'+p.video.completion+'%</b></div><div class="dd">Replays<b>'+nf(p.video.replays)+'</b></div>':'')
         +'<div class="dd">Admin reply<b>'+p.pageReplies+'/'+p.comments+'</b></div><div class="dd">Comment đầu<b>'+p.firstCommentMin+'p</b></div>'
         +'</div></td></tr>';}});
-  var id='posts';
-  return '<section id="s-content"><div class="eyebrow">Hiệu quả nội dung — bấm dòng để xem chi tiết</div><div class="panel" id="tbl-'+id+'">'
-    +searchBox(id,'Tìm bài viết / chủ đề…')
-    +'<div class="tw"><table><thead><tr><th>Bài viết</th><th>Loại</th>'
-    +th(id,'views','Views','Sắp theo views')+th(id,'react','React')+th(id,'cmt','Cmt')+th(id,'share','Share')+th(id,'er','ER','Engagement Rate')+th(id,'er2','vs TB')
-    +'</tr></thead><tbody id="tb-'+id+'"></tbody></table></div><div class="pager" id="pg-'+id+'"></div></div></section>';
+  // ── tab: Video / Reel ──
+  regTable({id:'posts-vid',rows:(v&&v.rows)||[],pageSize:10,cols:7,
+    search:function(r,q){return norm(r.p.msg).indexOf(q)>-1;},
+    sortVal:function(r,k){return k==='ts'?r.p.ts:k==='mv'?r.v.mediaViews:k==='vw'?r.v.viewers:k==='wt'?r.v.avgWatch:k==='cp'?r.v.completion:r.v.replays;},
+    render:function(r){var p=r.p,vi=r.v;return '<tr onclick="toggleDrill(\''+p.id+'v\')"><td><span class="nm">'+esc(p.msg.slice(0,50))+'</span></td><td><span class="pill p-neutral">'+esc(p.type)+'</span></td>'
+      +'<td class="num">'+nf(vi.mediaViews)+'</td><td class="num" style="color:var(--good)">'+nf(vi.viewers)+'</td><td class="num">'+vi.avgWatch+'s</td><td class="num">'+vi.completion+'%</td><td class="num">'+nf(vi.replays)+'</td></tr>'
+      +'<tr class="drill" id="dr-'+p.id+'v" style="display:none"><td colspan="7"><div class="drill-in">'
+      +'<div class="dd">Đăng lúc<b>'+fmtTime(p.ts)+'</b></div><div class="dd">Views (post)<b>'+nf(p.views)+'</b></div>'
+      +'<div class="dd">Reactions<b>'+nf(reactTotal(p.react))+'</b></div><div class="dd">Comments<b>'+nf(p.comments)+'</b></div>'
+      +'<div class="dd">Shares<b>'+nf(p.shares)+'</b></div><div class="dd">Clicks<b>'+nf(p.clicks)+'</b></div>'
+      +'</div></td></tr>';}});
+  var isVid=_ctab==='video';
+  var tabs='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">'
+    +'<div class="eyebrow" style="margin:0">Hiệu quả nội dung — bấm dòng để xem chi tiết</div>'
+    +'<div class="seg"><button class="'+(isVid?'':'on')+'" onclick="setCtab(\'posts\')" data-tip="Tất cả bài viết trong kỳ">Tất cả bài</button>'
+    +'<button class="'+(isVid?'on':'')+'" onclick="setCtab(\'video\')" data-tip="Chỉ video &amp; reel — xem media views, người xem, watch time">Video / Reel '+(v&&v.n?'<span class="pill p-neutral" style="font-size:10px">'+v.n+'</span>':'')+'</button></div></div>';
+  if(!isVid){
+    var id='posts';
+    return '<section id="s-content">'+tabs+'<div class="panel" id="tbl-'+id+'">'
+      +searchBox(id,'Tìm bài viết / chủ đề…')
+      +'<div class="tw"><table><thead><tr><th>Bài viết</th><th>Loại</th>'
+      +th(id,'views','Views','Sắp theo views')+th(id,'react','React')+th(id,'cmt','Cmt')+th(id,'share','Share')+th(id,'er','ER','Engagement Rate')+th(id,'er2','vs TB')
+      +'</tr></thead><tbody id="tb-'+id+'"></tbody></table></div><div class="pager" id="pg-'+id+'"></div></div></section>';
+  } else {
+    var vid='posts-vid';
+    return '<section id="s-content">'+tabs+'<div class="panel" id="tbl-'+vid+'">'
+      +searchBox(vid,'Tìm video / reel…')
+      +'<div class="tw"><table><thead><tr><th>Video</th><th>Loại</th>'
+      +th(vid,'mv','Media Views','Tổng lượt xem video')+th(vid,'vw','Người xem','Unique viewers — tô màu xanh')+th(vid,'wt','Watch TB')+th(vid,'cp','Completion')+th(vid,'rep','Replays')
+      +'</tr></thead><tbody id="tb-'+vid+'"></tbody></table></div><div class="pager" id="pg-'+vid+'"></div></div></section>';
+  }
 }
 function videoSection(d){
   var v=d.video,lives=windowLives(_days);
@@ -523,17 +551,7 @@ function videoSection(d){
     +vstat('Completion',v.completion+'%',v.completion>=40?'good':'warn','Tỷ lệ xem hết trung bình.')
     +vstat('Replays',nf(v.replays),'','Tổng lượt xem lại (reels replays).')
     +'</div>';
-  // bảng video sort được
-  regTable({id:'vids',rows:(v&&v.rows)||[],pageSize:8,cols:6,
-    search:function(r,q){return norm(r.p.msg).indexOf(q)>-1;},
-    sortVal:function(r,k){return k==='mv'?r.v.mediaViews:k==='vw'?r.v.viewers:k==='wt'?r.v.avgWatch:k==='cp'?r.v.completion:r.v.replays;},
-    render:function(r){var p=r.p,vi=r.v;return '<tr><td><span class="nm">'+esc(p.msg.slice(0,46))+'</span></td><td><span class="pill p-neutral">'+esc(p.type)+'</span></td>'
-      +'<td class="num">'+nf(vi.mediaViews)+'</td><td class="num">'+nf(vi.viewers)+'</td><td class="num">'+vi.avgWatch+'s</td><td class="num">'+vi.completion+'%</td></tr>';}});
-  var vid='vids';
-  var vtable=noVid?'':'<div class="panel" id="tbl-'+vid+'" style="margin-top:16px"><div class="panel-h" data-tip="Từng video/reel — bấm tiêu đề cột để sắp xếp.">Chi tiết video</div>'+searchBox(vid,'Tìm video…')
-    +'<div class="tw"><table><thead><tr><th>Video</th><th>Loại</th>'
-    +th(vid,'mv','Media Views')+th(vid,'vw','Người xem')+th(vid,'wt','Watch TB')+th(vid,'cp','Completion')
-    +'</tr></thead><tbody id="tb-'+vid+'"></tbody></table></div><div class="pager" id="pg-'+vid+'"></div></div>';
+  // bảng chi tiết video đã chuyển vào contentSection (tab Video/Reel)
   // livestream
   var liveBody;
   if(!lives.length)liveBody='<div class="nd">Chưa có buổi livestream trong kỳ <span style="display:block;font-size:11.5px;margin-top:6px;color:var(--faint)">Cần ingest /{PAGE_ID}/live_videos qua fetch.js (peak_concurrent_viewers · live_video_insights)</span></div>';
@@ -550,8 +568,7 @@ function videoSection(d){
       +'</tbody></table></div>';
   }
   return '<section id="s-video"><div class="eyebrow">Video / Reel &amp; Livestream</div>'
-    +'<div class="panel"><div class="panel-h" data-tip="Hiệu quả video & reel: media views, người xem duy nhất, watch time, completion.">Video &amp; Reel</div>'+kpis+'</div>'
-    +vtable
+    +'<div class="panel"><div class="panel-h" data-tip="Hiệu quả video & reel: media views, người xem duy nhất, watch time, completion. Chi tiết từng video: xem tab Video/Reel ở section Nội dung.">Video &amp; Reel · tổng hợp</div>'+kpis+'</div>'
     +'<div class="panel" style="margin-top:16px"><div class="panel-h" data-tip="Phát trực tiếp: peak concurrent viewers, người xem duy nhất, thời lượng.">Livestream</div>'+liveBody+'</div>'
     +'</section>';
 }
@@ -650,7 +667,7 @@ function executive(d,cur,prev){
 }
 
 /* ── app state ── */
-var _days=0,_mode='op',_theme='dark',_filter={},_density='comfortable',_metric='views',_inited=false,_tipInited=false,_cmds=[],_cmdSel=0,_cmdFiltered=[];
+var _days=0,_mode='op',_theme='dark',_filter={},_density='comfortable',_metric='views',_ctab='posts',_inited=false,_tipInited=false,_cmds=[],_cmdSel=0,_cmdFiltered=[];
 try{var _st=localStorage.getItem('shb-fb-theme');if(_st)_theme=_st;}catch(e){}
 try{var _sd=localStorage.getItem('shb-fb-density');if(_sd)_density=_sd;}catch(e){}
 function applyTheme(){if(_theme==='light')document.documentElement.setAttribute('data-theme','light');else document.documentElement.removeAttribute('data-theme');}
