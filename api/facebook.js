@@ -77,11 +77,33 @@ function mapSupabase(rows, snaps) {
       video: r.video || null, vel: r.vel || { h1: 0, h3: 0, h6: 0, h24: 0 }
     };
   });
+  // Gộp bài Group vào pipeline chính -> hiện trong KPI tổng quan + bảng Hiệu quả nội dung,
+  // giống cách Professional Dashboard của Facebook gộp bài group vào nội dung của Page.
+  var groupRows = arguments[2];
+  posts = posts.concat(groupAsPosts(groupRows));
   var series = (snaps || []).map(function (s) { return { ms: new Date(s.captured_at).getTime(), followers: s.followers || 0, views: s.views || 0, eng: s.engagement || 0 }; });
   if (!series.length) series = genMock().series;
   var followers = series.length ? series[series.length - 1].followers : 0;
   // lives: chưa ingest qua fetch.js (live_videos) — để trống, section tự hiện empty-state.
-  return { posts: posts, series: series, lives: [], page: { followers: followers, name: 'SHB Fanpage' }, groupPosts: mapGroupPosts(arguments[2]) };
+  return { posts: posts, series: series, lives: [], page: { followers: followers, name: 'SHB Fanpage' }, groupPosts: mapGroupPosts(groupRows), live: true };
+}
+function gpType(t) { t = String(t || '').toUpperCase(); if (/REEL/.test(t)) return 'Reel'; if (/VIDEO/.test(t)) return 'Video'; if (/MULTI_IMAGE|PHOTO|IMAGE|ALBUM/.test(t)) return 'Ảnh'; if (/LINK|SHARE/.test(t)) return 'Link'; return 'Text'; }
+function gpTopic(msg) { var m = String(msg || '').match(/#(\w+)/); return m ? m[1] : 'Group'; }
+// Map 1 fb_group_posts -> shape post chuẩn. Chỉ có tổng engagement -> reactions ≈ engagement - comments,
+// shares chưa tách được nên = 0 (Facebook cũng hiển thị engagement gộp).
+function groupAsPosts(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(function (r) {
+    var eng = r.engagement || 0, cmt = r.comments || 0, reactions = Math.max(0, eng - cmt);
+    return {
+      id: 'g_' + r.post_id, msg: r.title || '(không có nội dung)', ts: r.created_time ? new Date(r.created_time).getTime() : 0,
+      type: gpType(r.post_type), topic: gpTopic(r.title), permalink: r.permalink || '#',
+      views: r.reach || 0, mediaViewers: r.viewers || 0,
+      react: { like: reactions, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
+      comments: cmt, replies: 0, pageReplies: 0, shares: 0, clicks: 0, firstCommentMin: 0,
+      video: null, vel: { h1: 0, h3: 0, h6: 0, h24: 0 }, isGroup: true
+    };
+  });
 }
 // Bài Group "SHB Một Nhà" (nạp qua userscript -> /api/ingest -> fb_group_posts).
 function mapGroupPosts(rows) {
@@ -103,10 +125,10 @@ async function loadData() {
       sbGet('/rest/v1/fb_page_snapshots?select=*&order=captured_at.asc&limit=400'),
       sbGet('/rest/v1/fb_group_posts?select=*&order=reach.desc&limit=500').catch(function () { return []; })
     ]);
-    if (!Array.isArray(r[0]) || !r[0].length) {
-      // Page chưa có dữ liệu nhưng group có thể có -> vẫn dùng mock cho page, gắn group thật.
-      var m = genMock(); m.groupPosts = mapGroupPosts(r[2]); return m;
-    }
+    var hasPage = Array.isArray(r[0]) && r[0].length;
+    var hasGroup = Array.isArray(r[2]) && r[2].length;
+    if (!hasPage && !hasGroup) return genMock();          // cả hai rỗng -> demo
+    if (!hasPage && hasGroup) return mapSupabase([], r[1], r[2]); // chỉ có group -> dựng từ group thật
     return mapSupabase(r[0], r[1], r[2]);
   } catch (e) { console.error('[fb loadData]', e && e.message); return genMock(); }
 }
@@ -685,7 +707,7 @@ function masthead(mode){
     +'<button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K)">⌘K</button>'
     +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Sáng/Tối">'+(_theme==='dark'?'☼':'☾')+'</button>'
     +'<button class="icon-btn" onclick="toggleDensity()" data-tip="Thoáng/Gọn">⇕</button>'
-    +'<span class="fresh" data-tip="Lần fetch gần nhất">● mock</span>'+mBtn+'</div></div></div>';
+    +'<span class="fresh" data-tip="Nguồn dữ liệu">● '+(DATA.live?'live':'demo')+'</span>'+mBtn+'</div></div></div>';
 }
 
 /* ── views ── */
