@@ -54,7 +54,7 @@ function genMock() {
     var lviews = ri(3000, 28000), lviewers = Math.round(lviews * (.55 + rnd() * .2)), lpeak = Math.round(lviewers * (.08 + rnd() * .14));
     lives.push({ id: 'L' + L, title: liveTitles[L % liveTitles.length], ts: lts, durationMin: ri(18, 75), peak: lpeak, views: lviews, viewers: lviewers, reactions: ri(80, 1400), comments: ri(20, 600), status: 'VOD' });
   }
-  return { posts: posts, series: series, lives: lives, page: { followers: f, name: 'SHB Fanpage' } };
+  return { posts: posts, series: series, lives: lives, page: { followers: f, name: 'SHB Fanpage' }, groupPosts: [] };
 }
 // ── DATA LOADER: Supabase nếu có env, ngược lại fallback MOCK ──────────────
 const https = require('https');
@@ -81,17 +81,33 @@ function mapSupabase(rows, snaps) {
   if (!series.length) series = genMock().series;
   var followers = series.length ? series[series.length - 1].followers : 0;
   // lives: chưa ingest qua fetch.js (live_videos) — để trống, section tự hiện empty-state.
-  return { posts: posts, series: series, lives: [], page: { followers: followers, name: 'SHB Fanpage' } };
+  return { posts: posts, series: series, lives: [], page: { followers: followers, name: 'SHB Fanpage' }, groupPosts: mapGroupPosts(arguments[2]) };
+}
+// Bài Group "SHB Một Nhà" (nạp qua userscript -> /api/ingest -> fb_group_posts).
+function mapGroupPosts(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(function (r) {
+    return {
+      id: r.post_id, title: r.title || '(không có nội dung)', permalink: r.permalink || '#',
+      ts: r.created_time ? new Date(r.created_time).getTime() : 0, type: r.post_type || '',
+      reach: r.reach || 0, viewers: r.viewers || 0, engagement: r.engagement || 0,
+      comments: r.comments || 0, source: r.source || 'prodash', updated: r.updated_at ? new Date(r.updated_at).getTime() : 0
+    };
+  });
 }
 async function loadData() {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) return genMock();
   try {
     var r = await Promise.all([
       sbGet('/rest/v1/fb_posts?select=*&order=created_time.desc&limit=500'),
-      sbGet('/rest/v1/fb_page_snapshots?select=*&order=captured_at.asc&limit=400')
+      sbGet('/rest/v1/fb_page_snapshots?select=*&order=captured_at.asc&limit=400'),
+      sbGet('/rest/v1/fb_group_posts?select=*&order=reach.desc&limit=500').catch(function () { return []; })
     ]);
-    if (!Array.isArray(r[0]) || !r[0].length) return genMock();
-    return mapSupabase(r[0], r[1]);
+    if (!Array.isArray(r[0]) || !r[0].length) {
+      // Page chưa có dữ liệu nhưng group có thể có -> vẫn dùng mock cho page, gắn group thật.
+      var m = genMock(); m.groupPosts = mapGroupPosts(r[2]); return m;
+    }
+    return mapSupabase(r[0], r[1], r[2]);
   } catch (e) { console.error('[fb loadData]', e && e.message); return genMock(); }
 }
 
@@ -538,6 +554,47 @@ function contentSection(d){
       +'</tr></thead><tbody id="tb-'+vid+'"></tbody></table></div><div class="pager" id="pg-'+vid+'"></div></div></section>';
   }
 }
+/* ── Bài Group "SHB Một Nhà" — nạp qua /api/ingest (CSV/userscript), không lấy được qua Graph API ── */
+function groupSection(){
+  var gp=(DATA.groupPosts||[]).slice();
+  if(!gp.length){
+    return '<section id="s-group"><div class="eyebrow">Bài Group "SHB Một Nhà"</div>'
+      +'<div class="panel"><div class="nd" style="text-align:center;padding:40px 20px">'
+      +'<div style="font-size:34px;color:var(--faint)">📥</div>'
+      +'<h3 style="color:var(--text-2);margin:12px 0 6px">Chưa có dữ liệu bài Group</h3>'
+      +'<div style="color:var(--muted);font-size:12.5px;max-width:520px;margin:0 auto;line-height:1.6">Số liệu bài đăng trong Group không lấy được qua Facebook Graph API (Groups API đã bị Meta gỡ 22/04/2024). Nạp dữ liệu từ <b>Thư viện nội dung → Xuất dữ liệu (CSV)</b> bằng công cụ <code>tools/csv-upload.html</code>, hoặc bật userscript <code>tools/shb-content-library.user.js</code>.</div>'
+      +'</div></div></section>';
+  }
+  // KPI tổng
+  var tReach=0,tView=0,tEng=0,tCmt=0;
+  gp.forEach(function(p){tReach+=p.reach;tView+=p.viewers;tEng+=p.engagement;tCmt+=p.comments;});
+  var src=gp[0]&&gp[0].source==='csv'?'CSV':'Content Library';
+  var upd=gp.reduce(function(a,p){return Math.max(a,p.updated||0);},0);
+  function kpi(l,v,tip){return '<div class="kpi"><div class="kpi-l" data-tip="'+esc(tip)+'">'+l+'</div><div class="kpi-v num">'+v+'</div></div>';}
+  var kpis='<div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px">'
+    +kpi('Số bài',nf(gp.length),'Tổng bài Group đã nạp.')
+    +kpi('Lượt xem',nf(tReach),'Tổng lượt xem (cột "Lượt xem" trong Content Library).')
+    +kpi('Người xem',nf(tView),'Tổng người xem duy nhất.')
+    +kpi('Tương tác',nf(tEng),'Tổng lượt tương tác.')
+    +kpi('Bình luận',nf(tCmt),'Tổng bình luận.')
+    +'</div>';
+  var id='grp';
+  regTable({id:id,rows:gp,pageSize:15,cols:6,
+    search:function(p,q){return norm(p.title).indexOf(q)>-1;},
+    sortVal:function(p,k){return k==='ts'?p.ts:k==='reach'?p.reach:k==='view'?p.viewers:k==='eng'?p.engagement:k==='cmt'?p.comments:p.reach;},
+    render:function(p){var link=p.permalink&&p.permalink!=='#'?p.permalink:'';
+      return '<tr>'+(link?'<td><a href="'+esc(link)+'" target="_blank" rel="noopener" class="nm" style="color:var(--text)">'+esc(p.title.slice(0,64))+'</a></td>':'<td><span class="nm">'+esc(p.title.slice(0,64))+'</span></td>')
+        +'<td class="num">'+(p.ts?fmtDay(p.ts):'—')+'</td>'
+        +'<td class="num">'+nf(p.reach)+'</td><td class="num" style="color:var(--good)">'+nf(p.viewers)+'</td>'
+        +'<td class="num">'+nf(p.engagement)+'</td><td class="num">'+nf(p.comments)+'</td></tr>';}});
+  return '<section id="s-group"><div class="eyebrow">Bài Group "SHB Một Nhà"<span style="margin-left:auto;font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted)">Nguồn: '+esc(src)+(upd?' · cập nhật '+fmtDay(upd):'')+'</span></div>'
+    +'<div class="so">Nội dung truyền thông (HRMS, EGP, Chuyển tiền quốc tế…) đăng trong Group — <b>không có trên Graph API</b>, nạp thủ công/bán tự động qua <b>/api/ingest</b>.</div>'
+    +kpis
+    +'<div class="panel" id="tbl-'+id+'">'+searchBox(id,'Tìm bài trong group…')
+    +'<div class="tw"><table><thead><tr><th>Bài viết</th>'
+    +th(id,'ts','Đăng')+th(id,'reach','Lượt xem','Sắp theo lượt xem')+th(id,'view','Người xem','Unique viewers')+th(id,'eng','Tương tác')+th(id,'cmt','Bình luận')
+    +'</tr></thead><tbody id="tb-'+id+'"></tbody></table></div><div class="pager" id="pg-'+id+'"></div></div></section>';
+}
 function videoSection(d){
   var v=d.video,lives=windowLives(_days);
   var noVid=!v||!v.n;
@@ -619,7 +676,7 @@ function filterBar(d){var F=_filter||{},o=d.opts||{};
   function topicSel(){var list=o.topic||[],cur=F.topic||'';var label=cur||'Tất cả chủ đề';var opts='<div class="csel-opt'+(cur?'':' on')+'" onclick="pickTopic(\'\')">Tất cả chủ đề</div>'+list.map(function(v){return '<div class="csel-opt'+(v===cur?' on':'')+'" onclick="pickTopic(\''+jsq(v)+'\')">'+esc(v)+'</div>';}).join('');
     return '<div class="csel"><div class="csel-btn" onclick="openTopicSel(event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div><div class="csel-dd" id="topic-dd" style="display:none"><input class="csel-inp" placeholder="🔍 Tìm chủ đề…" oninput="filterTopicSel(this.value)" onclick="event.stopPropagation()"><div class="csel-list" id="topic-list">'+opts+'</div></div></div>';}
   return '<div class="fbar"><span class="flbl">Lọc</span>'+topicSel()+sel('type','Mọi định dạng')+sel('media','Mọi loại media')+sel('slot','Mọi khung giờ')+sel('dayType','Mọi ngày')+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa tất cả</button>':'')+'</div>';}
-function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-react">Cảm xúc</a><a href="#s-engage">Engagement</a><a href="#s-time">Best time</a><a href="#s-content">Nội dung</a><a href="#s-video">Video/Live</a><a href="#s-mix">Phân tích</a><a href="#s-aud">Audience</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
+function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-react">Cảm xúc</a><a href="#s-engage">Engagement</a><a href="#s-time">Best time</a><a href="#s-content">Nội dung</a><a href="#s-group">Bài Group</a><a href="#s-video">Video/Live</a><a href="#s-mix">Phân tích</a><a href="#s-aud">Audience</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
 function masthead(mode){
   var mBtn=mode==='ex'?'<button class="mode-btn alt" onclick="setMode(\'op\')" data-tip="Bảng điều hành đầy đủ">Bảng điều hành</button>':'<button class="mode-btn" onclick="setMode(\'ex\')" data-tip="Tóm tắt cho lãnh đạo">Tóm tắt lãnh đạo</button>';
   return '<div class="mast"><div class="mast-in"><div class="brand"><div class="logo">SHB</div><div><div class="tt">Facebook Dashboard</div><div class="ss">Fanpage · CM Analytics</div></div></div>'
@@ -639,7 +696,7 @@ function operational(d,cur,prev,ser){
     +'<section id="s-react"><div class="eyebrow">Cảm xúc</div><div class="row2">'+reactionPanel(d)+timingPanelMini(d)+'</div></section>'
     +'<section id="s-engage"><div class="eyebrow">Engagement</div>'+engagementPanel(d)+'</section>'
     +'<section id="s-time"><div class="eyebrow">Best time đăng bài</div>'+timingPanel(d)+'</section>'
-    +contentSection(d)+videoSection(d)+mixSection(d)+audienceSection(d)+insightSection(d)+healthSection(d)+dictSection()
+    +contentSection(d)+groupSection()+videoSection(d)+mixSection(d)+audienceSection(d)+insightSection(d)+healthSection(d)+dictSection()
     +'<div class="foot">SHB CM · Facebook Dashboard · dữ liệu MOCK · tự làm mới 15 phút</div></div>';
 }
 function timingPanelMini(d){
