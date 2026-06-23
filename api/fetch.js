@@ -23,8 +23,13 @@ const TOKEN = process.env.FB_PAGE_TOKEN;
 const SB_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const POST_LIMIT = parseInt(process.env.FB_POST_LIMIT || '50', 10);
-// Tên metric Insights — chỉnh qua env cho khớp version đang dùng.
-const INSIGHT_METRICS = (process.env.FB_INSIGHT_METRICS || 'post_impressions_unique,post_clicks').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+// Post-level Insights ĐÃ CHẾT cho page này (probe 23/06/2026: mọi metric post_* trả #100
+// "not a valid insights metric", kể cả trên bài timeline). Mặc định RỖNG để không spam lỗi;
+// chỉ bật lại qua env nếu Meta khôi phục metric. Tương tác lấy bằng edge expansion (vẫn chạy).
+const INSIGHT_METRICS = (process.env.FB_INSIGHT_METRICS || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+// Page-level insights CÒN SỐNG (v25). period=day, lấy giá trị mới nhất cho fb_page_snapshots.
+const PAGE_GRAPH = process.env.FB_PAGE_INSIGHT_VERSION || 'v25.0';
+const PAGE_METRICS = (process.env.FB_PAGE_METRICS || 'page_views_total,page_post_engagements,page_daily_follows').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
 
 function getJSON(url) {
   return new Promise(function (resolve, reject) {
@@ -43,9 +48,23 @@ function sbWrite(path, body, prefer) {
     req.on('error', reject); req.write(data); req.end();
   });
 }
-function graph(path, params) {
+function graph(path, params, version) {
   var qs = Object.keys(params || {}).map(function (k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
-  return getJSON('https://graph.facebook.com/' + GRAPH + '/' + path + '?' + (qs ? qs + '&' : '') + 'access_token=' + encodeURIComponent(TOKEN));
+  return getJSON('https://graph.facebook.com/' + (version || GRAPH) + '/' + path + '?' + (qs ? qs + '&' : '') + 'access_token=' + encodeURIComponent(TOKEN));
+}
+// Lấy giá trị mới nhất của từng page metric (v25). Lỗi metric -> bỏ qua, không làm hỏng cron.
+async function pageInsights(out) {
+  var res = {};
+  if (!PAGE_METRICS.length) return res;
+  for (var i = 0; i < PAGE_METRICS.length; i++) {
+    try {
+      var io = await graph(PAGE_ID + '/insights', { metric: PAGE_METRICS[i], period: 'day' }, PAGE_GRAPH);
+      var d = (io && io.data && io.data[0]) || null;
+      var vals = (d && d.values) || [];
+      res[PAGE_METRICS[i]] = vals.length ? (vals[vals.length - 1].value || 0) : 0;
+    } catch (e) { out.errors.push('page_insight ' + PAGE_METRICS[i] + ': ' + e.message); }
+  }
+  return res;
 }
 function rc(o) { return (o && o.summary && o.summary.total_count) || 0; }
 function mapType(p) {
@@ -104,9 +123,13 @@ module.exports = async (req, res) => {
       await sbWrite('/rest/v1/fb_posts?on_conflict=post_id', rows, 'resolution=merge-duplicates,return=minimal');
       await sbWrite('/rest/v1/fb_snapshots', snaps, 'return=minimal');
     }
-    var pageEng = snaps.reduce(function (a, s) { return a + s.engagement; }, 0);
-    var pageViews = snaps.reduce(function (a, s) { return a + s.views; }, 0);
+    // Page-level snapshot từ insights v25 (còn sống) — KHÔNG cộng dồn post nữa vì
+    // post-insights đã chết và page chỉ có bài timeline lẻ tẻ.
+    var pi = await pageInsights(out);
+    var pageViews = pi.page_views_total || 0;
+    var pageEng = pi.page_post_engagements || 0;
     await sbWrite('/rest/v1/fb_page_snapshots', [{ page_id: PAGE_ID, followers: page.followers_count || page.fan_count || 0, views: pageViews, engagement: pageEng }], 'return=minimal');
+    out.pageInsights = pi;
     out.ok = true; out.posts = rows.length;
     res.status(200).json(out);
   } catch (e) { out.errors.push(e.message); res.status(500).json(out); }

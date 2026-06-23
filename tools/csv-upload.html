@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SHB — Nạp CSV bài Group → /api/ingest</title>
+<style>
+  body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0b0916;color:#eee;margin:0;padding:22px;font-size:14px}
+  h1{font-size:18px;margin:0 0 4px}.sub{color:#9b96bd;font-size:12.5px;margin-bottom:16px}
+  input,select{box-sizing:border-box;background:#16132a;color:#eee;border:1px solid #2e2a4d;border-radius:8px;padding:9px;font-size:13px}
+  label{display:block;font-size:11.5px;color:#9b96bd;margin:10px 0 4px;text-transform:uppercase;letter-spacing:.05em}
+  button{background:linear-gradient(135deg,#7c5cff,#5b8cff);color:#fff;border:none;padding:11px 20px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer}
+  button.alt{background:#16132a;border:1px solid #2e2a4d;color:#cfcae8}
+  table{border-collapse:collapse;width:100%;margin-top:12px;font-size:12px}
+  th,td{border:1px solid #2e2a4d;padding:6px 8px;text-align:left;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  th{background:#16132a;color:#bdb8db}
+  .map{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:8px}
+  .card{background:#100d22;border:1px solid #2e2a4d;border-radius:10px;padding:12px;margin-top:14px}
+  #log{white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:12.5px;color:#9b96bd;margin-top:10px}
+  .ok{color:#34e0a1}.bad{color:#ff7d96}
+  code{background:#16132a;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<h1>Nạp CSV bài Group → /api/ingest</h1>
+<div class="sub">Xuất CSV từ <b>Thư viện nội dung → Xuất dữ liệu</b>, chọn file ở đây. Công cụ tự nhận diện cột, cho xem trước rồi đẩy lên dashboard. Secret chỉ nằm trên máy bạn.</div>
+
+<div class="map">
+  <div><label>Ingest URL</label><input id="url" value="https://shb-fb-dashboard.vercel.app/api/ingest" style="width:100%"></div>
+  <div><label>INGEST_SECRET</label><input id="secret" type="password" placeholder="dán secret" style="width:100%"></div>
+  <div><label>GROUP_ID</label><input id="group" value="503009407721580" style="width:100%"></div>
+</div>
+
+<label>Chọn file CSV</label>
+<input type="file" id="file" accept=".csv,text/csv">
+
+<div id="mapCard" class="card" style="display:none">
+  <b>Ánh xạ cột</b> <span class="sub">(tự nhận diện — chỉnh nếu sai)</span>
+  <div class="map" id="mapping"></div>
+</div>
+
+<div id="prevCard" class="card" style="display:none">
+  <b>Xem trước</b> <span id="prevCount" class="sub"></span>
+  <div style="overflow:auto"><table id="prev"></table></div>
+  <div style="margin-top:14px"><button id="send">▶ Đẩy lên dashboard</button> <button class="alt" id="dl">⬇ Tải JSON đã ghép</button></div>
+  <div id="log"></div>
+</div>
+
+<script>
+var ROWS=[], HEADERS=[], rawRows=[];
+var FIELDS=[
+  {key:'title',     label:'Tiêu đề / Bàn xem trước', kw:['bài','tiêu đề','preview','xem trước','nội dung','title']},
+  {key:'permalink', label:'Liên kết / URL',          kw:['liên kết','url','permalink','link','đường dẫn']},
+  {key:'post_id',   label:'Post ID',                 kw:['id bài','post id','mã bài','post_id']},
+  {key:'created_time',label:'Ngày đăng',             kw:['ngày','thời gian','đăng','date','time','published']},
+  {key:'reach',     label:'Lượt xem (reach)',        kw:['lượt xem','reach','views']},
+  {key:'viewers',   label:'Người xem (unique)',      kw:['người xem','viewers','người tiếp cận']},
+  {key:'engagement',label:'Lượt tương tác',          kw:['tương tác','engagement']},
+  {key:'comments',  label:'Bình luận',               kw:['bình luận','comment']}
+];
+
+function parseCSV(text){
+  // parser hỗ trợ dấu phẩy trong ngoặc kép + xuống dòng
+  var rows=[], row=[], cur='', q=false, i=0, c;
+  // bỏ BOM
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  for(i=0;i<text.length;i++){ c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else { if(c==='"') q=true;
+      else if(c===','){ row.push(cur); cur=''; }
+      else if(c==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+      else if(c==='\r'){}
+      else cur+=c; }
+  }
+  if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(function(r){return r.some(function(x){return String(x).trim()!=='';});});
+}
+
+function norm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d');}
+function autoMap(){
+  var map={};
+  FIELDS.forEach(function(f){
+    var best=-1;
+    HEADERS.forEach(function(h,idx){
+      var hn=norm(h);
+      f.kw.forEach(function(k){ if(hn.indexOf(norm(k))>-1 && best<0) best=idx; });
+    });
+    map[f.key]=best;
+  });
+  return map;
+}
+var MAP={};
+function renderMapping(){
+  var html='';
+  FIELDS.forEach(function(f){
+    html+='<div><label>'+f.label+'</label><select data-k="'+f.key+'"><option value="-1">— bỏ qua —</option>'
+      +HEADERS.map(function(h,i){return '<option value="'+i+'"'+(MAP[f.key]===i?' selected':'')+'>'+(h||('cột '+(i+1)))+'</option>';}).join('')
+      +'</select></div>';
+  });
+  document.getElementById('mapping').innerHTML=html;
+  [].forEach.call(document.querySelectorAll('#mapping select'),function(s){
+    s.onchange=function(){ MAP[this.getAttribute('data-k')]=parseInt(this.value,10); buildRows(); };
+  });
+}
+
+function toInt(v){ v=String(v==null?'':v).replace(/[.\s,]/g,''); var n=parseInt(v,10); return isNaN(n)?0:n; }
+function extractId(permalink,fallback){
+  var m=String(permalink||'').match(/permalink\/(\d+)/)||String(permalink||'').match(/\/posts\/(\d+)/)||String(permalink||'').match(/(\d{6,})/);
+  if(m) return m[1];
+  if(fallback) return String(fallback).trim();
+  return '';
+}
+function buildRows(){
+  var g=document.getElementById('group').value.trim();
+  ROWS=rawRows.map(function(r){
+    function get(k){ var i=MAP[k]; return (i>=0&&i<r.length)?r[i]:''; }
+    var permalink=get('permalink'), pid=extractId(permalink, get('post_id'));
+    return {
+      post_id: pid,
+      group_id: g,
+      title: get('title'),
+      permalink: permalink,
+      created_time: get('created_time')||null,
+      reach: toInt(get('reach')),
+      viewers: toInt(get('viewers')),
+      engagement: toInt(get('engagement')),
+      comments: toInt(get('comments')),
+      source: 'csv'
+    };
+  }).filter(function(x){return x.post_id;});
+  renderPreview();
+}
+function renderPreview(){
+  var cols=['post_id','title','reach','viewers','engagement','comments','created_time'];
+  var html='<thead><tr>'+cols.map(function(c){return '<th>'+c+'</th>';}).join('')+'</tr></thead><tbody>';
+  ROWS.slice(0,12).forEach(function(r){ html+='<tr>'+cols.map(function(c){return '<td>'+String(r[c]==null?'':r[c])+'</td>';}).join('')+'</tr>'; });
+  html+='</tbody>';
+  document.getElementById('prev').innerHTML=html;
+  var skipped=rawRows.length-ROWS.length;
+  document.getElementById('prevCount').textContent='— '+ROWS.length+' bài hợp lệ'+(skipped>0?' ('+skipped+' dòng bị bỏ vì thiếu post_id — kiểm tra cột Liên kết/URL hoặc Post ID)':'');
+  document.getElementById('prevCard').style.display=ROWS.length||skipped?'block':'none';
+}
+
+document.getElementById('file').onchange=function(e){
+  var f=e.target.files[0]; if(!f) return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    var all=parseCSV(rd.result);
+    if(all.length<2){ alert('CSV không có dữ liệu'); return; }
+    // Content Library đôi khi có 1-2 dòng tiêu đề phụ; dùng dòng có nhiều cột nhất gần đầu làm header
+    HEADERS=all[0]; rawRows=all.slice(1);
+    MAP=autoMap();
+    document.getElementById('mapCard').style.display='block';
+    renderMapping(); buildRows();
+  };
+  rd.readAsText(f,'utf-8');
+};
+
+document.getElementById('send').onclick=function(){
+  var url=document.getElementById('url').value.trim(), secret=document.getElementById('secret').value.trim();
+  if(!secret){ alert('Dán INGEST_SECRET'); return; }
+  if(!ROWS.length){ alert('Không có bài hợp lệ'); return; }
+  var log=document.getElementById('log'); log.textContent='Đang gửi '+ROWS.length+' bài...';
+  fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-ingest-secret':secret},body:JSON.stringify(ROWS)})
+    .then(function(r){return r.text().then(function(t){return {s:r.status,t:t};});})
+    .then(function(o){ log.innerHTML=(o.s>=200&&o.s<300?'<span class="ok">✅ HTTP '+o.s+' — '+o.t+'</span>':'<span class="bad">❌ HTTP '+o.s+' — '+o.t+'</span>'); })
+    .catch(function(e){ log.innerHTML='<span class="bad">❌ '+e.message+'</span>'; });
+};
+document.getElementById('dl').onclick=function(){
+  var blob=new Blob([JSON.stringify(ROWS,null,2)],{type:'application/json'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='group-posts.json'; a.click();
+};
+</script>
+</body>
+</html>
