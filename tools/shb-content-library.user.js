@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         SHB Content Library → Supabase
 // @namespace    shb-fb-dashboard
-// @version      1.0.0
+// @version      2.0.0
 // @description  Bắt response Professional Dashboard Content Library (bài Group "SHB Một Nhà") và đẩy sang /api/ingest. Groups API công khai đã bị Meta gỡ 22/04/2024 nên đây là nguồn dữ liệu duy nhất.
 // @author       SHB CM
 // @match        https://www.facebook.com/*
 // @match        https://business.facebook.com/*
 // @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
 // @connect      shb-fb-dashboard.vercel.app
 // @run-at       document-start
 // ==/UserScript==
@@ -21,64 +22,57 @@
   var AUTO_SCROLL = true;                     // tự cuộn để lazy-load hết bài trong dải ngày đang chọn
   var DEBUG = true;
 
+  // Hook trên window THẬT của trang (unsafeWindow) — KHÔNG phải sandbox của Tampermonkey.
+  // Đây là điểm mấu chốt: response data đến qua XHR của trang; hook window sandbox sẽ trượt.
+  var W = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
+
   function log() { if (DEBUG) try { console.log.apply(console, ['[SHB-CL]'].concat([].slice.call(arguments))); } catch (e) {} }
 
-  // post_id chuẩn = số trong permalink .../permalink/{id}/  (ổn định hơn id GraphQL).
-  function extractId(n) {
-    var pl = n.permalink || n.url || n.permalink_url || '';
-    var m = String(pl).match(/permalink\/(\d+)/) || String(pl).match(/\/posts\/(\d+)/) || String(pl).match(/(\d{6,})/);
-    if (m) return m[1];
-    // fallback: id GraphQL (có thể là base64/feedback id) — vẫn dùng làm khoá nếu không có permalink
-    return String(n.post_id || n.id || n.legacy_story_id || '').trim();
+  function mval(insights, key) {
+    var m = insights && insights[key];
+    return (m && typeof m.value === 'number') ? m.value : 0;
+  }
+  function idFromUrl(url) {
+    var m = String(url || '').match(/permalink\/(\d+)/) || String(url || '').match(/\/posts\/(\d+)/) || String(url || '').match(/(\d{6,})/);
+    return m ? m[1] : '';
   }
 
-  // Một số metric của prodash bọc trong {value: N} hoặc {count: N} hoặc số thẳng.
-  function metric(v) {
-    if (v == null) return 0;
-    if (typeof v === 'number') return v;
-    if (typeof v === 'object') { var x = v.value != null ? v.value : (v.count != null ? v.count : v.total_count); return Number(x) || 0; }
-    var n = Number(v); return isNaN(n) ? 0 : n;
-  }
-
-  function pickTitle(n) {
-    return n.title || n.message || (n.preview && n.preview.text) || (n.story && n.story.message && n.story.message.text) || '';
-  }
-  function pickPermalink(n) {
-    return n.permalink || n.url || n.permalink_url || n.story_permalink || '';
-  }
-  function pickCreated(n) {
-    var c = n.created_time || n.creation_time || n.publish_time || n.created || null;
-    if (c == null) return null;
-    // epoch giây -> ISO; nếu đã là chuỗi thì giữ nguyên
-    if (typeof c === 'number') return new Date(c < 1e12 ? c * 1000 : c).toISOString();
-    return c;
+  // Chuẩn hoá 1 node ProDashContentLibraryStory -> 1 row ingest.
+  function mapNode(node) {
+    if (!node) return null;
+    var story = node.story || {};
+    var ent = node.tofu_entity || {};
+    var ins = ent.entity_insights || {};
+    var postId = String(ent.entity_id || idFromUrl(story.url) || '').trim();
+    if (!postId) return null;
+    var created = null;
+    if (story.creation_time) { try { created = new Date(story.creation_time * 1000).toISOString(); } catch (e) {} }
+    return {
+      post_id: postId,
+      group_id: (story.target_group && story.target_group.id) || GROUP_ID,
+      title: node.title || '',
+      permalink: story.url || '',
+      created_time: created,
+      post_type: node.business_content_type || node.__typename || '',
+      reach: mval(ins, 'views'),          // cột "Lượt xem" (headline)
+      viewers: mval(ins, 'viewers'),      // "Người xem" (unique)
+      engagement: mval(ins, 'engagement'),// "Tương tác"
+      comments: mval(ins, 'comment'),     // "Bình luận"
+      source: 'prodash'
+    };
   }
 
   var sent = {}; // chống gửi trùng trong cùng phiên
 
-  function handle(json) {
-    var lib = json && json.data && json.data.prodash_content_library;
-    if (!lib || !lib.edges) return;
+  function handleLibrary(lib) {
+    if (!lib || !lib.edges || !lib.edges.length) return;
     var rows = [];
     lib.edges.forEach(function (e) {
-      var n = (e && e.node) || {};
-      var id = extractId(n);
-      if (!id) return;
-      var key = id + ':' + metric(n.reach) + ':' + metric(n.engagement);
+      var row = mapNode(e && e.node);
+      if (!row) return;
+      var key = row.post_id + ':' + row.reach + ':' + row.engagement;
       if (sent[key]) return; sent[key] = 1;
-      rows.push({
-        post_id: id,
-        group_id: GROUP_ID,
-        title: pickTitle(n),
-        permalink: pickPermalink(n),
-        created_time: pickCreated(n),
-        post_type: n.post_type || n.subtype || n.type || '',
-        reach: metric(n.reach),
-        viewers: metric(n.viewers || n.unique_viewers || n.media_viewers),
-        engagement: metric(n.engagement || n.engagement_count || n.total_engagement),
-        comments: metric(n.comment || n.comments || n.comment_count),
-        source: 'prodash'
-      });
+      rows.push(row);
     });
     if (!rows.length) return;
     log('gửi', rows.length, 'bài', rows);
@@ -91,45 +85,56 @@
     });
   }
 
+  // Tìm prodash_content_library ở các vị trí có thể: data.node.* hoặc data.*
+  function scanJson(j) {
+    if (!j || !j.data) return;
+    var d = j.data;
+    if (d.node && d.node.prodash_content_library) handleLibrary(d.node.prodash_content_library);
+    if (d.prodash_content_library) handleLibrary(d.prodash_content_library);
+  }
+
   function tryParse(text) {
-    if (!text || text.indexOf('prodash_content_library') < 0) return;
-    // Response GraphQL của FB có thể là nhiều JSON nối nhau bằng newline.
-    String(text).split('\n').forEach(function (line) {
+    text = String(text || '');
+    if (text.indexOf('prodash_content_library') < 0) return;
+    // Response FB hay có tiền tố for(;;); và đôi khi nhiều JSON nối bằng newline.
+    text.replace(/^for\s*\(;;\);/, '').split('\n').forEach(function (line) {
       line = line.trim(); if (!line) return;
-      try { handle(JSON.parse(line)); } catch (e) {}
+      try { scanJson(JSON.parse(line)); } catch (e) {}
     });
   }
 
-  // ── Hook fetch ───────────────────────────────────────────────────────────
-  var of = window.fetch;
+  // ── Hook fetch (trên window thật) ─────────────────────────────────────────
+  var of = W.fetch;
   if (of) {
-    window.fetch = function () {
+    W.fetch = function () {
       var p = of.apply(this, arguments);
       try { p.then(function (r) { try { r.clone().text().then(tryParse); } catch (e) {} }); } catch (e) {}
       return p;
     };
   }
 
-  // ── Hook XHR (FB dùng cả hai) ──────────────────────────────────────────────
-  var oo = XMLHttpRequest.prototype.open, os = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function (m, u) { this.__shbUrl = u; return oo.apply(this, arguments); };
-  XMLHttpRequest.prototype.send = function () {
-    this.addEventListener('load', function () {
-      try { tryParse(this.responseText); } catch (e) {}
-    });
-    return os.apply(this, arguments);
-  };
+  // ── Hook XHR (trên window thật) — FB dùng cái này cho graphql ──────────────
+  var XHR = W.XMLHttpRequest;
+  if (XHR && XHR.prototype) {
+    var oo = XHR.prototype.open, os = XHR.prototype.send;
+    XHR.prototype.open = function (m, u) { this.__shbUrl = u; return oo.apply(this, arguments); };
+    XHR.prototype.send = function () {
+      var x = this;
+      x.addEventListener('load', function () { try { tryParse(x.responseText); } catch (e) {} });
+      return os.apply(this, arguments);
+    };
+  }
 
   // ── Auto-scroll để lazy-load hết bài (FB chỉ render dần khi cuộn) ──────────
   if (AUTO_SCROLL) {
     var idle = 0, lastH = 0;
     var timer = setInterval(function () {
-      window.scrollTo(0, document.body.scrollHeight);
+      W.scrollTo(0, document.body.scrollHeight);
       var h = document.body.scrollHeight;
       if (h === lastH) { if (++idle >= 6) { clearInterval(timer); log('auto-scroll xong'); } }
       else { idle = 0; lastH = h; }
     }, 1500);
   }
 
-  log('userscript đã nạp — mở Content Library và để trang tự cuộn.');
+  log('userscript v2 đã nạp (hook window thật) — mở Content Library và để trang tự cuộn.');
 })();
