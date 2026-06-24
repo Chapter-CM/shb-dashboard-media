@@ -172,5 +172,5 @@
     }, 1500);
   }
 
-  log('userscript v2 đã nạp (hook window thật) — mở Content Library và để trang tự cuộn.');
+  log('userscript v3.0 đã nạp (hook window thật) — Content Library tự cuộn; trang Insights tự bắt số liệu page-level.');
 })();
