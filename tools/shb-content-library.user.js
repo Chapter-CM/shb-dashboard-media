@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SHB Content Library → Supabase
 // @namespace    shb-fb-dashboard
-// @version      2.0.0
+// @version      3.0.0
 // @description  Bắt response Professional Dashboard Content Library (bài Group "SHB Một Nhà") và đẩy sang /api/ingest. Groups API công khai đã bị Meta gỡ 22/04/2024 nên đây là nguồn dữ liệu duy nhất.
 // @author       SHB CM
 // @match        https://www.facebook.com/*
@@ -93,14 +93,50 @@
     if (d.prodash_content_library) handleLibrary(d.prodash_content_library);
   }
 
+  // ── PAGE-LEVEL: trích generic mọi metric {value} + time-series từ insights ──
+  var SKIP = { recent_posts: 1, image: 1, privacy_icon: 1, attachments: 1 };
+  function extractMetrics(obj, acc) {
+    if (!obj || typeof obj !== 'object') return;
+    if (Array.isArray(obj)) { for (var i = 0; i < obj.length; i++) extractMetrics(obj[i], acc); return; }
+    for (var k in obj) {
+      if (SKIP[k]) continue;
+      var v = obj[k];
+      if (!v || typeof v !== 'object') continue;
+      var tn = v.__typename || '';
+      if (typeof v.value === 'number' && /Metric/.test(tn)) { acc.metrics[k] = v.value; }
+      else if (/TimeSeries/.test(tn)) { acc.series[k] = v; }
+      else extractMetrics(v, acc);
+    }
+  }
+  function rangeFromUrl() { var m = String(location.search).match(/date_range=([A-Z0-9_]+)/); return m ? m[1] : ''; }
+  var pageLastSent = '';
+  function sendPage(acc) {
+    var sig = JSON.stringify(acc.metrics) + '|' + Object.keys(acc.series).sort().join(',');
+    if (sig === pageLastSent) return; pageLastSent = sig;
+    log('PAGE metrics:', acc.metrics, '| series:', Object.keys(acc.series));
+    GM_xmlhttpRequest({
+      method: 'POST', url: INGEST,
+      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': SECRET },
+      data: JSON.stringify({ kind: 'page', date_range: rangeFromUrl(), metrics: acc.metrics, series: acc.series }),
+      onload: function (r) { log('page ingest', r.status, r.responseText); },
+      onerror: function (e) { log('page ingest LỖI', e); }
+    });
+  }
+
   function tryParse(text) {
     text = String(text || '');
-    if (text.indexOf('prodash_content_library') < 0) return;
-    // Response FB hay có tiền tố for(;;); và đôi khi nhiều JSON nối bằng newline.
+    var hasLib = text.indexOf('prodash_content_library') > -1;
+    var hasPage = text.indexOf('TofuFBPageEntityInsights') > -1;
+    if (!hasLib && !hasPage) return;
+    var pageAcc = { metrics: {}, series: {} };
+    // Response FB hay có tiền tố for(;;); và nhiều JSON (deferred) nối bằng newline.
     text.replace(/^for\s*\(;;\);/, '').split('\n').forEach(function (line) {
       line = line.trim(); if (!line) return;
-      try { scanJson(JSON.parse(line)); } catch (e) {}
+      var j; try { j = JSON.parse(line); } catch (e) { return; }
+      if (hasLib) scanJson(j);
+      if (hasPage) extractMetrics(j, pageAcc);
     });
+    if (hasPage && (Object.keys(pageAcc.metrics).length || Object.keys(pageAcc.series).length)) sendPage(pageAcc);
   }
 
   // ── Hook fetch (trên window thật) ─────────────────────────────────────────

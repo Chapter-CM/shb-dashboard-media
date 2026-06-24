@@ -82,6 +82,21 @@ module.exports = async (req, res) => {
 
   try {
     var body = await readBody(req);
+
+    // Payload cấp TRANG (page-level insights) — {kind:'page', metrics:{}, series:{}, date_range}
+    if (body && body.kind === 'page') {
+      var prow = {
+        date_range: str(body.date_range || ''),
+        metrics: (body.metrics && typeof body.metrics === 'object') ? body.metrics : {},
+        series: (body.series && typeof body.series === 'object') ? body.series : {}
+      };
+      if (!Object.keys(prow.metrics).length && !Object.keys(prow.series).length) {
+        res.status(200).json({ ok: true, kind: 'page', note: 'không có metric' }); return;
+      }
+      await sbWrite('/rest/v1/fb_page_insights', [prow], 'return=minimal');
+      res.status(200).json({ ok: true, kind: 'page', metrics: Object.keys(prow.metrics).length, series: Object.keys(prow.series).length }); return;
+    }
+
     var list = Array.isArray(body) ? body : (body && Array.isArray(body.posts) ? body.posts : null);
     if (!list) { res.status(400).json({ error: 'body phải là mảng post hoặc {posts:[...]}' }); return; }
 
