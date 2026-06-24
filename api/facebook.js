@@ -672,7 +672,32 @@ function mixSection(d){
     +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate (Tương tác ÷ Lượt xem) theo định dạng. Bấm để lọc.">Hiệu quả theo định dạng <span style="font-weight:600;color:var(--muted);font-size:11px">· ER</span></div>'+barsER(d.byType,'type')+'</div>'
     +'</div>'
     +'<div style="margin-top:16px"><div class="panel"><div class="panel-h" data-tip="Engagement Rate theo chủ đề (hashtag chính). Bấm để lọc.">Theo chủ đề <span style="font-weight:600;color:var(--muted);font-size:11px">· ER</span></div>'+barsER(d.byTopic,'topic')+'</div></div>'
+    +contentMatrix(d)
     +'</section>';
+}
+// Ma trận hiệu quả: trục X = Lượt xem (tiếp cận), trục Y = ER (tương tác). Chia 4 góc phần tư
+// quanh trung vị -> nhận diện Ngôi sao / Tiềm năng ẩn / Phủ rộng nhạt / Yếu. (BCG-style content matrix)
+function contentMatrix(d){
+  var rows=(d.rows||[]).filter(function(r){return pViews(r.p)>0;});
+  if(rows.length<4)return '';
+  var xs=rows.map(function(r){return pViews(r.p);}).slice().sort(function(a,b){return a-b;});
+  var ys=rows.map(function(r){return r.er;}).slice().sort(function(a,b){return a-b;});
+  var mx=xs[Math.floor(xs.length/2)],my=ys[Math.floor(ys.length/2)];
+  var maxX=xs[xs.length-1]*1.06||1,maxY=ys[ys.length-1]*1.06||1;
+  var W=720,H=320,pl=46,pr=16,pt=26,pb=36;
+  function X(v){return pl+(v/maxX)*(W-pl-pr);}
+  function Y(v){return pt+(1-v/maxY)*(H-pt-pb);}
+  var dots=rows.map(function(r){var x=pViews(r.p),y=r.er;var col=(x>=mx&&y>=my)?'var(--good)':(x<mx&&y>=my)?'var(--accent)':(x>=mx&&y<my)?'var(--warn)':'var(--faint)';
+    return '<circle cx="'+X(x).toFixed(1)+'" cy="'+Y(y).toFixed(1)+'" r="5" fill="'+col+'" fill-opacity=".82" stroke="'+col+'" style="cursor:pointer" onclick="setFilter(\'post\',\''+r.p.id+'\')" data-tip="'+esc(fmtDay(r.p.ts)+' · '+r.p.msg.slice(0,38)+' — '+nf(x)+' xem · ER '+r.er+'%')+'"></circle>';}).join('');
+  var mxX=X(mx).toFixed(1),myY=Y(my).toFixed(1);
+  var lines='<line x1="'+mxX+'" y1="'+pt+'" x2="'+mxX+'" y2="'+(H-pb)+'" stroke="var(--stroke-2)" stroke-dasharray="4 4"/><line x1="'+pl+'" y1="'+myY+'" x2="'+(W-pr)+'" y2="'+myY+'" stroke="var(--stroke-2)" stroke-dasharray="4 4"/>';
+  function ql(x,y,t,c){return '<text x="'+x+'" y="'+y+'" fill="'+c+'" font-size="10" font-weight="700" opacity=".75">'+t+'</text>';}
+  var labels=ql(W-pr-78,pt+12,'★ Ngôi sao','var(--good)')+ql(pl+6,pt+12,'◆ Tiềm năng ẩn','var(--accent)')+ql(W-pr-120,H-pb-8,'Phủ rộng, ít tương tác','var(--warn)')+ql(pl+6,H-pb-8,'Yếu','var(--faint)');
+  var axis='<text x="'+(pl+(W-pl-pr)/2)+'" y="'+(H-6)+'" fill="var(--muted)" font-size="10" text-anchor="middle">Lượt xem →</text>'
+    +'<text x="14" y="'+(pt+(H-pt-pb)/2)+'" fill="var(--muted)" font-size="10" text-anchor="middle" transform="rotate(-90 14 '+(pt+(H-pt-pb)/2)+')">ER % →</text>';
+  return '<div style="margin-top:16px"><div class="panel"><div class="panel-h" data-tip="Mỗi điểm là 1 bài. Trục ngang = Lượt xem (độ phủ), trục dọc = ER (sức hút). Vạch = trung vị. Bấm điểm để lọc theo bài.">Ma trận hiệu quả nội dung <span style="font-weight:600;color:var(--muted);font-size:11px">· Phủ × Sức hút</span></div>'
+    +'<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'">'+lines+axis+dots+labels+'</svg>'
+    +'<div class="so" style="margin-top:8px;font-size:11.5px">★ <b>Ngôi sao</b>: phủ rộng &amp; hút mạnh — nhân bản công thức. ◆ <b>Tiềm năng ẩn</b>: ER cao nhưng ít người thấy — nên đẩy phân phối/đăng lại.</div></div></div>';
 }
 function setCtab(t){_ctab=t;paint();}
 function isVideoPost(p){return /Reel|Video|Live/i.test(p.type||'')||pmv(p,'video_view_time')>0||pmv(p,'video_view_three_second')>0;}
