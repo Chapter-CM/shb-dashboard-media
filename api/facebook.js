@@ -231,12 +231,25 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .seg button{background:none;border:none;color:var(--muted);padding:6px 13px;cursor:pointer;font:inherit;font-size:12px;font-weight:600;border-radius:9px;transition:.18s}
 .seg button.on{background:var(--grad);color:#fff;box-shadow:0 6px 16px -6px rgba(124,92,255,.6)}
 .seg button:hover:not(.on){color:var(--text)}
-.dtrange{display:flex;align-items:center;gap:5px;background:var(--glass);border:1px solid var(--stroke);border-radius:12px;padding:3px 8px}
-.dtrange.on{border-color:var(--accent)}
-.dtrange input{background:var(--filter-bg,#1c1a2e);border:1px solid var(--stroke);color:var(--text);font:inherit;font-size:11px;padding:4px 6px;border-radius:8px;color-scheme:dark;outline:none}
-.dtrange .ar{color:var(--faint);font-size:11px}
-.dtrange .dtx{background:var(--risk-bg);border:none;color:var(--risk);font:inherit;font-weight:700;cursor:pointer;border-radius:6px;padding:2px 8px}
-[data-theme="light"] .dtrange input{color-scheme:light}
+.dtbtn{display:flex;align-items:center;gap:7px;background:var(--glass);border:1px solid var(--stroke);color:var(--text-2);font:inherit;font-size:12px;font-weight:600;padding:7px 12px;border-radius:11px;cursor:pointer;white-space:nowrap}
+.dtbtn:hover{color:var(--text);border-color:var(--stroke-2)}
+.dtbtn.on{background:var(--accent-bg);border-color:var(--accent);color:var(--text)}
+.dtbtn .arr{color:var(--muted);font-size:9px}
+.dtpop{padding:14px;min-width:236px}
+.dtpop-h{font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:11px}
+.dtpop-l{display:block;font-size:11px;color:var(--text-2);font-weight:600;margin-bottom:9px}
+.dtpop-l input{display:block;width:100%;margin-top:4px;background:var(--filter-bg,#1c1a2e);border:1px solid var(--stroke);color:var(--text);font:inherit;font-size:12.5px;padding:8px 10px;border-radius:10px;color-scheme:dark;outline:none}
+.dtpop-l input:focus{border-color:var(--accent)}
+[data-theme="light"] .dtpop-l input{color-scheme:light}
+.dtpop-apply{width:100%;margin-top:4px;background:var(--grad);color:#fff;border:none;font:inherit;font-size:12.5px;font-weight:700;padding:9px;border-radius:10px;cursor:pointer;box-shadow:0 8px 20px -8px rgba(124,92,255,.7)}
+.dtpop-clear{width:100%;margin-top:7px;background:none;border:none;color:var(--risk);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer}
+.funnel{margin-top:16px;background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r);padding:18px 22px;box-shadow:var(--shadow)}
+.fn-row{display:flex;align-items:center;gap:12px;margin:9px 0}
+.fn-lbl{width:130px;font-size:12px;color:var(--text-2);font-weight:600}
+.fn-track{flex:1;background:var(--hair);border-radius:8px;overflow:hidden;height:34px;display:flex;align-items:center}
+.fn-bar{height:100%;display:flex;align-items:center;padding:0 12px;color:#fff;font-weight:700;font-family:var(--num);font-size:13px;border-radius:8px;min-width:62px;white-space:nowrap;transition:width .8s cubic-bezier(.16,1,.3,1)}
+.fn-cvt{width:96px;text-align:right;font-size:11.5px;font-family:var(--num);color:var(--muted)}
+.fn-cvt b{color:var(--good)}
 .icon-btn{height:36px;min-width:36px;padding:0 10px;border-radius:11px;background:var(--glass);border:1px solid var(--stroke);color:var(--text-2);cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px;transition:.18s}
 .icon-btn:hover{color:var(--text);border-color:var(--stroke-2)}
 .mode-btn{background:var(--grad);color:#fff;border:none;padding:9px 16px;border-radius:11px;cursor:pointer;font:inherit;font-size:12px;font-weight:700;box-shadow:0 8px 20px -8px rgba(124,92,255,.7)}
@@ -882,12 +895,43 @@ function filterBar(d){var F=_filter||{},o=d.opts||{};
     return '<div class="csel"><div class="csel-btn" onclick="openTopicSel(event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div><div class="csel-dd" id="topic-dd" style="display:none"><input class="csel-inp" placeholder="🔍 Tìm chủ đề…" oninput="filterTopicSel(this.value)" onclick="event.stopPropagation()"><div class="csel-list" id="topic-list">'+opts+'</div></div></div>';}
   return '<div class="fbar"><span class="flbl">Lọc</span>'+topicSel()+sel('type','Mọi định dạng')+sel('media','Mọi loại media')+sel('slot','Mọi khung giờ')+sel('dayType','Mọi ngày')+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa tất cả</button>':'')+'</div>';}
 function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-content">Nội dung</a><a href="#s-mix">Phân tích</a><a href="#s-time">Khung giờ</a><a href="#s-aud">Audience</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
+// Phễu hiệu quả: Tiếp cận (Lượt xem) -> Tương tác -> Chuyển đổi (theo dõi thực).
+// Dùng đúng định nghĩa hiện có: views & interactions theo ngày hoạt động; follow = net_follow per-post.
+function funnelPanel(d){
+  var PS=(DATA.pageInsights&&DATA.pageInsights.series)||{},F=_filter||{};
+  var cFil=Object.keys(F).some(function(k){return F[k];});
+  var views=(!cFil&&PS.views&&PS.views.length)?sumSeries(PS.views):d.sum.views;
+  var eng=(!cFil&&PS.interactions&&PS.interactions.length)?sumSeries(PS.interactions):d.sum.eng;
+  var follow=0;windowPosts(_days,0).filter(function(p){return matchFilter(p,F);}).forEach(function(p){follow+=pmv(p,'net_follow');});
+  var stages=[['Lượt xem (tiếp cận)',views,'var(--accent)'],['Lượt tương tác',eng,'var(--accent-2)'],['Theo dõi thực',follow,'var(--good)']];
+  var max=views||1,prev=null;
+  var rows=stages.map(function(st){
+    var v=st[1],w=Math.max(2,v/max*100),cvt=prev==null?'100%':(prev?pc(v/prev*100):0)+'%';
+    var html='<div class="fn-row"><div class="fn-lbl">'+st[0]+'</div><div class="fn-track"><div class="fn-bar" style="width:'+w.toFixed(1)+'%;background:'+st[2]+'">'+nf(v)+'</div></div><div class="fn-cvt">'+(prev==null?'<span style="color:var(--faint)">đỉnh phễu</span>':'<b>'+cvt+'</b> từ trên')+'</div></div>';
+    prev=v;return html;
+  }).join('');
+  return '<div class="funnel"><div class="panel-h" data-tip="Hành trình: bao nhiêu lượt xem dẫn tới tương tác, rồi tới người theo dõi mới. % = tỉ lệ chuyển đổi so với bước trên.">Phễu hiệu quả · Tiếp cận → Tương tác → Chuyển đổi</div>'+rows+'</div>';
+}
+function dateCtrl(){
+  var custom=!!(_from&&_to);
+  var presets=[[0,'Tất cả'],[7,'7N'],[30,'30N'],[90,'90N']];
+  var segs=presets.map(function(p){return '<button class="'+((!custom&&_days===p[0])?'on':'')+'" onclick="flt('+p[0]+')">'+p[1]+'</button>';}).join('');
+  var lbl=custom?(fmtDay(_from)+'–'+fmtDay(_to)):'Tuỳ chọn';
+  return '<div class="seg">'+segs+'</div>'
+    +'<div class="csel"><button class="dtbtn'+(custom?' on':'')+'" onclick="toggleDtPop(event)" data-tip="Chọn khoảng ngày tuỳ chọn"><span>📅 '+esc(lbl)+'</span><span class="arr">▾</span></button>'
+    +'<div class="csel-dd dtpop" id="dt-pop" style="display:none" onclick="event.stopPropagation()">'
+    +'<div class="dtpop-h">Khoảng ngày tuỳ chọn</div>'
+    +'<label class="dtpop-l">Từ ngày<input type="date" id="dt-from" value="'+isoDate(_from)+'"></label>'
+    +'<label class="dtpop-l">Đến ngày<input type="date" id="dt-to" value="'+isoDate(_to)+'"></label>'
+    +'<button class="dtpop-apply" onclick="onRange()">Áp dụng</button>'
+    +(custom?'<button class="dtpop-clear" onclick="flt(0)">Xoá lọc ngày</button>':'')
+    +'</div></div>';
+}
 function masthead(mode){
   var mBtn=mode==='ex'?'<button class="mode-btn alt" onclick="setMode(\'op\')" data-tip="Bảng điều hành đầy đủ">Bảng điều hành</button>':'<button class="mode-btn" onclick="setMode(\'ex\')" data-tip="Tóm tắt cho lãnh đạo">Tóm tắt lãnh đạo</button>';
   return '<div class="mast"><div class="mast-in"><div class="brand"><div class="logo">SHB</div><div><div class="tt">Facebook Dashboard</div><div class="ss">Fanpage · CM Analytics</div></div></div>'
     +'<div class="ctrls"><div class="seg"><button onclick="location.href=\'/api/dashboard\'" data-tip="Sang dashboard Email">Email</button><button class="on">Facebook</button></div>'
-    +'<div class="seg"><button class="'+(_days===0&&!_from?'on':'')+'" onclick="flt(0)">Tất cả</button><button class="'+(_days===30?'on':'')+'" onclick="flt(30)">30N</button><button class="'+(_days===7?'on':'')+'" onclick="flt(7)">7N</button></div>'
-    +'<div class="dtrange'+(_from&&_to?' on':'')+'" data-tip="Lọc theo khoảng ngày tuỳ chọn"><input type="date" id="dt-from" value="'+isoDate(_from)+'" onchange="onRange()"><span class="ar">→</span><input type="date" id="dt-to" value="'+isoDate(_to)+'" onchange="onRange()">'+(_from&&_to?'<button class="dtx" onclick="flt(0)" data-tip="Bỏ lọc ngày">×</button>':'')+'</div>'
+    +dateCtrl()
     +'<button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K)">⌘K</button>'
     +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Sáng/Tối">'+(_theme==='dark'?'☼':'☾')+'</button>'
     +'<button class="icon-btn" onclick="toggleDensity()" data-tip="Thoáng/Gọn">⇕</button>'
@@ -898,7 +942,7 @@ function masthead(mode){
 function operational(d,cur,prev,ser){
   return masthead('op')+'<div class="subnav"><div class="subnav-in">'+navLinks()+'</div></div>'+filterStatusBar()
     +'<div class="wrap">'+filterBar(d)
-    +'<section id="s-ov" style="padding-top:14px"><div class="eyebrow">Tổng quan</div>'+heroRow(d,cur,prev,ser)+heroChart(d,ser)+'</section>'
+    +'<section id="s-ov" style="padding-top:14px"><div class="eyebrow">Tổng quan</div>'+heroRow(d,cur,prev,ser)+heroChart(d,ser)+funnelPanel(d)+'</section>'
     +contentSection(d)+mixSection(d)
     +'<section id="s-time"><div class="eyebrow">Khung giờ hiệu quả</div>'+timingPanel(d)+'</section>'
     +audienceSection(d)+insightSection(d)+healthSection(d)+dictSection()
@@ -959,7 +1003,8 @@ function setMetric(m){_metric=m;paint();}
 function openTopicSel(e){e.stopPropagation();var dd=document.getElementById('topic-dd');if(!dd)return;var open=dd.style.display==='block';dd.style.display=open?'none':'block';if(!open){var inp=dd.querySelector('.csel-inp');if(inp){inp.value='';inp.focus();filterTopicSel('');}}}
 function filterTopicSel(q){var list=document.getElementById('topic-list');if(!list)return;var qq=norm(q);list.querySelectorAll('.csel-opt').forEach(function(el){el.style.display=(qq===''||norm(el.textContent).indexOf(qq)>-1)?'':'none';});}
 function pickTopic(v){setFilter('topic',v);var dd=document.getElementById('topic-dd');if(dd)dd.style.display='none';}
-document.addEventListener('click',function(){var dd=document.getElementById('topic-dd');if(dd)dd.style.display='none';});
+function toggleDtPop(e){e.stopPropagation();var p=document.getElementById('dt-pop');if(p)p.style.display=p.style.display==='block'?'none':'block';}
+document.addEventListener('click',function(){var dd=document.getElementById('topic-dd');if(dd)dd.style.display='none';var dp=document.getElementById('dt-pop');if(dp)dp.style.display='none';});
 function jump(sel){var el=document.querySelector(sel);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
 
 function render(){
