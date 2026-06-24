@@ -553,20 +553,25 @@ function heroRow(d,cur,prev,ser){
   var fv=ser.map(function(b){return b.followers;}),vv=ser.map(function(b){return b.views;});
   var reachRate=s.reachRate;
   var PS=(DATA.pageInsights&&DATA.pageInsights.series)||{};
+  var m=(DATA.pageInsights&&DATA.pageInsights.metrics)||{};
   var cFil=Object.keys(_filter||{}).some(function(k){return _filter[k];}); // lọc theo bài/loại/chủ đề
   // Theo NGÀY HOẠT ĐỘNG (chuẩn Facebook): cộng chuỗi ngày trong khoảng lọc. Chỉ khi KHÔNG lọc theo bài/loại.
   var viewsAct=(!cFil&&PS.views)?sumSeries(PS.views):null;
   var engAct=(!cFil&&PS.interactions)?sumSeries(PS.interactions):null;
   var viewsVal=viewsAct!=null?viewsAct:s.views;
+  // Các chỉ số cấp trang (activity, theo kỳ Facebook đã bắt) — fallback per-post khi lọc theo bài/loại
+  function pg(pageVal,postVal){return (!cFil&&typeof pageVal==='number')?pageVal:postVal;}
+  var viewersV=pg(m.viewers,s.mediaViewers), cmtV=pg(m.comment,s.comments), impV=pg(m.impression,sumPm(cur,'impression'));
+  var engV=engAct!=null?engAct:s.eng, folV=m.follower||m.total_follower||s.followers;
+  if(viewsVal&&viewersV)reachRate=Math.min(100,Math.round(viewersV/viewsVal*1000)/10);
   var actTag='<span style="font-size:9px;color:rgba(255,255,255,.7);font-weight:600;text-transform:none"> · ngày hoạt động</span>';
-  var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem theo NGÀY HOẠT ĐỘNG (chuỗi page-level Facebook). Vòng cung = Người xem ÷ Lượt xem."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(reachRate,50,nf(viewsVal),'Reach '+reachRate+'% · ER '+s.engRate+'%')+'</div><div class="gc-sub">'+nf(s.mediaViewers)+' người xem · tỉ lệ reach '+reachRate+'% (Người xem/Lượt xem)</div></div>';
+  var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem theo NGÀY HOẠT ĐỘNG (chuỗi page-level Facebook). Vòng cung = Người xem ÷ Lượt xem."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(reachRate,50,nf(viewsVal),'Reach '+reachRate+'% · ER '+s.engRate+'%')+'</div><div class="gc-sub">'+nf(viewersV)+' người xem · tỉ lệ reach '+reachRate+'% (Người xem/Lượt xem)</div></div>';
   var k=[
-    card('Người xem',nf(s.mediaViewers),'','','Người xem duy nhất — cộng dồn theo BÀI (ngày đăng), vì Facebook không cung cấp chuỗi theo ngày cho chỉ số này.'),
-    card('Lượt tương tác'+(engAct!=null?' ·hđ':''),nf(engAct!=null?engAct:s.eng),'','',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook.':'Tổng tương tác theo bài (ngày đăng). Quét lại trang Lượt tương tác để có số theo ngày hoạt động.'),
-    card('Bình luận',nf(s.comments),'','','Tổng bình luận — theo BÀI (ngày đăng).'),
-    card('Lượt hiển thị',nf(sumPm(cur,'impression')),'','','Số lần nội dung hiển thị (impressions) — theo BÀI (ngày đăng). KHÁC Lượt xem.'),
-    card('Reaction',nf(Math.max(0,s.eng-s.comments)),'','','Lượt cảm xúc (≈ tương tác − bình luận) — theo BÀI (ngày đăng).'),
-    card('Follower',nf(s.followers),'',spark(fv,'var(--good)'),'Tổng follower hiện tại của trang.')
+    card('Người xem',nf(viewersV),'','','Người xem duy nhất (unique viewers) cấp trang theo ngày hoạt động — chuẩn Facebook (không phải cộng dồn per-post).'),
+    card('Lượt tương tác'+(engAct!=null?' ·hđ':''),nf(engV),'','',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.'),
+    card('Bình luận',nf(cmtV),'','','Tổng bình luận cấp trang (theo kỳ Facebook đã bắt).'),
+    card('Lượt hiển thị',nf(impV),'','','Số lần nội dung hiển thị (impressions) cấp trang. KHÁC Lượt xem: một người có thể thấy nhiều lần.'),
+    card('Follower',nf(folV),'',spark(fv,'var(--good)'),'Tổng follower hiện tại của trang.')
   ].join('');
   return '<div class="hero-row">'+gauge+'<div class="kpi-col">'+k+'</div></div>';
 }
