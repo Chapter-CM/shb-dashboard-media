@@ -407,8 +407,9 @@ function process(posts){
   sum.avgFirst=Math.round(sum.firstSum/arr.length);
   sum.velocity=sum.eng?pc(sum.velEarly/sum.eng*100):0;
   sum.followers=DATA.page.followers;
-  sum.avgViewers=sum.nPosts?Math.round(sum.mediaViewers/sum.nPosts):0;          // người xem duy nhất TB / bài
-  sum.reachRate=sum.followers?Math.min(100,pc(sum.avgViewers/sum.followers*100)):0; // reach TB mỗi bài (≤100%)
+  sum.avgViewers=sum.nPosts?Math.round(sum.mediaViewers/sum.nPosts):0;          // người xem TB / bài
+  // Tỉ lệ reach = Người xem ÷ Lượt xem (chuẩn FB: viewers/views). Không dùng follower.
+  sum.reachRate=sum.views?Math.min(100,pc(sum.mediaViewers/sum.views*100)):0;
   // best time heatmap: 7 days x 24h, weighted by engagement
   var heat=[];for(var i=0;i<7;i++){heat.push(new Array(24).fill(0));}
   arr.forEach(function(p){var d=new Date(p.ts);heat[(d.getDay()+6)%7][d.getHours()]+=engOf(p);});
@@ -475,7 +476,7 @@ function heroRow(d,cur,prev,ser){
   function card(label,val,dH,spH,tip){return '<div class="kpi" data-tip="'+esc(tip)+'"><div class="kl">'+label+'</div><div class="kv">'+val+'</div><div class="krow">'+(dH||'<span class="delta flat"></span>')+(spH||'')+'</div></div>';}
   var fv=ser.map(function(b){return b.followers;}),vv=ser.map(function(b){return b.views;});
   var reachRate=s.reachRate;
-  var gauge='<div class="gauge-card" data-tip="Số to = tổng Views (tổng lượt xem). Vòng cung = Reach TB/bài = người xem duy nhất trung bình mỗi bài ÷ follower (≤100%)."><div class="gc-h">Tổng Views · '+s.nPosts+' bài</div><div class="gauge-wrap">'+gaugeBig(reachRate,40,nf(s.views),'Reach '+reachRate+'% · ER '+s.engRate+'%')+'</div><div class="gc-sub">'+nf(s.mediaViewers)+' người xem · TB '+nf(s.avgViewers)+'/bài · mục tiêu reach 40%</div></div>';
+  var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem. Vòng cung = Tỉ lệ reach = Người xem ÷ Lượt xem (chuẩn Facebook)."><div class="gc-h">Tổng Lượt xem · '+s.nPosts+' bài</div><div class="gauge-wrap">'+gaugeBig(reachRate,50,nf(s.views),'Reach '+reachRate+'% · ER '+s.engRate+'%')+'</div><div class="gc-sub">'+nf(s.mediaViewers)+' người xem · tỉ lệ reach '+reachRate+'% (Người xem/Lượt xem)</div></div>';
   var k=[
     card('Người xem',nf(s.mediaViewers),deltaChip(sumKey(cur,'mediaViewers'),sumKey(prev,'mediaViewers')),'','Media Viewers — tổng người xem duy nhất cộng dồn các bài (thay Reach từ 15/06/2026). Reach TB mỗi bài = '+reachRate+'% follower.'),
     card('Tương tác',nf(s.eng),deltaChip(sumKey(cur,'eng'),sumKey(prev,'eng')),'','Tổng lượt tương tác (engagement) cộng dồn các bài — theo số Facebook ghi nhận per-post (gồm cảm xúc, bình luận, chia sẻ, click...). Khác số "Lượt tương tác" cấp trang vì đó là định nghĩa hẹp hơn.'),
