@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SHB Content Library → Supabase
 // @namespace    shb-fb-dashboard
-// @version      3.3.0
+// @version      3.4.0
 // @description  Bắt response Professional Dashboard Content Library (bài Group "SHB Một Nhà") và đẩy sang /api/ingest. Groups API công khai đã bị Meta gỡ 22/04/2024 nên đây là nguồn dữ liệu duy nhất.
 // @author       SHB CM
 // @match        https://www.facebook.com/*
@@ -58,6 +58,10 @@
     var ins = ent.entity_insights || {};
     var postId = String(ent.entity_id || idFromUrl(story.url) || '').trim();
     if (!postId) return null;
+    // CHẶN bài của trang/group KHÁC: chỉ nhận bài thuộc GROUP_ID (SHB Một Nhà).
+    var grp = (story.target_group && story.target_group.id) ? String(story.target_group.id) : '';
+    if (grp && grp !== GROUP_ID) return null;
+    if (!grp) { var u = String(story.url || ''); if (u.indexOf(GROUP_ID) < 0 && u.indexOf('shbmotnha') < 0) return null; }
     var created = null;
     if (story.creation_time) { try { created = new Date(story.creation_time * 1000).toISOString(); } catch (e) {} }
     return {
@@ -232,5 +236,5 @@
   } catch (e) {}
   if (/professional_dashboard/.test(location.pathname)) tourTick();
 
-  log('userscript v3.3 đã nạp — bóc full chỉ số per-post + page-level. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
+  log('userscript v3.4 đã nạp — bóc full chỉ số per-post + page-level. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
 })();
