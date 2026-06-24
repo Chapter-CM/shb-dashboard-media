@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SHB Content Library → Supabase
 // @namespace    shb-fb-dashboard
-// @version      3.2.0
+// @version      3.3.0
 // @description  Bắt response Professional Dashboard Content Library (bài Group "SHB Một Nhà") và đẩy sang /api/ingest. Groups API công khai đã bị Meta gỡ 22/04/2024 nên đây là nguồn dữ liệu duy nhất.
 // @author       SHB CM
 // @match        https://www.facebook.com/*
@@ -37,6 +37,19 @@
     return m ? m[1] : '';
   }
 
+  // Bóc TẤT CẢ chỉ số {value} trong entity_insights của 1 bài (Lượt hiển thị, Số người
+  // theo dõi thực, Lượt phân phối, watch time, ≥3s/≥1ph...). Lưu jsonb metrics.
+  function entMetrics(ins) {
+    var o = {};
+    if (ins && typeof ins === 'object') {
+      Object.keys(ins).forEach(function (k) {
+        var v = ins[k];
+        if (v && typeof v === 'object' && typeof v.value === 'number') o[k] = v.value;
+      });
+    }
+    return o;
+  }
+
   // Chuẩn hoá 1 node ProDashContentLibraryStory -> 1 row ingest.
   function mapNode(node) {
     if (!node) return null;
@@ -58,6 +71,7 @@
       viewers: mval(ins, 'viewers'),      // "Người xem" (unique)
       engagement: mval(ins, 'engagement'),// "Tương tác"
       comments: mval(ins, 'comment'),     // "Bình luận"
+      metrics: entMetrics(ins),           // TẤT CẢ chỉ số per-post (jsonb)
       source: 'prodash'
     };
   }
@@ -218,5 +232,5 @@
   } catch (e) {}
   if (/professional_dashboard/.test(location.pathname)) tourTick();
 
-  log('userscript v3.2 đã nạp — bắt số liệu toàn Professional Dashboard. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
+  log('userscript v3.3 đã nạp — bóc full chỉ số per-post + page-level. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
 })();

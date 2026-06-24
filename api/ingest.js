@@ -49,6 +49,7 @@ function normalize(p) {
     viewers: num(p.viewers),
     engagement: num(p.engagement),
     comments: num(p.comments),
+    metrics: (p.metrics && typeof p.metrics === 'object') ? p.metrics : {},
     source: str(p.source || 'prodash'),
     updated_at: new Date().toISOString()
   };
