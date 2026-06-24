@@ -94,14 +94,16 @@ function gpTopic(msg) { var m = String(msg || '').match(/#(\w+)/); return m ? m[
 function groupAsPosts(rows) {
   if (!Array.isArray(rows)) return [];
   return rows.map(function (r) {
-    var eng = r.engagement || 0, cmt = r.comments || 0, reactions = Math.max(0, eng - cmt);
+    var eng = r.engagement || 0, cmt = r.comments || 0;
     return {
       id: 'g_' + r.post_id, msg: r.title || '(không có nội dung)', ts: r.created_time ? new Date(r.created_time).getTime() : 0,
       type: gpType(r.post_type), topic: gpTopic(r.title), permalink: r.permalink || '#',
       views: r.reach || 0, mediaViewers: r.viewers || 0,
-      react: { like: reactions, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
+      // Nguồn Content Library KHÔNG tách reaction từng bài — chỉ có tổng engagement (broad).
+      // Nên KHÔNG bịa reactions; giữ react=0 và mang tổng tương tác thật ở engRaw.
+      react: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
       comments: cmt, replies: 0, pageReplies: 0, shares: 0, clicks: 0, firstCommentMin: 0,
-      video: null, vel: { h1: 0, h3: 0, h6: 0, h24: 0 }, isGroup: true
+      video: null, vel: { h1: 0, h3: 0, h6: 0, h24: 0 }, isGroup: true, engRaw: eng
     };
   });
 }
@@ -377,7 +379,7 @@ function donut(parts){
 
 /* ── analytics core: process(posts) ── */
 function reactTotal(r){return r.like+r.love+r.haha+r.wow+r.sad+r.angry;}
-function engOf(p){return reactTotal(p.react)+p.comments+p.shares;}
+function engOf(p){return p.engRaw!=null?p.engRaw:reactTotal(p.react)+p.comments+p.shares;}
 function erOf(p){return p.views?engOf(p)/p.views*100:0;}
 function process(posts){
   if(!posts.length)return {empty:true};
@@ -476,7 +478,7 @@ function heroRow(d,cur,prev,ser){
   var gauge='<div class="gauge-card" data-tip="Số to = tổng Views (tổng lượt xem). Vòng cung = Reach TB/bài = người xem duy nhất trung bình mỗi bài ÷ follower (≤100%)."><div class="gc-h">Tổng Views · '+s.nPosts+' bài</div><div class="gauge-wrap">'+gaugeBig(reachRate,40,nf(s.views),'Reach '+reachRate+'% · ER '+s.engRate+'%')+'</div><div class="gc-sub">'+nf(s.mediaViewers)+' người xem · TB '+nf(s.avgViewers)+'/bài · mục tiêu reach 40%</div></div>';
   var k=[
     card('Người xem',nf(s.mediaViewers),deltaChip(sumKey(cur,'mediaViewers'),sumKey(prev,'mediaViewers')),'','Media Viewers — tổng người xem duy nhất cộng dồn các bài (thay Reach từ 15/06/2026). Reach TB mỗi bài = '+reachRate+'% follower.'),
-    card('Reactions',nf(s.reactions),deltaChip(sumKey(cur,'reactions'),sumKey(prev,'reactions')),'','Tổng cảm xúc (6 loại).'),
+    card('Tương tác',nf(s.eng),deltaChip(sumKey(cur,'eng'),sumKey(prev,'eng')),'','Tổng lượt tương tác (engagement) cộng dồn các bài — theo số Facebook ghi nhận per-post (gồm cảm xúc, bình luận, chia sẻ, click...). Khác số "Lượt tương tác" cấp trang vì đó là định nghĩa hẹp hơn.'),
     card('Comments',nf(s.comments),deltaChip(sumKey(cur,'comments'),sumKey(prev,'comments')),'','Tổng bình luận.'),
     card('Shares',nf(s.shares),deltaChip(sumKey(cur,'shares'),sumKey(prev,'shares')),'','Tổng lượt chia sẻ — tín hiệu lan toả mạnh.'),
     card('Follower',nf(s.followers),'',spark(fv,'var(--good)'),'Tổng follower hiện tại (cần snapshot để có growth).'),
@@ -484,7 +486,7 @@ function heroRow(d,cur,prev,ser){
   ].join('');
   return '<div class="hero-row">'+gauge+'<div class="kpi-col">'+k+'</div></div>';
 }
-function sumKey(posts,k){var t=0;posts.forEach(function(p){if(k==='reactions')t+=reactTotal(p.react);else t+=p[k]||0;});return t;}
+function sumKey(posts,k){var t=0;posts.forEach(function(p){if(k==='reactions')t+=reactTotal(p.react);else if(k==='eng')t+=engOf(p);else t+=p[k]||0;});return t;}
 function heroChart(d,ser){
   return '<div class="hero-chart"><div class="hc-head"><div class="hc-title" data-tip="Xu hướng theo thời gian — chọn chỉ số để xem.">Xu hướng theo thời gian</div>'
     +'<div class="metric-toggle"><button class="'+(_metric==='views'?'on':'')+'" onclick="setMetric(\'views\')">Views</button><button class="'+(_metric==='eng'?'on':'')+'" onclick="setMetric(\'eng\')">Tương tác</button><button class="'+(_metric==='followers'?'on':'')+'" onclick="setMetric(\'followers\')">Follower</button></div></div>'
@@ -492,6 +494,7 @@ function heroChart(d,ser){
 }
 function reactionPanel(d){
   var r=d.sum.react,meta=[['love','❤️ Love','#ff7d96'],['like','👍 Like','#5b8cff'],['haha','😆 Haha','#ffc861'],['wow','😮 Wow','#8b7bff'],['sad','😢 Sad','#5bb8ff'],['angry','😡 Angry','#ff9d5b']];
+  if(reactTotal(r)===0){return '<div class="panel"><div class="panel-h">Cảm xúc &amp; Sentiment</div><div class="nd" style="padding:28px 16px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6">Nguồn Content Library của Facebook <b>không tách chi tiết 6 loại cảm xúc theo từng bài</b> — chỉ có tổng <b>Tương tác</b> (xem card Tổng quan). Phần này cần dữ liệu reaction cấp bài (chỉ bài Fanpage tự đăng mới có).</div></div>';}
   var parts=meta.map(function(m){return {v:r[m[0]],c:m[2]};});
   var leg=meta.map(function(m){return '<div class="dl"><i style="background:'+m[2]+'"></i>'+m[1]+'<b>'+nf(r[m[0]])+'</b></div>';}).join('');
   var sCls=d.sum.sentiment>=40?'good':d.sum.sentiment>=0?'warn':'risk';
