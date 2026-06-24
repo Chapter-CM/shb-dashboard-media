@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SHB Content Library → Supabase
 // @namespace    shb-fb-dashboard
-// @version      3.1.0
+// @version      3.2.0
 // @description  Bắt response Professional Dashboard Content Library (bài Group "SHB Một Nhà") và đẩy sang /api/ingest. Groups API công khai đã bị Meta gỡ 22/04/2024 nên đây là nguồn dữ liệu duy nhất.
 // @author       SHB CM
 // @match        https://www.facebook.com/*
@@ -135,7 +135,7 @@
   function tryParse(text) {
     text = String(text || '');
     var hasLib = text.indexOf('prodash_content_library') > -1;
-    var hasPage = /profile_insights/.test(location.pathname) &&
+    var hasPage = /professional_dashboard/.test(location.pathname) &&
       (text.indexOf('MetricsQueryResult') > -1 || text.indexOf('TimeSeries') > -1);
     if (!hasLib && !hasPage) return;
     var pageAcc = { metrics: {}, series: {} };
@@ -182,5 +182,41 @@
     }, 1500);
   }
 
-  log('userscript v3.1 đã nạp (hook window thật) — Content Library tự cuộn; trang Insights tự bắt số liệu page-level.');
+  // ── AUTO-TOUR: tự đi hết các mục của Professional Dashboard để quét sạch ────
+  // Bấm Ctrl+Shift+Y trên trang dashboard để bắt đầu. Script tự mở từng mục,
+  // mỗi mục đợi ~10s (đủ để auto-scroll nạp hết widget + hook bắt số liệu), rồi sang mục kế.
+  var TOUR = [
+    '/professional_dashboard/?ref=tab_bar',
+    '/professional_dashboard/profile_insights/views/',
+    '/professional_dashboard/profile_insights/interactions/',
+    '/professional_dashboard/profile_insights/audience/',
+    '/professional_dashboard/profile_insights/earnings/',
+    '/professional_dashboard/content/content_library/?ref=tab_bar'
+  ];
+  function tourTick() {
+    var raw = null; try { raw = sessionStorage.getItem('shbTour'); } catch (e) {}
+    if (!raw) return;
+    var q; try { q = JSON.parse(raw); } catch (e) { q = null; }
+    if (!q || !q.length) { try { sessionStorage.removeItem('shbTour'); } catch (e) {} return; }
+    log('TOUR: đang ở', q[0], '— còn', q.length, 'mục');
+    setTimeout(function () {
+      q.shift();
+      try { sessionStorage.setItem('shbTour', JSON.stringify(q)); } catch (e) {}
+      if (q.length) { W.location.href = q[0]; }
+      else { try { sessionStorage.removeItem('shbTour'); } catch (e) {} log('TOUR xong — đã quét hết các mục.'); }
+    }, 10000);
+  }
+  function startTour() {
+    try { sessionStorage.setItem('shbTour', JSON.stringify(TOUR.slice())); } catch (e) {}
+    log('TOUR bắt đầu — sẽ tự đi qua', TOUR.length, 'mục (~1 phút). Đừng đụng chuột.');
+    W.location.href = TOUR[0];
+  }
+  try {
+    W.addEventListener('keydown', function (e) {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'Y' || e.key === 'y')) { startTour(); }
+    });
+  } catch (e) {}
+  if (/professional_dashboard/.test(location.pathname)) tourTick();
+
+  log('userscript v3.2 đã nạp — bắt số liệu toàn Professional Dashboard. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
 })();
