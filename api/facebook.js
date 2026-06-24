@@ -580,24 +580,33 @@ function heroRow(d,cur,prev,ser){
   var viewersV=pg(mx.viewers,s.mediaViewers), cmtV=pg(mx.comment,s.comments), impV=pg(mx.impression,sumPm(cur,'impression'));
   var engV=engAct!=null?engAct:s.eng, folV=m.follower||m.total_follower||s.followers;
   if(viewsVal&&viewersV)reachRate=Math.min(100,Math.round(viewersV/viewsVal*1000)/10);
+  var erAct=viewsVal?pc(engV/viewsVal*100):s.engRate;            // ER theo số activity (chuẩn nhất)
+  var erArc=Math.min(100,Math.round(erAct/TARGET_ER*100));        // vòng cung = ER so với mục tiêu
   var actTag='<span style="font-size:9px;color:rgba(255,255,255,.7);font-weight:600;text-transform:none"> · ngày hoạt động</span>';
   var vDelta=(!cFil)?seriesDelta(PS.views):'';
-  var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem theo NGÀY HOẠT ĐỘNG (chuỗi page-level Facebook). Vòng cung = tỉ lệ Người xem ÷ Lượt xem."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(reachRate,50,nf(viewsVal),nf(viewersV)+' người xem')+'</div><div class="gc-sub">'+(vDelta?vDelta+' so với kỳ trước · ':'')+'Người xem ÷ Lượt xem = '+reachRate+'% · '+s.nPosts+' bài</div></div>';
+  var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem theo ngày hoạt động. Vòng cung = ER (Tương tác ÷ Lượt xem) so với mục tiêu '+TARGET_ER+'%; vạch trắng = mốc mục tiêu."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(erArc,100,nf(viewsVal),'ER '+erAct+'%')+'</div><div class="gc-sub">'+(vDelta?vDelta+' so kỳ trước · ':'')+'ER '+erAct+'% '+(erAct>=TARGET_ER?'✓ đạt':'(mục tiêu '+TARGET_ER+'%)')+' · '+s.nPosts+' bài</div></div>';
+  var erCls=erAct>=TARGET_ER?'up':'down';
   var k=[
-    card('Người xem',nf(viewersV),'','','Người xem duy nhất (unique viewers) cấp trang theo ngày hoạt động — chuẩn Facebook (không phải cộng dồn per-post).'),
     card('Lượt tương tác'+(engAct!=null?' ·hđ':''),nf(engV),(!cFil?seriesDelta(PS.interactions):''),'',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Delta = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.'),
-    card('Bình luận',nf(cmtV),'','','Tổng bình luận cấp trang (theo kỳ Facebook đã bắt).'),
-    card('Lượt hiển thị',nf(impV),'','','Số lần nội dung hiển thị (impressions) cấp trang. KHÁC Lượt xem: một người có thể thấy nhiều lần.'),
-    card('Follower',nf(folV),'',spark(fv,'var(--good)'),'Tổng follower hiện tại của trang.')
+    card('ER (Engagement Rate)',erAct+'%','<span class="delta '+erCls+'">'+(erAct>=TARGET_ER?'≥':'<')+' mục tiêu '+TARGET_ER+'%</span>','','Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.'),
+    card('Người xem',nf(viewersV),'','','Người xem duy nhất (unique viewers) cấp trang theo ngày hoạt động.'),
+    card('Lượt hiển thị',nf(impV),'','','Số lần nội dung hiển thị (impressions) cấp trang. KHÁC Lượt xem.'),
+    card('Bình luận',nf(cmtV),'','','Tổng bình luận cấp trang (theo kỳ Facebook đã bắt).')
   ].join('');
   var topType=(d.byType&&d.byType[0])?d.byType[0].name:'', topTopic=(d.byTopic&&d.byTopic[0])?d.byTopic[0].name:'';
-  var summary='<div class="so" style="margin-top:16px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:15px">💡</span><div>Kỳ này: <b>'+nf(viewsVal)+'</b> lượt xem'+(vDelta?' ('+vDelta+' so kỳ trước)':'')+' · <b>'+nf(engV)+'</b> lượt tương tác · ER <b>'+s.engRate+'%</b>'+(s.engRate>=TARGET_ER?' ✓ đạt mục tiêu':' (mục tiêu '+TARGET_ER+'%)')+'.'+(topType?' Định dạng <b>'+esc(topType)+'</b>'+(topTopic?' &amp; chủ đề <b>'+esc(topTopic)+'</b>':'')+' hiệu quả nhất — ưu tiên sản xuất.':'')+'</div></div>';
+  var summary='<div class="so" style="margin-top:16px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:15px">💡</span><div>Kỳ này: <b>'+nf(viewsVal)+'</b> lượt xem'+(vDelta?' ('+vDelta+' so kỳ trước)':'')+' · <b>'+nf(engV)+'</b> lượt tương tác · ER <b>'+erAct+'%</b>'+(erAct>=TARGET_ER?' ✓ đạt mục tiêu':' (mục tiêu '+TARGET_ER+'%)')+'.'+(topType?' Định dạng <b>'+esc(topType)+'</b>'+(topTopic?' &amp; chủ đề <b>'+esc(topTopic)+'</b>':'')+' hiệu quả nhất — ưu tiên sản xuất.':'')+'</div></div>';
   return '<div class="hero-row">'+gauge+'<div class="kpi-col">'+k+'</div></div>'+summary;
 }
 function sumKey(posts,k){var t=0;posts.forEach(function(p){if(k==='reactions')t+=reactTotal(p.react);else if(k==='eng')t+=engOf(p);else t+=p[k]||0;});return t;}
 function sumPm(posts,k){var t=0;posts.forEach(function(p){if(p.pm&&typeof p.pm[k]==='number')t+=p.pm[k];});return t;}
 function pmv(p,k){return (p&&p.pm&&typeof p.pm[k]==='number')?p.pm[k]:0;}
 function pViews(p){return pmv(p,'views')||pmv(p,'reach')||p.views||0;}
+// ER theo NGÀY HOẠT ĐỘNG = tương tác(ngày) ÷ lượt xem(ngày) × 100.
+function dailyER(){
+  var PS=(DATA.pageInsights&&DATA.pageInsights.series)||{},vm={};
+  (PS.views||[]).forEach(function(p){vm[p.ms]=p.value;});
+  return (PS.interactions||[]).map(function(p){var v=vm[p.ms];return v?{ms:p.ms,value:Math.round(p.value/v*1000)/10}:null;}).filter(Boolean).sort(function(a,b){return a.ms-b.ms;});
+}
 // Gom 1 chỉ số per-post theo NGÀY ĐĂNG (tôn trọng lọc thời gian + lọc chéo).
 function dailyByPost(metricFn){
   var F=_filter||{},m={};
@@ -623,11 +632,11 @@ function heroChart(d,ser){
     note=' <span style="font-size:10px;color:var(--faint);font-weight:600;text-transform:none;letter-spacing:0">· theo ngày ĐĂNG (đang lọc)</span>';
   } else if(_metric==='views'){daily=(PS.views||[]).filter(function(p){return inWin(p.ms);});note=actNote('Lượt xem');}
   else if(_metric==='eng'){daily=(PS.interactions||[]).filter(function(p){return inWin(p.ms);});note=actNote('Lượt tương tác');}
-  else {daily=(PS.followers||[]).filter(function(p){return inWin(p.ms);});if(!daily.length)daily=(ser||[]).map(function(b){return {ms:b.ms,value:b.followers};}).filter(function(b){return b.value;});}
-  var chart=daily&&daily.length?pageDailyChart(daily)
-    :'<div class="nd" style="padding:30px 16px;text-align:center">Chưa có chuỗi theo ngày hoạt động cho chỉ số này.'+(_metric==='eng'?'<br><span style="font-size:11.5px">Quét lại trang <b>Lượt tương tác</b> (Ctrl+Shift+Y) để lấy interactions_time_series.</span>':_metric==='followers'?'<br><span style="font-size:11.5px">Quét lại trang <b>Đối tượng</b>.</span>':'')+'</div>';
+  else {daily=dailyER().filter(function(p){return inWin(p.ms);});note=actNote('ER %');}  // ER theo ngày = tương tác/lượt xem
+  var chart=daily&&daily.length?pageDailyChart(daily,_metric==='er'?'%':'')
+    :'<div class="nd" style="padding:30px 16px;text-align:center">Chưa có chuỗi theo ngày hoạt động cho chỉ số này.'+(_metric==='eng'||_metric==='er'?'<br><span style="font-size:11.5px">Quét lại trang <b>Lượt tương tác</b> (Ctrl+Shift+Y) để lấy interactions_time_series.</span>':'')+'</div>';
   return '<div class="hero-chart"><div class="hc-head"><div class="hc-title" data-tip="Xu hướng theo NGÀY CÓ HOẠT ĐỘNG (không phải ngày đăng) — chuẩn Facebook.">Xu hướng theo thời gian'+note+'</div>'
-    +'<div class="metric-toggle"><button class="'+(_metric==='views'?'on':'')+'" onclick="setMetric(\'views\')">Lượt xem</button><button class="'+(_metric==='eng'?'on':'')+'" onclick="setMetric(\'eng\')">Tương tác</button><button class="'+(_metric==='followers'?'on':'')+'" onclick="setMetric(\'followers\')">Follower</button></div></div>'
+    +'<div class="metric-toggle"><button class="'+(_metric==='views'?'on':'')+'" onclick="setMetric(\'views\')">Lượt xem</button><button class="'+(_metric==='eng'?'on':'')+'" onclick="setMetric(\'eng\')">Tương tác</button><button class="'+(_metric==='er'?'on':'')+'" onclick="setMetric(\'er\')">ER %</button></div></div>'
     +chart+'</div>';
 }
 function reactionPanel(d){
@@ -848,28 +857,16 @@ function ageGenderPanel(ag){
 }
 function audienceSection(d){
   var pi=DATA.pageInsights;
-  var ser=windowSeries(_days),fv=ser.map(function(b){return b.followers;});
-  var useFol=pi&&pi.folDaily&&pi.folDaily.length;
-  var folD=useFol?pi.folDaily.filter(function(p){return inWin(p.ms);}):[];
-  var grow=folD.length?folD[folD.length-1].value-folD[0].value:(fv.length?fv[fv.length-1]-fv[0]:0);
-  var fol=(pi&&pi.follower)||{total:0,net:0,unfollow:0};
   var t=d.tiers;function tier(v,n,lbl,col,tip){return '<div class="tier" data-tip="'+esc(tip)+'"><div class="tv">'+v+'</div><div class="tn"><span class="dt" style="color:'+col+'"></span>'+n+'</div><div class="td">'+lbl+'</div></div>';}
-  function kc(l,v,cls,tip){return '<div class="kpi" data-tip="'+esc(tip)+'"><div class="kl">'+l+'</div><div class="kv '+(cls||'')+'" style="font-size:23px">'+v+'</div></div>';}
-  var folKpis=(pi&&fol.total)?'<div class="kpi-col" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
-    +kc('Tổng follower',nf(fol.total),'','Tổng người theo dõi trang hiện tại.')
-    +kc('Tăng thực (net)',(fol.net>=0?'+':'')+nf(fol.net),fol.net>=0?'good':'risk','Người theo dõi tăng thực trong kỳ (net follower).')
-    +kc('Huỷ theo dõi',nf(fol.unfollow),'','Số lượt huỷ theo dõi trong kỳ.')
-    +'</div>':'';
-  return '<section id="s-aud"><div class="eyebrow">Audience &amp; Follower</div>'+folKpis
-    +'<div class="hero-chart"><div class="hc-head"><div class="hc-title">Follower theo ngày <span class="pill '+(grow>=0?'p-good':'p-risk')+'">'+(grow>=0?'+':'')+nf(grow)+'</span></div></div>'
-    +(useFol&&folD.length?pageDailyChart(folD):areaChart(ser,'followers','follower'))+'</div>'
-    +(pi&&pi.ageGender?'<div class="row2" style="margin-top:16px">'+ageGenderPanel(pi.ageGender)+'<div class="panel"><div class="panel-h">Ghi chú nhân khẩu học</div><div class="so" style="margin-top:0">Tỉnh/thành &amp; Quốc gia: Facebook báo <b>chưa đủ dữ liệu</b> để hiển thị (trang nhỏ). Sẽ hiện khi đủ.</div></div></div>':'')
-    +'<div class="tiers" style="margin-top:16px">'
+  return '<section id="s-aud"><div class="eyebrow">Đối tượng &amp; phân loại nội dung</div>'
+    +'<div class="tiers">'
     +tier(t.hot.length,'Hot','ER ≥ 1.2× TB','var(--good)','Bài bùng nổ — học công thức để nhân bản.')
     +tier(t.warm.length,'Warm','ER quanh mức TB','var(--warn)','Bài ổn định quanh trung bình.')
     +tier(t.cold.length,'Cold','ER < 0.8× TB','var(--risk)','Bài kém — xem lại định dạng/thời điểm.')
     +tier(d.sum.noEng,'Im lặng','0 tương tác','var(--muted)','Bài không có tương tác nào.')
-    +'</div></section>';
+    +'</div>'
+    +(pi&&pi.ageGender?'<div class="row2" style="margin-top:16px">'+ageGenderPanel(pi.ageGender)+'<div class="panel"><div class="panel-h">Ghi chú đối tượng</div><div class="so" style="margin-top:0">Độ tuổi/giới tính là của <b>người theo dõi trang</b> (Facebook không cấp nhân khẩu học của người xem bài Group). Tỉnh/thành &amp; Quốc gia: FB báo chưa đủ dữ liệu.</div></div></div>':'')
+    +'</section>';
 }
 function insightsOf(d){
   var s=d.sum,ins=[];
@@ -919,7 +916,7 @@ function filterBar(d){var F=_filter||{},o=d.opts||{};
   function topicSel(){var list=o.topic||[],cur=F.topic||'';var label=cur||'Tất cả chủ đề';var opts='<div class="csel-opt'+(cur?'':' on')+'" onclick="pickTopic(\'\')">Tất cả chủ đề</div>'+list.map(function(v){return '<div class="csel-opt'+(v===cur?' on':'')+'" onclick="pickTopic(\''+jsq(v)+'\')">'+esc(v)+'</div>';}).join('');
     return '<div class="csel"><div class="csel-btn" onclick="openTopicSel(event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div><div class="csel-dd" id="topic-dd" style="display:none"><input class="csel-inp" placeholder="🔍 Tìm chủ đề…" oninput="filterTopicSel(this.value)" onclick="event.stopPropagation()"><div class="csel-list" id="topic-list">'+opts+'</div></div></div>';}
   return '<div class="fbar"><span class="flbl">Lọc</span>'+topicSel()+sel('type','Mọi định dạng')+sel('media','Mọi loại media')+sel('slot','Mọi khung giờ')+sel('dayType','Mọi ngày')+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa tất cả</button>':'')+'</div>';}
-function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-content">Nội dung</a><a href="#s-mix">Phân tích</a><a href="#s-time">Khung giờ</a><a href="#s-aud">Audience</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
+function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-content">Nội dung</a><a href="#s-mix">Phân tích</a><a href="#s-time">Khung giờ</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
 // Phễu hiệu quả: Tiếp cận (Lượt xem) -> Tương tác -> Chuyển đổi (theo dõi thực).
 // Dùng đúng định nghĩa hiện có: views & interactions theo ngày hoạt động; follow = net_follow per-post.
 function funnelPanel(d){
@@ -927,8 +924,8 @@ function funnelPanel(d){
   var cFil=Object.keys(F).some(function(k){return F[k];});
   var views=(!cFil&&PS.views&&PS.views.length)?sumSeries(PS.views):d.sum.views;
   var eng=(!cFil&&PS.interactions&&PS.interactions.length)?sumSeries(PS.interactions):d.sum.eng;
-  var follow=0;windowPosts(_days,0).filter(function(p){return matchFilter(p,F);}).forEach(function(p){follow+=pmv(p,'net_follow');});
-  var stages=[['Lượt xem (tiếp cận)',views,'var(--accent)'],['Lượt tương tác',eng,'var(--accent-2)'],['Theo dõi thực',follow,'var(--good)']];
+  var deep=0;windowPosts(_days,0).filter(function(p){return matchFilter(p,F);}).forEach(function(p){deep+=(pmv(p,'comment')||p.comments||0);});
+  var stages=[['Lượt xem (tiếp cận)',views,'var(--accent)'],['Lượt tương tác',eng,'var(--accent-2)'],['Bình luận (sâu)',deep,'var(--good)']];
   var max=views||1,prev=null;
   var rows=stages.map(function(st){
     var v=st[1],w=Math.max(2,v/max*100),cvt=prev==null?'100%':(prev?pc(v/prev*100):0)+'%';
@@ -983,8 +980,9 @@ function timingPanelMini(d){
     +'</div></div>';
 }
 /* ── Toàn trang (page-level) — số liệu Facebook + chart ngày ── */
-function pageDailyChart(daily){
+function pageDailyChart(daily,unit){
   if(!daily||!daily.length) return '';
+  unit=unit||'';
   var W=820,H=150,pl=8,pr=8,pt=12,pb=22,n=daily.length;
   var max=Math.max.apply(null,daily.map(function(p){return p.value;}))||1;
   function X(i){return pl+(n===1?(W-pl-pr)/2:(i/(n-1))*(W-pl-pr));}
@@ -992,7 +990,7 @@ function pageDailyChart(daily){
   var pts=daily.map(function(p,i){return X(i).toFixed(1)+','+Y(p.value).toFixed(1);});
   var area='M'+pl+','+(H-pb)+' L'+pts.join(' L')+' L'+(W-pr).toFixed(1)+','+(H-pb)+' Z';
   var line='M'+pts.join(' L');
-  var dots=daily.map(function(p,i){return '<circle class="dot" cx="'+X(i).toFixed(1)+'" cy="'+Y(p.value).toFixed(1)+'" r="3" fill="var(--accent)" data-tip="'+esc(fmtDay(p.ms)+': '+nf(p.value)+' lượt xem')+'"></circle>';}).join('');
+  var dots=daily.map(function(p,i){return '<circle class="dot" cx="'+X(i).toFixed(1)+'" cy="'+Y(p.value).toFixed(1)+'" r="3" fill="var(--accent)" data-tip="'+esc(fmtDay(p.ms)+': '+(unit==='%'?p.value+'%':nf(p.value)))+'"></circle>';}).join('');
   var labels='';[0,Math.floor(n/4),Math.floor(n/2),Math.floor(3*n/4),n-1].forEach(function(i){if(daily[i])labels+='<text x="'+X(i).toFixed(1)+'" y="'+(H-6)+'" fill="var(--faint)" font-size="9" text-anchor="middle" font-family="var(--num)">'+esc(fmtDay(daily[i].ms))+'</text>';});
   return '<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'">'
     +'<defs><linearGradient id="pgGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".34"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>'
