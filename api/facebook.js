@@ -140,14 +140,16 @@ function buildPageInsights(rows) {
     seriesMap[norm] = Object.keys(byDay[norm]).map(function (k) { return { ms: +k, value: byDay[norm][k] }; }).sort(function (a, b) { return a.ms - b.ms; });
   });
   var daily = seriesMap.views || [];
-  // gom metric: rows đã desc theo captured_at -> giữ giá trị MỚI NHẤT cho mỗi key; bỏ sentinel rác
+  // gom metric: m = MỚI NHẤT (rows desc) cho chỉ số mức (follower); mMax = LỚN NHẤT cho chỉ
+  // số cộng dồn theo kỳ (viewers/impression/comment...) ≈ khoảng rộng nhất đã bắt. Bỏ sentinel rác.
   var NOISE = { distribution_score: 1, raw_query_result: 1 };
-  var m = {};
+  var m = {}, mMax = {};
   rows.forEach(function (r) {
     var mm = r.metrics || {};
     Object.keys(mm).forEach(function (k) {
-      if (NOISE[k]) return;
-      if (m[k] == null && typeof mm[k] === 'number') m[k] = mm[k];
+      if (NOISE[k] || typeof mm[k] !== 'number') return;
+      if (m[k] == null) m[k] = mm[k];
+      if (mMax[k] == null || mm[k] > mMax[k]) mMax[k] = mm[k];
     });
   });
   var best = rows[0];
@@ -165,7 +167,7 @@ function buildPageInsights(rows) {
     viewers: (best && best.metrics && best.metrics.viewers) || m.viewers || 0,
     range: (best && best.date_range) || '',
     captured: best ? new Date(best.captured_at).getTime() : new Date(rows[0].captured_at).getTime(),
-    series: seriesMap,
+    series: seriesMap, metricsMax: mMax,
     ageGender: ageGender, folDaily: folDaily,
     follower: { total: m.follower || m.total_follower || 0, net: m.net_follower || 0, unfollow: m.unfollower || 0 }
   };
@@ -554,6 +556,7 @@ function heroRow(d,cur,prev,ser){
   var reachRate=s.reachRate;
   var PS=(DATA.pageInsights&&DATA.pageInsights.series)||{};
   var m=(DATA.pageInsights&&DATA.pageInsights.metrics)||{};
+  var mx=(DATA.pageInsights&&DATA.pageInsights.metricsMax)||{};
   var cFil=Object.keys(_filter||{}).some(function(k){return _filter[k];}); // lọc theo bài/loại/chủ đề
   // Theo NGÀY HOẠT ĐỘNG (chuẩn Facebook): cộng chuỗi ngày trong khoảng lọc. Chỉ khi KHÔNG lọc theo bài/loại.
   var viewsAct=(!cFil&&PS.views)?sumSeries(PS.views):null;
@@ -561,7 +564,7 @@ function heroRow(d,cur,prev,ser){
   var viewsVal=viewsAct!=null?viewsAct:s.views;
   // Các chỉ số cấp trang (activity, theo kỳ Facebook đã bắt) — fallback per-post khi lọc theo bài/loại
   function pg(pageVal,postVal){return (!cFil&&typeof pageVal==='number')?pageVal:postVal;}
-  var viewersV=pg(m.viewers,s.mediaViewers), cmtV=pg(m.comment,s.comments), impV=pg(m.impression,sumPm(cur,'impression'));
+  var viewersV=pg(mx.viewers,s.mediaViewers), cmtV=pg(mx.comment,s.comments), impV=pg(mx.impression,sumPm(cur,'impression'));
   var engV=engAct!=null?engAct:s.eng, folV=m.follower||m.total_follower||s.followers;
   if(viewsVal&&viewersV)reachRate=Math.min(100,Math.round(viewersV/viewsVal*1000)/10);
   var actTag='<span style="font-size:9px;color:rgba(255,255,255,.7);font-weight:600;text-transform:none"> · ngày hoạt động</span>';
