@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SHB Content Library → Supabase
 // @namespace    shb-fb-dashboard
-// @version      2.0.0
+// @version      3.2.0
 // @description  Bắt response Professional Dashboard Content Library (bài Group "SHB Một Nhà") và đẩy sang /api/ingest. Groups API công khai đã bị Meta gỡ 22/04/2024 nên đây là nguồn dữ liệu duy nhất.
 // @author       SHB CM
 // @match        https://www.facebook.com/*
@@ -93,14 +93,60 @@
     if (d.prodash_content_library) handleLibrary(d.prodash_content_library);
   }
 
+  // ── PAGE-LEVEL: trích generic mọi metric {value} + time-series từ insights ──
+  var SKIP = { recent_posts: 1, image: 1, privacy_icon: 1, attachments: 1, story: 1 };
+  var NOISE = { raw_query_result: 1 }; // key bao quanh giá trị 1 bài viết -> bỏ
+  function extractMetrics(obj, acc) {
+    if (!obj || typeof obj !== 'object') return;
+    if (Array.isArray(obj)) { for (var i = 0; i < obj.length; i++) extractMetrics(obj[i], acc); return; }
+    for (var k in obj) {
+      if (SKIP[k]) continue;
+      var v = obj[k];
+      if (!v || typeof v !== 'object') continue;
+      var tn = v.__typename || '';
+      if (typeof v.value === 'number' && /Metric/.test(tn) && !NOISE[k]) { acc.metrics[k] = v.value; }
+      else if (/TimeSeries/.test(tn)) { if (!acc.series[k]) acc.series[k] = v; }
+      else extractMetrics(v, acc);
+    }
+  }
+  // Mảnh deferred của time-series tới theo path riêng (vd ["...","view_time_series","data_points"]).
+  function grabSeriesByPath(j, acc) {
+    if (!j || !Array.isArray(j.path) || typeof j.data === 'undefined') return;
+    for (var i = 0; i < j.path.length; i++) {
+      if (/time_series/i.test(String(j.path[i]))) { acc.series[j.path[i]] = j.data; return; }
+    }
+  }
+  function rangeFromUrl() { var m = String(location.search).match(/date_range=([A-Z0-9_]+)/); return m ? m[1] : ''; }
+  var pageLastSent = '';
+  function sendPage(acc) {
+    var sig = JSON.stringify(acc.metrics) + '|' + Object.keys(acc.series).sort().join(',');
+    if (sig === pageLastSent) return; pageLastSent = sig;
+    log('PAGE metrics:', acc.metrics, '| series:', Object.keys(acc.series));
+    Object.keys(acc.series).forEach(function (k) { log('  series[' + k + ']:', JSON.stringify(acc.series[k]).slice(0, 400)); });
+    GM_xmlhttpRequest({
+      method: 'POST', url: INGEST,
+      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': SECRET },
+      data: JSON.stringify({ kind: 'page', date_range: rangeFromUrl(), metrics: acc.metrics, series: acc.series }),
+      onload: function (r) { log('page ingest', r.status, r.responseText); },
+      onerror: function (e) { log('page ingest LỖI', e); }
+    });
+  }
+
   function tryParse(text) {
     text = String(text || '');
-    if (text.indexOf('prodash_content_library') < 0) return;
-    // Response FB hay có tiền tố for(;;); và đôi khi nhiều JSON nối bằng newline.
+    var hasLib = text.indexOf('prodash_content_library') > -1;
+    var hasPage = /professional_dashboard/.test(location.pathname) &&
+      (text.indexOf('MetricsQueryResult') > -1 || text.indexOf('TimeSeries') > -1);
+    if (!hasLib && !hasPage) return;
+    var pageAcc = { metrics: {}, series: {} };
+    // Response FB hay có tiền tố for(;;); và nhiều JSON (deferred) nối bằng newline.
     text.replace(/^for\s*\(;;\);/, '').split('\n').forEach(function (line) {
       line = line.trim(); if (!line) return;
-      try { scanJson(JSON.parse(line)); } catch (e) {}
+      var j; try { j = JSON.parse(line); } catch (e) { return; }
+      if (hasLib) scanJson(j);
+      if (hasPage) { extractMetrics(j, pageAcc); grabSeriesByPath(j, pageAcc); }
     });
+    if (hasPage && (Object.keys(pageAcc.metrics).length || Object.keys(pageAcc.series).length)) sendPage(pageAcc);
   }
 
   // ── Hook fetch (trên window thật) ─────────────────────────────────────────
@@ -136,5 +182,41 @@
     }, 1500);
   }
 
-  log('userscript v2 đã nạp (hook window thật) — mở Content Library và để trang tự cuộn.');
+  // ── AUTO-TOUR: tự đi hết các mục của Professional Dashboard để quét sạch ────
+  // Bấm Ctrl+Shift+Y trên trang dashboard để bắt đầu. Script tự mở từng mục,
+  // mỗi mục đợi ~10s (đủ để auto-scroll nạp hết widget + hook bắt số liệu), rồi sang mục kế.
+  var TOUR = [
+    '/professional_dashboard/?ref=tab_bar',
+    '/professional_dashboard/profile_insights/views/',
+    '/professional_dashboard/profile_insights/interactions/',
+    '/professional_dashboard/profile_insights/audience/',
+    '/professional_dashboard/profile_insights/earnings/',
+    '/professional_dashboard/content/content_library/?ref=tab_bar'
+  ];
+  function tourTick() {
+    var raw = null; try { raw = sessionStorage.getItem('shbTour'); } catch (e) {}
+    if (!raw) return;
+    var q; try { q = JSON.parse(raw); } catch (e) { q = null; }
+    if (!q || !q.length) { try { sessionStorage.removeItem('shbTour'); } catch (e) {} return; }
+    log('TOUR: đang ở', q[0], '— còn', q.length, 'mục');
+    setTimeout(function () {
+      q.shift();
+      try { sessionStorage.setItem('shbTour', JSON.stringify(q)); } catch (e) {}
+      if (q.length) { W.location.href = q[0]; }
+      else { try { sessionStorage.removeItem('shbTour'); } catch (e) {} log('TOUR xong — đã quét hết các mục.'); }
+    }, 10000);
+  }
+  function startTour() {
+    try { sessionStorage.setItem('shbTour', JSON.stringify(TOUR.slice())); } catch (e) {}
+    log('TOUR bắt đầu — sẽ tự đi qua', TOUR.length, 'mục (~1 phút). Đừng đụng chuột.');
+    W.location.href = TOUR[0];
+  }
+  try {
+    W.addEventListener('keydown', function (e) {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'Y' || e.key === 'y')) { startTour(); }
+    });
+  } catch (e) {}
+  if (/professional_dashboard/.test(location.pathname)) tourTick();
+
+  log('userscript v3.2 đã nạp — bắt số liệu toàn Professional Dashboard. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
 })();
