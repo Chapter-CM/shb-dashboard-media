@@ -568,15 +568,18 @@ function heroRow(d,cur,prev,ser){
   var engV=engAct!=null?engAct:s.eng, folV=m.follower||m.total_follower||s.followers;
   if(viewsVal&&viewersV)reachRate=Math.min(100,Math.round(viewersV/viewsVal*1000)/10);
   var actTag='<span style="font-size:9px;color:rgba(255,255,255,.7);font-weight:600;text-transform:none"> · ngày hoạt động</span>';
-  var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem theo NGÀY HOẠT ĐỘNG (chuỗi page-level Facebook). Vòng cung = tỉ lệ Người xem ÷ Lượt xem."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(reachRate,50,nf(viewsVal),nf(viewersV)+' người xem')+'</div><div class="gc-sub">Người xem ÷ Lượt xem = '+reachRate+'% · '+s.nPosts+' bài trong kỳ</div></div>';
+  var vDelta=(!cFil)?seriesDelta(PS.views):'';
+  var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem theo NGÀY HOẠT ĐỘNG (chuỗi page-level Facebook). Vòng cung = tỉ lệ Người xem ÷ Lượt xem."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(reachRate,50,nf(viewsVal),nf(viewersV)+' người xem')+'</div><div class="gc-sub">'+(vDelta?vDelta+' so với kỳ trước · ':'')+'Người xem ÷ Lượt xem = '+reachRate+'% · '+s.nPosts+' bài</div></div>';
   var k=[
     card('Người xem',nf(viewersV),'','','Người xem duy nhất (unique viewers) cấp trang theo ngày hoạt động — chuẩn Facebook (không phải cộng dồn per-post).'),
-    card('Lượt tương tác'+(engAct!=null?' ·hđ':''),nf(engV),'','',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.'),
+    card('Lượt tương tác'+(engAct!=null?' ·hđ':''),nf(engV),(!cFil?seriesDelta(PS.interactions):''),'',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Delta = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.'),
     card('Bình luận',nf(cmtV),'','','Tổng bình luận cấp trang (theo kỳ Facebook đã bắt).'),
     card('Lượt hiển thị',nf(impV),'','','Số lần nội dung hiển thị (impressions) cấp trang. KHÁC Lượt xem: một người có thể thấy nhiều lần.'),
     card('Follower',nf(folV),'',spark(fv,'var(--good)'),'Tổng follower hiện tại của trang.')
   ].join('');
-  return '<div class="hero-row">'+gauge+'<div class="kpi-col">'+k+'</div></div>';
+  var topType=(d.byType&&d.byType[0])?d.byType[0].name:'', topTopic=(d.byTopic&&d.byTopic[0])?d.byTopic[0].name:'';
+  var summary='<div class="so" style="margin-top:16px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:15px">💡</span><div>Kỳ này: <b>'+nf(viewsVal)+'</b> lượt xem'+(vDelta?' ('+vDelta+' so kỳ trước)':'')+' · <b>'+nf(engV)+'</b> lượt tương tác · ER <b>'+s.engRate+'%</b>'+(s.engRate>=TARGET_ER?' ✓ đạt mục tiêu':' (mục tiêu '+TARGET_ER+'%)')+'.'+(topType?' Định dạng <b>'+esc(topType)+'</b>'+(topTopic?' &amp; chủ đề <b>'+esc(topTopic)+'</b>':'')+' hiệu quả nhất — ưu tiên sản xuất.':'')+'</div></div>';
+  return '<div class="hero-row">'+gauge+'<div class="kpi-col">'+k+'</div></div>'+summary;
 }
 function sumKey(posts,k){var t=0;posts.forEach(function(p){if(k==='reactions')t+=reactTotal(p.react);else if(k==='eng')t+=engOf(p);else t+=p[k]||0;});return t;}
 function sumPm(posts,k){var t=0;posts.forEach(function(p){if(p.pm&&typeof p.pm[k]==='number')t+=p.pm[k];});return t;}
@@ -593,6 +596,11 @@ function dailyByPost(metricFn){
 }
 function inWin(ms){if(_from&&_to)return ms>=_from&&ms<=_to;if(_days)return ms>=Date.now()-_days*864e5;return true;}
 function sumSeries(arr){var t=0;(arr||[]).forEach(function(p){if(inWin(p.ms))t+=p.value;});return t;}
+// Khoảng đang xem [lo,hi]; null = "Tất cả" (không so sánh kỳ trước được).
+function winRange(){if(_from&&_to)return [_from,_to];if(_days){var hi=Date.now();return [hi-_days*864e5,hi];}return null;}
+function sumIn(arr,lo,hi){var t=0;(arr||[]).forEach(function(p){if(p.ms>=lo&&p.ms<=hi)t+=p.value;});return t;}
+// Delta so với kỳ liền trước cùng độ dài (chuẩn period-over-period). '' nếu đang xem "Tất cả".
+function seriesDelta(arr){var wr=winRange();if(!wr||!arr||!arr.length)return '';var lo=wr[0],hi=wr[1],span=hi-lo;return deltaChip(sumIn(arr,lo,hi),sumIn(arr,lo-span,lo));}
 function actNote(l){return ' <span style="font-size:10px;color:var(--faint);font-weight:600;text-transform:none;letter-spacing:0">· '+l+' theo NGÀY HOẠT ĐỘNG (Facebook)</span>';}
 function heroChart(d,ser){
   var PS=(DATA.pageInsights&&DATA.pageInsights.series)||{}, daily, note='';
