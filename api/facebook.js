@@ -517,16 +517,19 @@ function heroRow(d,cur,prev,ser){
   var reachRate=s.reachRate;
   var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem. Vòng cung = Tỉ lệ reach = Người xem ÷ Lượt xem (chuẩn Facebook)."><div class="gc-h">Tổng Lượt xem · '+s.nPosts+' bài</div><div class="gauge-wrap">'+gaugeBig(reachRate,50,nf(s.views),'Reach '+reachRate+'% · ER '+s.engRate+'%')+'</div><div class="gc-sub">'+nf(s.mediaViewers)+' người xem · tỉ lệ reach '+reachRate+'% (Người xem/Lượt xem)</div></div>';
   var k=[
-    card('Người xem',nf(s.mediaViewers),deltaChip(sumKey(cur,'mediaViewers'),sumKey(prev,'mediaViewers')),'','Media Viewers — tổng người xem duy nhất cộng dồn các bài (thay Reach từ 15/06/2026). Reach TB mỗi bài = '+reachRate+'% follower.'),
-    card('Tương tác',nf(s.eng),deltaChip(sumKey(cur,'eng'),sumKey(prev,'eng')),'','Tổng lượt tương tác (engagement) cộng dồn các bài — theo số Facebook ghi nhận per-post (gồm cảm xúc, bình luận, chia sẻ, click...). Khác số "Lượt tương tác" cấp trang vì đó là định nghĩa hẹp hơn.'),
-    card('Comments',nf(s.comments),deltaChip(sumKey(cur,'comments'),sumKey(prev,'comments')),'','Tổng bình luận.'),
-    card('Shares',nf(s.shares),deltaChip(sumKey(cur,'shares'),sumKey(prev,'shares')),'','Tổng lượt chia sẻ — tín hiệu lan toả mạnh.'),
-    card('Follower',nf(s.followers),'',spark(fv,'var(--good)'),'Tổng follower hiện tại (cần snapshot để có growth).'),
-    card('Clicks',nf(s.clicks),deltaChip(sumKey(cur,'clicks'),sumKey(prev,'clicks')),spark(vv,'var(--accent)'),'Tổng lượt click vào bài/link. Click Rate = Clicks ÷ Views = '+s.clickRate+'%.')
+    card('Người xem',nf(s.mediaViewers),deltaChip(sumKey(cur,'mediaViewers'),sumKey(prev,'mediaViewers')),'','Số người xem duy nhất (unique viewers) cộng dồn các bài — mỗi người chỉ tính 1 lần.'),
+    card('Lượt tương tác',nf(s.eng),deltaChip(sumKey(cur,'eng'),sumKey(prev,'eng')),'','Tổng lượt tương tác = số cảm xúc + bình luận + chia sẻ + lưu bài (định nghĩa của Facebook).'),
+    card('Bình luận',nf(s.comments),deltaChip(sumKey(cur,'comments'),sumKey(prev,'comments')),'','Tổng lượt bình luận.'),
+    card('Lượt hiển thị',nf(sumPm(cur,'impression')),deltaChip(sumPm(cur,'impression'),sumPm(prev,'impression')),'','Tổng số lần nội dung hiển thị trên màn hình (impressions). KHÁC "Lượt xem": một người có thể nhìn thấy nhiều lần.'),
+    card('Người theo dõi thực',nf(sumPm(cur,'net_follow')),deltaChip(sumPm(cur,'net_follow'),sumPm(prev,'net_follow')),'','Số người theo dõi tăng thực nhờ nội dung (net follows).'),
+    card('Follower',nf(s.followers),'',spark(fv,'var(--good)'),'Tổng follower hiện tại của trang (từ snapshot).')
   ].join('');
   return '<div class="hero-row">'+gauge+'<div class="kpi-col">'+k+'</div></div>';
 }
 function sumKey(posts,k){var t=0;posts.forEach(function(p){if(k==='reactions')t+=reactTotal(p.react);else if(k==='eng')t+=engOf(p);else t+=p[k]||0;});return t;}
+function sumPm(posts,k){var t=0;posts.forEach(function(p){if(p.pm&&typeof p.pm[k]==='number')t+=p.pm[k];});return t;}
+function pmv(p,k){return (p&&p.pm&&typeof p.pm[k]==='number')?p.pm[k]:0;}
+function pViews(p){return pmv(p,'views')||pmv(p,'reach')||p.views||0;}
 function heroChart(d,ser){
   var pd=DATA.pageInsights, useDaily=(_metric==='views'&&pd&&pd.daily&&pd.daily.length);
   var note=useDaily?' <span style="font-size:10px;color:var(--faint);font-weight:600;text-transform:none;letter-spacing:0">· lượt xem toàn trang/ngày (Facebook)</span>':'';
@@ -574,51 +577,62 @@ function mixSection(d){
     +'</div></section>';
 }
 function setCtab(t){_ctab=t;paint();}
+function isVideoPost(p){return /Reel|Video|Live/i.test(p.type||'')||pmv(p,'video_view_time')>0||pmv(p,'video_view_three_second')>0;}
+function postLink(p,txt){var l=p.permalink&&p.permalink!=='#'?p.permalink:'';return l?'<a href="'+esc(l)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="nm" style="color:var(--text);text-decoration:underline solid var(--stroke-2)" data-tip="Mở bài trên Facebook ↗">'+esc(txt)+'</a>':'<span class="nm">'+esc(txt)+'</span>';}
 function contentSection(d){
-  var v=d.video;
+  var allRows=d.rows||[];
+  var vidRows=allRows.filter(function(r){return isVideoPost(r.p);});
   // ── tab: Tất cả bài ──
-  regTable({id:'posts',rows:d.rows,pageSize:12,cols:8,
+  regTable({id:'posts',rows:allRows,pageSize:12,cols:8,
     search:function(r,q){return norm(r.p.msg).indexOf(q)>-1||norm(r.p.topic).indexOf(q)>-1;},
-    sortVal:function(r,k){return k==='ts'?r.p.ts:k==='views'?r.p.views:k==='react'?reactTotal(r.p.react):k==='cmt'?r.p.comments:k==='share'?r.p.shares:k==='er'?r.er:r.eng;},
-    render:function(r){var p=r.p,vc=r.vsAvg>=0?'p-good':'p-risk';
-      return '<tr onclick="toggleDrill(\''+p.id+'\')"><td><span class="nm">'+esc(p.msg.slice(0,52))+'</span></td><td><span class="pill p-neutral">'+esc(p.type)+'</span></td>'
-        +'<td class="num">'+nf(p.views)+'</td><td class="num">'+nf(reactTotal(p.react))+'</td><td class="num">'+nf(p.comments)+'</td><td class="num">'+nf(p.shares)+'</td>'
-        +'<td class="num">'+r.er+'%</td><td class="num"><span class="pill '+vc+'">'+(r.vsAvg>=0?'+':'')+r.vsAvg+'</span></td></tr>'
+    sortVal:function(r,k){var p=r.p;return k==='ts'?p.ts:k==='views'?pViews(p):k==='vw'?pmv(p,'viewers'):k==='imp'?pmv(p,'impression'):k==='eng'?(pmv(p,'engagement')||r.eng):k==='cmt'?(pmv(p,'comment')||p.comments):k==='er'?r.er:pViews(p);},
+    render:function(r){var p=r.p,vw=pViews(p),eng=pmv(p,'engagement')||r.eng,er=vw?pc(eng/vw*100):0,vc=r.vsAvg>=0?'p-good':'p-risk';
+      return '<tr onclick="toggleDrill(\''+p.id+'\')"><td>'+postLink(p,p.msg.slice(0,50))+'</td>'
+        +'<td class="num">'+(p.ts?fmtDay(p.ts):'—')+'</td>'
+        +'<td class="num">'+nf(vw)+'</td><td class="num">'+nf(pmv(p,'viewers'))+'</td>'
+        +'<td class="num">'+nf(pmv(p,'impression'))+'</td><td class="num">'+nf(eng)+'</td>'
+        +'<td class="num">'+nf(pmv(p,'comment')||p.comments)+'</td><td class="num">'+er+'%</td></tr>'
         +'<tr class="drill" id="dr-'+p.id+'" style="display:none"><td colspan="8"><div class="drill-in">'
         +'<div class="dd">Đăng lúc<b>'+fmtTime(p.ts)+'</b></div><div class="dd">Chủ đề<b>'+esc(p.topic)+'</b></div>'
-        +'<div class="dd">Clicks<b>'+nf(p.clicks)+'</b></div><div class="dd">Velocity 1h<b>'+pc(p.vel.h1/Math.max(1,r.eng)*100)+'%</b></div>'
-        +(p.video?'<div class="dd">Người xem<b>'+nf(p.video.viewers||0)+'</b></div><div class="dd">Watch TB<b>'+p.video.avgWatch+'s</b></div><div class="dd">Completion<b>'+p.video.completion+'%</b></div><div class="dd">Replays<b>'+nf(p.video.replays)+'</b></div>':'')
-        +'<div class="dd">Admin reply<b>'+p.pageReplies+'/'+p.comments+'</b></div><div class="dd">Comment đầu<b>'+p.firstCommentMin+'p</b></div>'
+        +'<div class="dd">Người theo dõi thực<b>'+nf(pmv(p,'net_follow'))+'</b></div>'
+        +'<div class="dd">vs TB chủ đề<b>'+(r.vsAvg>=0?'+':'')+r.vsAvg+'</b></div>'
+        +(isVideoPost(p)?'<div class="dd">Xem ≥3 giây<b>'+nf(pmv(p,'video_view_three_second'))+'</b></div><div class="dd">Xem ≥1 phút<b>'+nf(pmv(p,'video_view_one_min'))+'</b></div>'+(pmv(p,'video_view_avg_watch_time')?'<div class="dd">Thời gian xem TB<b>'+pc(pmv(p,'video_view_avg_watch_time')/1000)+'s</b></div>':''):'')
+        +(p.permalink&&p.permalink!=='#'?'<div class="dd"><a href="'+esc(p.permalink)+'" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700">Mở bài ↗</a></div>':'')
         +'</div></td></tr>';}});
-  // ── tab: Video / Reel ──
-  regTable({id:'posts-vid',rows:(v&&v.rows)||[],pageSize:10,cols:7,
+  // ── tab: Video / Reel / Live ──
+  regTable({id:'posts-vid',rows:vidRows,pageSize:12,cols:8,
     search:function(r,q){return norm(r.p.msg).indexOf(q)>-1;},
-    sortVal:function(r,k){return k==='ts'?r.p.ts:k==='mv'?r.v.mediaViews:k==='vw'?r.v.viewers:k==='wt'?r.v.avgWatch:k==='cp'?r.v.completion:r.v.replays;},
-    render:function(r){var p=r.p,vi=r.v;return '<tr onclick="toggleDrill(\''+p.id+'v\')"><td><span class="nm">'+esc(p.msg.slice(0,50))+'</span></td><td><span class="pill p-neutral">'+esc(p.type)+'</span></td>'
-      +'<td class="num">'+nf(vi.mediaViews)+'</td><td class="num" style="color:var(--good)">'+nf(vi.viewers)+'</td><td class="num">'+vi.avgWatch+'s</td><td class="num">'+vi.completion+'%</td><td class="num">'+nf(vi.replays)+'</td></tr>'
-      +'<tr class="drill" id="dr-'+p.id+'v" style="display:none"><td colspan="7"><div class="drill-in">'
-      +'<div class="dd">Đăng lúc<b>'+fmtTime(p.ts)+'</b></div><div class="dd">Views (post)<b>'+nf(p.views)+'</b></div>'
-      +'<div class="dd">Reactions<b>'+nf(reactTotal(p.react))+'</b></div><div class="dd">Comments<b>'+nf(p.comments)+'</b></div>'
-      +'<div class="dd">Shares<b>'+nf(p.shares)+'</b></div><div class="dd">Clicks<b>'+nf(p.clicks)+'</b></div>'
-      +'</div></td></tr>';}});
+    sortVal:function(r,k){var p=r.p;return k==='ts'?p.ts:k==='views'?pViews(p):k==='vw'?pmv(p,'viewers'):k==='s3'?pmv(p,'video_view_three_second'):k==='m1'?pmv(p,'video_view_one_min'):k==='wt'?pmv(p,'video_view_avg_watch_time'):pViews(p);},
+    render:function(r){var p=r.p;
+      return '<tr onclick="toggleDrill(\''+p.id+'v\')"><td>'+postLink(p,p.msg.slice(0,50))+'</td>'
+        +'<td class="num">'+(p.ts?fmtDay(p.ts):'—')+'</td>'
+        +'<td class="num">'+nf(pViews(p))+'</td><td class="num" style="color:var(--good)">'+nf(pmv(p,'viewers'))+'</td>'
+        +'<td class="num">'+nf(pmv(p,'video_view_three_second'))+'</td><td class="num">'+nf(pmv(p,'video_view_one_min'))+'</td>'
+        +'<td class="num">'+(pmv(p,'video_view_avg_watch_time')?pc(pmv(p,'video_view_avg_watch_time')/1000)+'s':'—')+'</td>'
+        +'<td class="num">'+nf(pmv(p,'impression'))+'</td></tr>'
+        +'<tr class="drill" id="dr-'+p.id+'v" style="display:none"><td colspan="8"><div class="drill-in">'
+        +'<div class="dd">Đăng lúc<b>'+fmtTime(p.ts)+'</b></div><div class="dd">Lượt tương tác<b>'+nf(pmv(p,'engagement')||r.eng)+'</b></div>'
+        +'<div class="dd">Bình luận<b>'+nf(pmv(p,'comment')||p.comments)+'</b></div><div class="dd">Người theo dõi thực<b>'+nf(pmv(p,'net_follow'))+'</b></div>'
+        +(p.permalink&&p.permalink!=='#'?'<div class="dd"><a href="'+esc(p.permalink)+'" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700">Mở bài ↗</a></div>':'')
+        +'</div></td></tr>';}});
   var isVid=_ctab==='video';
   var tabs='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">'
-    +'<div class="eyebrow" style="margin:0">Hiệu quả nội dung — bấm dòng để xem chi tiết</div>'
-    +'<div class="seg"><button class="'+(isVid?'':'on')+'" onclick="setCtab(\'posts\')" data-tip="Tất cả bài viết trong kỳ">Tất cả bài</button>'
-    +'<button class="'+(isVid?'on':'')+'" onclick="setCtab(\'video\')" data-tip="Chỉ video &amp; reel — xem media views, người xem, watch time">Video / Reel '+(v&&v.n?'<span class="pill p-neutral" style="font-size:10px">'+v.n+'</span>':'')+'</button></div></div>';
+    +'<div class="eyebrow" style="margin:0">Hiệu quả nội dung — bấm dòng xem chi tiết, bấm tiêu đề mở bài</div>'
+    +'<div class="seg"><button class="'+(isVid?'':'on')+'" onclick="setCtab(\'posts\')" data-tip="Tất cả bài viết trong kỳ">Tất cả bài <span class="pill p-neutral" style="font-size:10px">'+allRows.length+'</span></button>'
+    +'<button class="'+(isVid?'on':'')+'" onclick="setCtab(\'video\')" data-tip="Chỉ Video / Reel / Livestream">Video / Reel / Live '+(vidRows.length?'<span class="pill p-neutral" style="font-size:10px">'+vidRows.length+'</span>':'')+'</button></div></div>';
   if(!isVid){
     var id='posts';
     return '<section id="s-content">'+tabs+'<div class="panel" id="tbl-'+id+'">'
       +searchBox(id,'Tìm bài viết / chủ đề…')
-      +'<div class="tw"><table><thead><tr><th>Bài viết</th><th>Loại</th>'
-      +th(id,'views','Views','Sắp theo views')+th(id,'react','React')+th(id,'cmt','Cmt')+th(id,'share','Share')+th(id,'er','ER','Engagement Rate')+th(id,'er2','vs TB')
+      +'<div class="tw"><table><thead><tr><th>Bài viết</th>'
+      +th(id,'ts','Đăng','Sắp theo ngày đăng')+th(id,'views','Lượt xem','Số lần nội dung được xem')+th(id,'vw','Người xem','Người xem duy nhất')+th(id,'imp','Lượt hiển thị','Số lần hiển thị trên màn hình')+th(id,'eng','Lượt tương tác','Cảm xúc + bình luận + chia sẻ + lưu')+th(id,'cmt','Bình luận')+th(id,'er','ER','Tỉ lệ tương tác = Tương tác ÷ Lượt xem')
       +'</tr></thead><tbody id="tb-'+id+'"></tbody></table></div><div class="pager" id="pg-'+id+'"></div></div></section>';
   } else {
     var vid='posts-vid';
     return '<section id="s-content">'+tabs+'<div class="panel" id="tbl-'+vid+'">'
       +searchBox(vid,'Tìm video / reel…')
-      +'<div class="tw"><table><thead><tr><th>Video</th><th>Loại</th>'
-      +th(vid,'mv','Media Views','Tổng lượt xem video')+th(vid,'vw','Người xem','Unique viewers — tô màu xanh')+th(vid,'wt','Watch TB')+th(vid,'cp','Completion')+th(vid,'rep','Replays')
+      +'<div class="tw"><table><thead><tr><th>Video</th>'
+      +th(vid,'ts','Đăng')+th(vid,'views','Lượt xem')+th(vid,'vw','Người xem','Người xem duy nhất — tô xanh')+th(vid,'s3','Xem ≥3s','Lượt xem tối thiểu 3 giây')+th(vid,'m1','Xem ≥1ph','Lượt xem tối thiểu 1 phút')+th(vid,'wt','TG xem TB','Thời gian xem trung bình')+th(vid,'imp','Hiển thị')
       +'</tr></thead><tbody id="tb-'+vid+'"></tbody></table></div><div class="pager" id="pg-'+vid+'"></div></div></section>';
   }
 }
