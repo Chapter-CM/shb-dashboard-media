@@ -266,6 +266,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .f-clear-all{background:var(--risk-bg);border:1px solid transparent;color:var(--risk);font:inherit;font-size:11.5px;font-weight:700;padding:4px 12px;border-radius:99px;cursor:pointer;margin-left:4px}
 section{padding-top:28px;scroll-margin-top:122px}
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:15px;display:flex;align-items:center;gap:10px}
+.eyebrow::before{content:'';width:3px;height:15px;border-radius:2px;background:var(--grad);flex:0 0 auto;box-shadow:0 0 10px rgba(124,92,255,.5)}
 .eyebrow .qc{margin-left:auto;background:none;border:1px solid var(--stroke);color:var(--muted);font:inherit;font-size:11px;font-weight:600;padding:3px 9px;border-radius:8px;cursor:pointer}
 .so{font-size:12.5px;color:var(--text-2);background:var(--accent-bg);border:1px solid var(--stroke);border-radius:14px;padding:12px 16px;margin-top:14px;line-height:1.6}.so b{color:var(--accent)}
 .hero-row{display:grid;grid-template-columns:340px 1fr;gap:16px}
@@ -278,7 +279,7 @@ section{padding-top:28px;scroll-margin-top:122px}
 .kpi{background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r-sm);padding:17px 18px;backdrop-filter:blur(18px);box-shadow:var(--shadow);position:relative;transition:transform .17s,border-color .17s}
 .kpi::before{content:'';position:absolute;top:0;left:14px;right:14px;height:1px;background:linear-gradient(90deg,transparent,var(--stroke-2),transparent)}
 .kpi:hover{transform:translateY(-3px);border-color:var(--stroke-2)}
-.kpi .kl{font-size:11px;color:var(--muted);font-weight:600}
+.kpi .kl{font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase}
 .kpi .kv{font-size:27px;font-weight:700;letter-spacing:-.03em;margin-top:9px;line-height:1;font-family:var(--num)}
 .kpi .krow{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:11px}
 .delta{font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:3px;font-family:var(--num);padding:2px 7px;border-radius:99px}
@@ -1022,7 +1023,7 @@ try{var _st=localStorage.getItem('shb-fb-theme');if(_st)_theme=_st;}catch(e){}
 try{var _sd=localStorage.getItem('shb-fb-density');if(_sd)_density=_sd;}catch(e){}
 function applyTheme(){if(_theme==='light')document.documentElement.setAttribute('data-theme','light');else document.documentElement.removeAttribute('data-theme');}
 function applyDensity(){document.documentElement.setAttribute('data-density',_density);}
-function setFilter(k,v){if(v===''||v==null)delete _filter[k];else _filter[k]=v;paint();}
+function setFilter(k,v){if(v===''||v==null||_filter[k]===v)delete _filter[k];else _filter[k]=v;paint();}
 function clearFilter(k){delete _filter[k];paint();}
 function clearAllFilters(){_filter={};paint();}
 function setMetric(m){_metric=m;paint();}
@@ -1044,7 +1045,8 @@ function render(){
   return _mode==='ex'?executive(d,cl,pl):operational(d,cl,pl,ser);
 }
 function paint(){
-  try{applyTheme();applyDensity();document.getElementById('app').innerHTML=render();mountAllTables();wireNav();wireChart();countUp();init();initTooltip();}
+  var _sy=window.scrollY;
+  try{applyTheme();applyDensity();document.getElementById('app').innerHTML=render();mountAllTables();wireNav();wireChart();countUp();init();initTooltip();window.scrollTo(0,_sy);}
   catch(err){var app=document.getElementById('app');if(app)app.innerHTML='<div style="padding:40px 32px;font-family:monospace;max-width:860px;margin:0 auto"><div style="color:#ff7d96;font-size:18px;font-weight:700;margin-bottom:16px">⚠ Dashboard Error</div><pre style="font-size:12px;background:rgba(255,255,255,.06);padding:18px;border-radius:12px;white-space:pre-wrap;color:#bdb8db">'+String(err.stack||err.message||err)+'</pre><button onclick="_filter={};paint()" style="margin-top:16px;padding:9px 18px;background:#8b7bff;color:#fff;border:none;border-radius:10px;cursor:pointer">Xóa lọc &amp; thử lại</button></div>';console.error('[SHB FB]',err);}
 }
 function flt(days){_days=days;_from=null;_to=null;paint();}
