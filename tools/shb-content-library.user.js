@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SHB Content Library → Supabase
 // @namespace    shb-fb-dashboard
-// @version      3.0.0
+// @version      3.1.0
 // @description  Bắt response Professional Dashboard Content Library (bài Group "SHB Một Nhà") và đẩy sang /api/ingest. Groups API công khai đã bị Meta gỡ 22/04/2024 nên đây là nguồn dữ liệu duy nhất.
 // @author       SHB CM
 // @match        https://www.facebook.com/*
@@ -94,7 +94,8 @@
   }
 
   // ── PAGE-LEVEL: trích generic mọi metric {value} + time-series từ insights ──
-  var SKIP = { recent_posts: 1, image: 1, privacy_icon: 1, attachments: 1 };
+  var SKIP = { recent_posts: 1, image: 1, privacy_icon: 1, attachments: 1, story: 1 };
+  var NOISE = { raw_query_result: 1 }; // key bao quanh giá trị 1 bài viết -> bỏ
   function extractMetrics(obj, acc) {
     if (!obj || typeof obj !== 'object') return;
     if (Array.isArray(obj)) { for (var i = 0; i < obj.length; i++) extractMetrics(obj[i], acc); return; }
@@ -103,9 +104,16 @@
       var v = obj[k];
       if (!v || typeof v !== 'object') continue;
       var tn = v.__typename || '';
-      if (typeof v.value === 'number' && /Metric/.test(tn)) { acc.metrics[k] = v.value; }
-      else if (/TimeSeries/.test(tn)) { acc.series[k] = v; }
+      if (typeof v.value === 'number' && /Metric/.test(tn) && !NOISE[k]) { acc.metrics[k] = v.value; }
+      else if (/TimeSeries/.test(tn)) { if (!acc.series[k]) acc.series[k] = v; }
       else extractMetrics(v, acc);
+    }
+  }
+  // Mảnh deferred của time-series tới theo path riêng (vd ["...","view_time_series","data_points"]).
+  function grabSeriesByPath(j, acc) {
+    if (!j || !Array.isArray(j.path) || typeof j.data === 'undefined') return;
+    for (var i = 0; i < j.path.length; i++) {
+      if (/time_series/i.test(String(j.path[i]))) { acc.series[j.path[i]] = j.data; return; }
     }
   }
   function rangeFromUrl() { var m = String(location.search).match(/date_range=([A-Z0-9_]+)/); return m ? m[1] : ''; }
@@ -114,6 +122,7 @@
     var sig = JSON.stringify(acc.metrics) + '|' + Object.keys(acc.series).sort().join(',');
     if (sig === pageLastSent) return; pageLastSent = sig;
     log('PAGE metrics:', acc.metrics, '| series:', Object.keys(acc.series));
+    Object.keys(acc.series).forEach(function (k) { log('  series[' + k + ']:', JSON.stringify(acc.series[k]).slice(0, 400)); });
     GM_xmlhttpRequest({
       method: 'POST', url: INGEST,
       headers: { 'Content-Type': 'application/json', 'x-ingest-secret': SECRET },
@@ -126,7 +135,8 @@
   function tryParse(text) {
     text = String(text || '');
     var hasLib = text.indexOf('prodash_content_library') > -1;
-    var hasPage = text.indexOf('TofuFBPageEntityInsights') > -1;
+    var hasPage = /profile_insights/.test(location.pathname) &&
+      (text.indexOf('MetricsQueryResult') > -1 || text.indexOf('TimeSeries') > -1);
     if (!hasLib && !hasPage) return;
     var pageAcc = { metrics: {}, series: {} };
     // Response FB hay có tiền tố for(;;); và nhiều JSON (deferred) nối bằng newline.
@@ -134,7 +144,7 @@
       line = line.trim(); if (!line) return;
       var j; try { j = JSON.parse(line); } catch (e) { return; }
       if (hasLib) scanJson(j);
-      if (hasPage) extractMetrics(j, pageAcc);
+      if (hasPage) { extractMetrics(j, pageAcc); grabSeriesByPath(j, pageAcc); }
     });
     if (hasPage && (Object.keys(pageAcc.metrics).length || Object.keys(pageAcc.series).length)) sendPage(pageAcc);
   }
@@ -172,5 +182,5 @@
     }, 1500);
   }
 
-  log('userscript v3.0 đã nạp (hook window thật) — Content Library tự cuộn; trang Insights tự bắt số liệu page-level.');
+  log('userscript v3.1 đã nạp (hook window thật) — Content Library tự cuộn; trang Insights tự bắt số liệu page-level.');
 })();
