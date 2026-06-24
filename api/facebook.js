@@ -213,6 +213,12 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .seg button{background:none;border:none;color:var(--muted);padding:6px 13px;cursor:pointer;font:inherit;font-size:12px;font-weight:600;border-radius:9px;transition:.18s}
 .seg button.on{background:var(--grad);color:#fff;box-shadow:0 6px 16px -6px rgba(124,92,255,.6)}
 .seg button:hover:not(.on){color:var(--text)}
+.dtrange{display:flex;align-items:center;gap:5px;background:var(--glass);border:1px solid var(--stroke);border-radius:12px;padding:3px 8px}
+.dtrange.on{border-color:var(--accent)}
+.dtrange input{background:var(--filter-bg,#1c1a2e);border:1px solid var(--stroke);color:var(--text);font:inherit;font-size:11px;padding:4px 6px;border-radius:8px;color-scheme:dark;outline:none}
+.dtrange .ar{color:var(--faint);font-size:11px}
+.dtrange .dtx{background:var(--risk-bg);border:none;color:var(--risk);font:inherit;font-weight:700;cursor:pointer;border-radius:6px;padding:2px 8px}
+[data-theme="light"] .dtrange input{color-scheme:light}
 .icon-btn{height:36px;min-width:36px;padding:0 10px;border-radius:11px;background:var(--glass);border:1px solid var(--stroke);color:var(--text-2);cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px;transition:.18s}
 .icon-btn:hover{color:var(--text);border-color:var(--stroke-2)}
 .mode-btn{background:var(--grad);color:#fff;border:none;padding:9px 16px;border-radius:11px;cursor:pointer;font:inherit;font-size:12px;font-weight:700;box-shadow:0 8px 20px -8px rgba(124,92,255,.7)}
@@ -492,8 +498,12 @@ function matchFilter(p,F){
   if(F.media&&mediaOf(p)!==F.media)return false;
   return true;
 }
-function windowPosts(days,back){if(!days)return back?[]:DATA.posts;var now=Date.now(),hi=now-back*days*864e5,lo=hi-days*864e5;return DATA.posts.filter(function(p){return p.ts<=hi&&p.ts>lo;});}
-function windowSeries(days){if(!days)return DATA.series;return DATA.series.slice(Math.max(0,DATA.series.length-days));}
+function windowPosts(days,back){
+  if(_from&&_to){var span=_to-_from;var hi=back?_from:_to,lo=back?_from-span:_from;return DATA.posts.filter(function(p){return p.ts<=hi&&p.ts>lo;});}
+  if(!days)return back?[]:DATA.posts;var now=Date.now(),hi=now-back*days*864e5,lo=hi-days*864e5;return DATA.posts.filter(function(p){return p.ts<=hi&&p.ts>lo;});}
+function windowSeries(days){
+  if(_from&&_to)return DATA.series.filter(function(b){return b.ms>=_from&&b.ms<=_to;});
+  if(!days)return DATA.series;return DATA.series.slice(Math.max(0,DATA.series.length-days));}
 function windowLives(days){var all=DATA.lives||[];if(!days)return all;var lo=Date.now()-days*864e5;return all.filter(function(l){return l.ts>lo;});}
 
 /* ── table controller (with SORT — nâng cấp so với email) ── */
@@ -596,12 +606,23 @@ function timingPanel(d){
   return '<div class="panel"><div class="panel-h" data-tip="Tương tác theo Thứ × Giờ. Ô đậm = giờ vàng đăng bài.">Best time · cao điểm <b style="color:var(--accent)">'+DOWF[d.bestD]+' '+d.bestH+'h</b></div><div class="heat">'+hh+grid+'</div></div>';
 }
 function mixSection(d){
-  var F=_filter||{};
-  function bars(list,key){var max=Math.max.apply(null,list.map(function(x){return x.eng;}).concat([1]));
-    return list.map(function(x){var on=F[key]===x.name;return '<div class="rrow" style="cursor:pointer;'+(on?'background:var(--accent-bg);border-radius:8px':'')+'" onclick="setFilter(\''+key+'\',\''+jsq(x.name)+'\')" data-tip="Bấm để lọc chéo theo mục này (bấm lại để bỏ)"><span class="rlbl">'+esc(x.name)+' <span style="color:var(--faint)">('+x.n+')</span></span><div class="rbar"><span style="width:'+(x.eng/max*100).toFixed(1)+'%;background:var(--grad)"></span></div><span class="rval">'+x.er+'%</span></div>';}).join('');}
-  return '<section id="s-mix"><div class="eyebrow">Phân tích nội dung — bấm để lọc chéo</div><div class="row2">'
-    +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate theo định dạng bài. Bấm để lọc.">Theo định dạng</div>'+bars(d.byType,'type')+'</div>'
-    +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate theo chủ đề. Bấm để lọc.">Theo chủ đề</div>'+bars(d.byTopic,'topic')+'</div>'
+  var F=_filter||{},s=d.sum;
+  function barsER(list,key){var max=Math.max.apply(null,list.map(function(x){return x.eng;}).concat([1]));
+    return list.map(function(x){var on=F[key]===x.name;return '<div class="rrow" style="cursor:pointer;'+(on?'background:var(--accent-bg);border-radius:8px':'')+'" onclick="setFilter(\''+key+'\',\''+jsq(x.name)+'\')" data-tip="Bấm để lọc chéo (bấm lại để bỏ)"><span class="rlbl">'+esc(x.name)+' <span style="color:var(--faint)">('+x.n+')</span></span><div class="rbar"><span style="width:'+(x.eng/max*100).toFixed(1)+'%;background:var(--grad)"></span></div><span class="rval">'+x.er+'%</span></div>';}).join('');}
+  function barsShare(list,key){var tot=list.reduce(function(a,x){return a+(x.views||0);},0)||1;
+    return list.slice().sort(function(a,b){return b.views-a.views;}).map(function(x){var pct=x.views/tot*100,on=F[key]===x.name;
+      return '<div class="rrow" style="cursor:pointer;'+(on?'background:var(--accent-bg);border-radius:8px':'')+'" onclick="setFilter(\''+key+'\',\''+jsq(x.name)+'\')" data-tip="Tỉ trọng Lượt xem — bấm để lọc chéo"><span class="rlbl">'+esc(x.name)+'</span><div class="rbar"><span style="width:'+pct.toFixed(1)+'%;background:var(--grad)"></span></div><span class="rval">'+pc(pct)+'%</span></div>';}).join('');}
+  var react=Math.max(0,s.eng-s.comments);
+  var ttParts=[{v:react,c:'#5b8cff'},{v:s.comments,c:'#8b7bff'}];
+  var ttLeg='<div class="dl"><i style="background:#5b8cff"></i>Cảm xúc &amp; khác<b>'+nf(react)+'</b></div><div class="dl"><i style="background:#8b7bff"></i>Bình luận<b>'+nf(s.comments)+'</b></div>';
+  return '<section id="s-mix"><div class="eyebrow">Phân tích nội dung — bấm để lọc chéo</div>'
+    +'<div class="row2">'
+    +'<div class="panel"><div class="panel-h" data-tip="Tỉ trọng Lượt xem theo định dạng bài (Nhiều ảnh/Ảnh/Thước phim...). Bấm để lọc.">Theo loại nội dung</div>'+barsShare(d.byType,'type')+'</div>'
+    +'<div class="panel"><div class="panel-h" data-tip="Cảm xúc &amp; khác (≈ tổng tương tác − bình luận) so với Bình luận.">Theo loại tương tác</div><div class="donut-wrap">'+donut(ttParts)+'<div class="dleg">'+ttLeg+'</div></div></div>'
+    +'</div>'
+    +'<div class="row2" style="margin-top:16px">'
+    +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate theo định dạng. Bấm để lọc.">Hiệu quả theo định dạng (ER)</div>'+barsER(d.byType,'type')+'</div>'
+    +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate theo chủ đề. Bấm để lọc.">Theo chủ đề</div>'+barsER(d.byTopic,'topic')+'</div>'
     +'</div></section>';
 }
 function setCtab(t){_ctab=t;paint();}
@@ -793,7 +814,8 @@ function masthead(mode){
   var mBtn=mode==='ex'?'<button class="mode-btn alt" onclick="setMode(\'op\')" data-tip="Bảng điều hành đầy đủ">Bảng điều hành</button>':'<button class="mode-btn" onclick="setMode(\'ex\')" data-tip="Tóm tắt cho lãnh đạo">Tóm tắt lãnh đạo</button>';
   return '<div class="mast"><div class="mast-in"><div class="brand"><div class="logo">SHB</div><div><div class="tt">Facebook Dashboard</div><div class="ss">Fanpage · CM Analytics</div></div></div>'
     +'<div class="ctrls"><div class="seg"><button onclick="location.href=\'/api/dashboard\'" data-tip="Sang dashboard Email">Email</button><button class="on">Facebook</button></div>'
-    +'<div class="seg"><button class="'+(_days===0?'on':'')+'" onclick="flt(0)">Tất cả</button><button class="'+(_days===30?'on':'')+'" onclick="flt(30)">30N</button><button class="'+(_days===7?'on':'')+'" onclick="flt(7)">7N</button></div>'
+    +'<div class="seg"><button class="'+(_days===0&&!_from?'on':'')+'" onclick="flt(0)">Tất cả</button><button class="'+(_days===30?'on':'')+'" onclick="flt(30)">30N</button><button class="'+(_days===7?'on':'')+'" onclick="flt(7)">7N</button></div>'
+    +'<div class="dtrange'+(_from&&_to?' on':'')+'" data-tip="Lọc theo khoảng ngày tuỳ chọn"><input type="date" id="dt-from" value="'+isoDate(_from)+'" onchange="onRange()"><span class="ar">→</span><input type="date" id="dt-to" value="'+isoDate(_to)+'" onchange="onRange()">'+(_from&&_to?'<button class="dtx" onclick="flt(0)" data-tip="Bỏ lọc ngày">×</button>':'')+'</div>'
     +'<button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K)">⌘K</button>'
     +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Sáng/Tối">'+(_theme==='dark'?'☼':'☾')+'</button>'
     +'<button class="icon-btn" onclick="toggleDensity()" data-tip="Thoáng/Gọn">⇕</button>'
@@ -852,7 +874,9 @@ function executive(d,cur,prev){
 }
 
 /* ── app state ── */
-var _days=0,_mode='op',_theme='dark',_filter={},_density='comfortable',_metric='views',_ctab='posts',_inited=false,_tipInited=false,_cmds=[],_cmdSel=0,_cmdFiltered=[];
+var _days=0,_from=null,_to=null,_mode='op',_theme='dark',_filter={},_density='comfortable',_metric='views',_ctab='posts',_inited=false,_tipInited=false,_cmds=[],_cmdSel=0,_cmdFiltered=[];
+function isoDate(ms){if(!ms)return '';var d=new Date(ms);return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
+function onRange(){var f=(document.getElementById('dt-from')||{}).value,t=(document.getElementById('dt-to')||{}).value;if(!f||!t)return;_from=new Date(f+'T00:00:00').getTime();_to=new Date(t+'T23:59:59').getTime();if(_from>_to){var x=_from;_from=_to;_to=x;}_days=0;paint();}
 try{var _st=localStorage.getItem('shb-fb-theme');if(_st)_theme=_st;}catch(e){}
 try{var _sd=localStorage.getItem('shb-fb-density');if(_sd)_density=_sd;}catch(e){}
 function applyTheme(){if(_theme==='light')document.documentElement.setAttribute('data-theme','light');else document.documentElement.removeAttribute('data-theme');}
@@ -881,7 +905,7 @@ function paint(){
   try{applyTheme();applyDensity();document.getElementById('app').innerHTML=render();mountAllTables();wireNav();wireChart();countUp();init();initTooltip();}
   catch(err){var app=document.getElementById('app');if(app)app.innerHTML='<div style="padding:40px 32px;font-family:monospace;max-width:860px;margin:0 auto"><div style="color:#ff7d96;font-size:18px;font-weight:700;margin-bottom:16px">⚠ Dashboard Error</div><pre style="font-size:12px;background:rgba(255,255,255,.06);padding:18px;border-radius:12px;white-space:pre-wrap;color:#bdb8db">'+String(err.stack||err.message||err)+'</pre><button onclick="_filter={};paint()" style="margin-top:16px;padding:9px 18px;background:#8b7bff;color:#fff;border:none;border-radius:10px;cursor:pointer">Xóa lọc &amp; thử lại</button></div>';console.error('[SHB FB]',err);}
 }
-function flt(days){_days=days;paint();}
+function flt(days){_days=days;_from=null;_to=null;paint();}
 function setMode(m){_mode=m;paint();window.scrollTo(0,0);}
 function toggleTheme(){_theme=_theme==='dark'?'light':'dark';try{localStorage.setItem('shb-fb-theme',_theme);}catch(e){}paint();}
 function toggleDensity(){_density=_density==='compact'?'comfortable':'compact';try{localStorage.setItem('shb-fb-density',_density);}catch(e){}applyDensity();}
