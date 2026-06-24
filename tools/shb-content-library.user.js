@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SHB Content Library → Supabase
 // @namespace    shb-fb-dashboard
-// @version      3.5.0
+// @version      3.6.0
 // @description  Bắt response Professional Dashboard Content Library (bài Group "SHB Một Nhà") và đẩy sang /api/ingest. Groups API công khai đã bị Meta gỡ 22/04/2024 nên đây là nguồn dữ liệu duy nhất.
 // @author       SHB CM
 // @match        https://www.facebook.com/*
@@ -138,7 +138,8 @@
   function rangeFromUrl() { var m = String(location.search).match(/date_range=([A-Z0-9_]+)/); return m ? m[1] : ''; }
   var pageLastSent = '';
   function sendPage(acc) {
-    var sig = JSON.stringify(acc.metrics) + '|' + Object.keys(acc.series).sort().join(',');
+    var sCount = Object.keys(acc.series).sort().map(function (k) { var pts = acc.series[k] && acc.series[k].points; return k + ':' + (Array.isArray(pts) ? pts.length : 0); }).join(',');
+    var sig = JSON.stringify(acc.metrics) + '|' + sCount;
     if (sig === pageLastSent) return; pageLastSent = sig;
     log('PAGE metrics:', acc.metrics, '| series:', Object.keys(acc.series));
     Object.keys(acc.series).forEach(function (k) { log('  series[' + k + ']:', JSON.stringify(acc.series[k]).slice(0, 400)); });
@@ -237,5 +238,5 @@
   } catch (e) {}
   if (/professional_dashboard/.test(location.pathname)) tourTick();
 
-  log('userscript v3.5 đã nạp — bóc full chỉ số per-post + page-level. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
+  log('userscript v3.6 đã nạp — bóc full chỉ số per-post + page-level. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
 })();
