@@ -122,17 +122,22 @@ function groupAsPosts(rows) {
 // Trả { daily:[{ms,value}], metrics:{}, totalViews, viewers, range, captured } hoặc null.
 function buildPageInsights(rows) {
   if (!Array.isArray(rows) || !rows.length) return null;
-  // Gom MỌI chuỗi theo ngày (ngày có hoạt động) -> seriesMap chuẩn hoá: views/interactions/followers.
-  var seriesMap = {};
+  // Gom MỌI chuỗi theo ngày (ngày có hoạt động), UNION theo ngày qua TẤT CẢ lần bắt
+  // -> bắt nhiều khoảng khác nhau sẽ phủ đủ thời gian. rows desc theo captured_at -> giá trị mới nhất thắng.
+  var byDay = {};
   rows.forEach(function (r) {
     var s = r.series || {};
     Object.keys(s).forEach(function (key) {
       var pts = s[key] && s[key].points;
       if (!Array.isArray(pts) || !pts.length) return;
       var norm = /interaction/.test(key) ? 'interactions' : /follow/.test(key) ? 'followers' : /view/.test(key) ? 'views' : key;
-      var arr = pts.map(function (p) { return { ms: new Date(p.start_time).getTime(), value: p.value || 0 }; }).filter(function (p) { return p.ms; }).sort(function (a, b) { return a.ms - b.ms; });
-      if (!seriesMap[norm] || seriesMap[norm].length < arr.length) seriesMap[norm] = arr;
+      if (!byDay[norm]) byDay[norm] = {};
+      pts.forEach(function (p) { var ms = new Date(p.start_time).getTime(); if (ms && byDay[norm][ms] === undefined) byDay[norm][ms] = p.value || 0; });
     });
+  });
+  var seriesMap = {};
+  Object.keys(byDay).forEach(function (norm) {
+    seriesMap[norm] = Object.keys(byDay[norm]).map(function (k) { return { ms: +k, value: byDay[norm][k] }; }).sort(function (a, b) { return a.ms - b.ms; });
   });
   var daily = seriesMap.views || [];
   // gom metric: rows đã desc theo captured_at -> giữ giá trị MỚI NHẤT cho mỗi key; bỏ sentinel rác
