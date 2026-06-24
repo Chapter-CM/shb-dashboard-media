@@ -103,7 +103,8 @@ function groupAsPosts(rows) {
       // Nên KHÔNG bịa reactions; giữ react=0 và mang tổng tương tác thật ở engRaw.
       react: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
       comments: cmt, replies: 0, pageReplies: 0, shares: 0, clicks: 0, firstCommentMin: 0,
-      video: null, vel: { h1: 0, h3: 0, h6: 0, h24: 0 }, isGroup: true, engRaw: eng
+      video: null, vel: { h1: 0, h3: 0, h6: 0, h24: 0 }, isGroup: true, engRaw: eng,
+      pm: r.metrics || {}   // tất cả chỉ số per-post (impression, net_follow, video_view_*, ...)
     };
   });
 }
@@ -151,7 +152,7 @@ function mapGroupPosts(rows) {
       id: r.post_id, title: r.title || '(không có nội dung)', permalink: r.permalink || '#',
       ts: r.created_time ? new Date(r.created_time).getTime() : 0, type: r.post_type || '',
       reach: r.reach || 0, viewers: r.viewers || 0, engagement: r.engagement || 0,
-      comments: r.comments || 0, source: r.source || 'prodash', updated: r.updated_at ? new Date(r.updated_at).getTime() : 0
+      comments: r.comments || 0, pm: r.metrics || {}, source: r.source || 'prodash', updated: r.updated_at ? new Date(r.updated_at).getTime() : 0
     };
   });
 }
@@ -527,9 +528,12 @@ function heroRow(d,cur,prev,ser){
 }
 function sumKey(posts,k){var t=0;posts.forEach(function(p){if(k==='reactions')t+=reactTotal(p.react);else if(k==='eng')t+=engOf(p);else t+=p[k]||0;});return t;}
 function heroChart(d,ser){
-  return '<div class="hero-chart"><div class="hc-head"><div class="hc-title" data-tip="Xu hướng theo thời gian — chọn chỉ số để xem.">Xu hướng theo thời gian</div>'
-    +'<div class="metric-toggle"><button class="'+(_metric==='views'?'on':'')+'" onclick="setMetric(\'views\')">Views</button><button class="'+(_metric==='eng'?'on':'')+'" onclick="setMetric(\'eng\')">Tương tác</button><button class="'+(_metric==='followers'?'on':'')+'" onclick="setMetric(\'followers\')">Follower</button></div></div>'
-    +areaChart(ser,_metric,_metric==='views'?'views':_metric==='eng'?'tương tác':'follower')+'</div>';
+  var pd=DATA.pageInsights, useDaily=(_metric==='views'&&pd&&pd.daily&&pd.daily.length);
+  var note=useDaily?' <span style="font-size:10px;color:var(--faint);font-weight:600;text-transform:none;letter-spacing:0">· lượt xem toàn trang/ngày (Facebook)</span>':'';
+  var chart=useDaily?pageDailyChart(pd.daily):areaChart(ser,_metric,_metric==='views'?'views':_metric==='eng'?'tương tác':'follower');
+  return '<div class="hero-chart"><div class="hc-head"><div class="hc-title" data-tip="Xu hướng theo thời gian — chọn chỉ số để xem.">Xu hướng theo thời gian'+note+'</div>'
+    +'<div class="metric-toggle"><button class="'+(_metric==='views'?'on':'')+'" onclick="setMetric(\'views\')">Lượt xem</button><button class="'+(_metric==='eng'?'on':'')+'" onclick="setMetric(\'eng\')">Tương tác</button><button class="'+(_metric==='followers'?'on':'')+'" onclick="setMetric(\'followers\')">Follower</button></div></div>'
+    +chart+'</div>';
 }
 function reactionPanel(d){
   var r=d.sum.react,meta=[['love','❤️ Love','#ff7d96'],['like','👍 Like','#5b8cff'],['haha','😆 Haha','#ffc861'],['wow','😮 Wow','#8b7bff'],['sad','😢 Sad','#5bb8ff'],['angry','😡 Angry','#ff9d5b']];
@@ -740,7 +744,7 @@ function filterBar(d){var F=_filter||{},o=d.opts||{};
   function topicSel(){var list=o.topic||[],cur=F.topic||'';var label=cur||'Tất cả chủ đề';var opts='<div class="csel-opt'+(cur?'':' on')+'" onclick="pickTopic(\'\')">Tất cả chủ đề</div>'+list.map(function(v){return '<div class="csel-opt'+(v===cur?' on':'')+'" onclick="pickTopic(\''+jsq(v)+'\')">'+esc(v)+'</div>';}).join('');
     return '<div class="csel"><div class="csel-btn" onclick="openTopicSel(event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div><div class="csel-dd" id="topic-dd" style="display:none"><input class="csel-inp" placeholder="🔍 Tìm chủ đề…" oninput="filterTopicSel(this.value)" onclick="event.stopPropagation()"><div class="csel-list" id="topic-list">'+opts+'</div></div></div>';}
   return '<div class="fbar"><span class="flbl">Lọc</span>'+topicSel()+sel('type','Mọi định dạng')+sel('media','Mọi loại media')+sel('slot','Mọi khung giờ')+sel('dayType','Mọi ngày')+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa tất cả</button>':'')+'</div>';}
-function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-page">Toàn trang</a><a href="#s-react">Cảm xúc</a><a href="#s-engage">Engagement</a><a href="#s-time">Best time</a><a href="#s-content">Nội dung</a><a href="#s-video">Video/Live</a><a href="#s-mix">Phân tích</a><a href="#s-aud">Audience</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
+function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-react">Cảm xúc</a><a href="#s-engage">Engagement</a><a href="#s-time">Best time</a><a href="#s-content">Nội dung</a><a href="#s-video">Video/Live</a><a href="#s-mix">Phân tích</a><a href="#s-aud">Audience</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
 function masthead(mode){
   var mBtn=mode==='ex'?'<button class="mode-btn alt" onclick="setMode(\'op\')" data-tip="Bảng điều hành đầy đủ">Bảng điều hành</button>':'<button class="mode-btn" onclick="setMode(\'ex\')" data-tip="Tóm tắt cho lãnh đạo">Tóm tắt lãnh đạo</button>';
   return '<div class="mast"><div class="mast-in"><div class="brand"><div class="logo">SHB</div><div><div class="tt">Facebook Dashboard</div><div class="ss">Fanpage · CM Analytics</div></div></div>'
@@ -757,7 +761,6 @@ function operational(d,cur,prev,ser){
   return masthead('op')+'<div class="subnav"><div class="subnav-in">'+navLinks()+'</div></div>'+filterStatusBar()
     +'<div class="wrap">'+filterBar(d)
     +'<section id="s-ov" style="padding-top:14px"><div class="eyebrow">Tổng quan</div>'+heroRow(d,cur,prev,ser)+heroChart(d,ser)+'</section>'
-    +pageSection()
     +'<section id="s-react"><div class="eyebrow">Cảm xúc</div><div class="row2">'+reactionPanel(d)+timingPanelMini(d)+'</div></section>'
     +'<section id="s-engage"><div class="eyebrow">Engagement</div>'+engagementPanel(d)+'</section>'
     +'<section id="s-time"><div class="eyebrow">Best time đăng bài</div>'+timingPanel(d)+'</section>'
@@ -788,24 +791,6 @@ function pageDailyChart(daily){
   return '<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'">'
     +'<defs><linearGradient id="pgGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".34"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>'
     +'<path d="'+area+'" fill="url(#pgGrad)"/><path d="'+line+'" fill="none" stroke="var(--accent)" stroke-width="2"/>'+dots+labels+'</svg>';
-}
-function pageSection(){
-  var p=DATA.pageInsights;
-  if(!p) return '';
-  var m=p.metrics||{};
-  function card(l,v,tip){return '<div class="kpi" data-tip="'+esc(tip||'')+'"><div class="kl">'+l+'</div><div class="kv">'+v+'</div></div>';}
-  var cards=[card('Tổng lượt xem',nf(p.totalViews),'Tổng lượt xem TOÀN TRANG theo Facebook (page-level), khoảng thời gian gần nhất bắt được. Khác với số cộng dồn từ bài viết.')];
-  if(p.viewers) cards.push(card('Người xem',nf(p.viewers),'Số người xem duy nhất (viewers) cấp trang.'));
-  if(m.engagement!=null) cards.push(card('Tương tác',nf(m.engagement),'Tổng tương tác (engagement) cấp trang theo Facebook.'));
-  if(m.video_view_three_second!=null) cards.push(card('Xem video ≥3s',nf(m.video_view_three_second),'Lượt xem video tối thiểu 3 giây.'));
-  if(m.total_earnings!=null) cards.push(card('Thu nhập',nf(m.total_earnings),'Tổng thu nhập (total_earnings).'));
-  var cols=Math.min(cards.length,5);
-  return '<section id="s-page"><div class="eyebrow">Toàn trang · số liệu Facebook'
-    +'<span style="margin-left:auto;font-size:10px;color:var(--faint);text-transform:none;letter-spacing:0">cập nhật '+esc(p.captured?fmtTime(p.captured):'—')+'</span></div>'
-    +'<div class="kpi-col" style="grid-template-columns:repeat('+cols+',1fr)">'+cards.join('')+'</div>'
-    +(p.daily&&p.daily.length?'<div class="hero-chart"><div class="hc-head"><div class="hc-title" data-tip="Lượt xem toàn trang theo từng ngày — lấy trực tiếp từ Facebook Professional Dashboard.">Lượt xem theo ngày (toàn trang)</div></div>'+pageDailyChart(p.daily)+'</div>':'')
-    +'<div class="so">Số liệu <b>cấp trang</b> Facebook ghi nhận — cập nhật mỗi lần chạy userscript (Ctrl+Shift+Y) trên Professional Dashboard.</div>'
-    +'</section>';
 }
 function executive(d,cur,prev){
   var s=d.sum,now=new Date().toLocaleDateString('vi-VN',{month:'long',year:'numeric'});
