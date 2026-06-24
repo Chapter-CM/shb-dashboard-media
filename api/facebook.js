@@ -501,6 +501,7 @@ function dayTypeOf(ts){var d=new Date(ts).getDay();return (d===0||d===6)?'Cuối
 function mediaOf(p){return p.video?'Video / Reel':'Ảnh / Text / Link';}
 function distinct(posts,fn){var s={};posts.forEach(function(p){s[fn(p)]=1;});return Object.keys(s);}
 function matchFilter(p,F){
+  if(F.post&&p.id!==F.post)return false;
   if(F.type&&p.type!==F.type)return false;
   if(F.topic&&p.topic!==F.topic)return false;
   if(F.slot&&slotOf(p.ts)!==F.slot)return false;
@@ -648,7 +649,7 @@ function contentSection(d){
     search:function(r,q){return norm(r.p.msg).indexOf(q)>-1||norm(r.p.topic).indexOf(q)>-1;},
     sortVal:function(r,k){var p=r.p,vw=pViews(p),imp=pmv(p,'impression');return k==='ts'?p.ts:k==='views'?vw:k==='vw'?pmv(p,'viewers'):k==='imp'?imp:k==='eng'?(pmv(p,'engagement')||r.eng):k==='cmt'?(pmv(p,'comment')||p.comments):k==='er'?r.er:k==='vhr'?(imp?vw/imp:0):k==='vrate'?(vw?pmv(p,'viewers')/vw:0):k==='ntf'?pmv(p,'net_follow'):pViews(p);},
     render:function(r){var p=r.p,vw=pViews(p),eng=pmv(p,'engagement')||r.eng,er=vw?pc(eng/vw*100):0,vc=r.vsAvg>=0?'p-good':'p-risk';
-      return '<tr onclick="toggleDrill(\''+p.id+'\')"><td>'+postLink(p,p.msg.slice(0,50))+'</td>'
+      return '<tr onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer'+(F.post===p.id?';background:var(--accent-bg)':'')+'" data-tip="Bấm để lọc TOÀN dashboard theo bài này (bấm lại để bỏ)"><td>'+postLink(p,p.msg.slice(0,50))+'</td>'
         +'<td class="num">'+(p.ts?fmtDay(p.ts):'—')+'</td>'
         +'<td onclick="event.stopPropagation();setFilter(\'type\',\''+jsq(p.type)+'\')" style="cursor:pointer" data-tip="Bấm để lọc chéo theo loại này"><span class="pill '+(F.type===p.type?'p-good':'p-neutral')+'">'+esc(p.type)+'</span></td>'
         +'<td class="num">'+nf(vw)+'</td><td class="num">'+nf(pmv(p,'viewers'))+'</td>'
@@ -669,7 +670,7 @@ function contentSection(d){
     search:function(r,q){return norm(r.p.msg).indexOf(q)>-1;},
     sortVal:function(r,k){var p=r.p;return k==='ts'?p.ts:k==='views'?pViews(p):k==='vw'?pmv(p,'viewers'):k==='s3'?pmv(p,'video_view_three_second'):k==='m1'?pmv(p,'video_view_one_min'):k==='wt'?pmv(p,'video_view_avg_watch_time'):pViews(p);},
     render:function(r){var p=r.p;
-      return '<tr onclick="toggleDrill(\''+p.id+'v\')"><td>'+postLink(p,p.msg.slice(0,50))+'</td>'
+      return '<tr onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer'+(F.post===p.id?';background:var(--accent-bg)':'')+'" data-tip="Bấm để lọc TOÀN dashboard theo bài này"><td>'+postLink(p,p.msg.slice(0,50))+'</td>'
         +'<td class="num">'+(p.ts?fmtDay(p.ts):'—')+'</td>'
         +'<td class="num">'+nf(pViews(p))+'</td><td class="num" style="color:var(--good)">'+nf(pmv(p,'viewers'))+'</td>'
         +'<td class="num">'+nf(pmv(p,'video_view_three_second'))+'</td><td class="num">'+nf(pmv(p,'video_view_one_min'))+'</td>'
@@ -836,7 +837,7 @@ function dictSection(){
 
 /* ── filter bar / nav / masthead ── */
 function filterStatusBar(){var F=_filter||{};var active=Object.keys(F).filter(function(k){return F[k];});if(!active.length)return '';
-  var L={type:'Định dạng',topic:'Chủ đề',media:'Media',slot:'Khung giờ',dayType:'Ngày'};var chips=active.map(function(k){return '<span class="f-chip">'+L[k]+': <b>'+esc(F[k])+'</b> <span class="cx" onclick="clearFilter(\''+k+'\')">×</span></span>';}).join('');
+  var L={post:'Bài',type:'Định dạng',topic:'Chủ đề',media:'Media',slot:'Khung giờ',dayType:'Ngày'};var chips=active.map(function(k){var disp=F[k];if(k==='post'){var pp=(DATA.posts||[]).filter(function(x){return x.id===F[k];})[0];disp=pp?pp.msg.slice(0,42):F[k];}return '<span class="f-chip">'+(L[k]||k)+': <b>'+esc(disp)+'</b> <span class="cx" onclick="clearFilter(\''+k+'\')">×</span></span>';}).join('');
   return '<div class="filter-status"><span class="lbl">Đang lọc</span>'+chips+'<button class="f-clear-all" onclick="clearAllFilters()">× Xóa tất cả</button></div>';}
 function filterBar(d){var F=_filter||{},o=d.opts||{};
   function sel(key,allLabel){var list=o[key]||[];if(!list.length)return '';var cur=F[key]||'';return '<select onchange="setFilter(\''+key+'\',this.value)"><option value="">'+allLabel+'</option>'+list.map(function(v){return '<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(v)+'</option>';}).join('')+'</select>';}
