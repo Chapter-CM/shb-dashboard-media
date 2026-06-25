@@ -586,8 +586,10 @@ function heroRow(d,cur,prev,ser){
   var viewsVal=viewsAct!=null?viewsAct:s.views;
   // Các chỉ số cấp trang (activity, theo kỳ Facebook đã bắt) — fallback per-post khi lọc theo bài/loại
   function pg(pageVal,postVal){return (!cFil&&typeof pageVal==='number')?pageVal:postVal;}
-  var viewersV=pg(mx.viewers,s.mediaViewers), cmtV=pg(mx.comment,s.comments);
-  var impV=sumPm(cur,'impression');   // luôn cộng tổng từ các nội dung (per-post); lọc thì cộng theo nội dung đang lọc
+  var viewersV=pg(mx.viewers,s.mediaViewers);
+  // Lượt hiển thị & Bình luận: LUÔN cộng tổng từ các nội dung (per-post); lọc thì cộng theo nội dung đang lọc
+  var impV=sumPm(cur,'impression');
+  var cmtV=cur.reduce(function(t,p){return t+(p.comments||pmv(p,'comment'));},0);
   var engV=engAct!=null?engAct:s.eng, folV=m.follower||m.total_follower||s.followers;
   if(viewsVal&&viewersV)reachRate=Math.min(100,Math.round(viewersV/viewsVal*1000)/10);
   var erAct=viewsVal?pc(engV/viewsVal*100):s.engRate;            // ER theo số activity (chuẩn nhất)
@@ -604,7 +606,7 @@ function heroRow(d,cur,prev,ser){
     card('Lượt tiếp cận',nf(reachSum),'<span class="delta flat">tỉ lệ tiếp cận '+reachRatio+'%</span>','','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem. Nếu chỉ 1 bài thì = người xem của bài đó.',{icon:'📡',unit:'lượt',accent:'accent'}),
     card('Người xem (duy nhất)',nf(viewersV),'','','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{icon:'👁',unit:'người',accent:'accent'}),
     card('Lượt hiển thị',nf(impV),'','','Tổng số lần hiển thị (impressions), CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc. KHÁC Lượt xem.',{icon:'📺',unit:'lượt',accent:'neutral'}),
-    card('Bình luận',nf(cmtV),'','','Tổng bình luận cấp trang (theo kỳ Facebook đã bắt).',{icon:'💬',unit:'',accent:'accent'})
+    card('Bình luận',nf(cmtV),'','','Tổng bình luận CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc.',{icon:'💬',unit:'',accent:'accent'})
   ].join('');
   var topType=(d.byType&&d.byType[0])?d.byType[0].name:'', topTopic=(d.byTopic&&d.byTopic[0])?d.byTopic[0].name:'';
   var summary='<div class="so" style="margin-top:16px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:15px">💡</span><div>Kỳ này: <b>'+nf(viewsVal)+'</b> lượt xem'+(vDelta?' ('+vDelta+' so kỳ trước)':'')+' · <b>'+nf(engV)+'</b> lượt tương tác · ER <b>'+erAct+'%</b>'+(erAct>=TARGET_ER?' ✓ đạt mục tiêu':' (mục tiêu '+TARGET_ER+'%)')+'.'+(topType?' Định dạng <b>'+esc(topType)+'</b>'+(topTopic?' &amp; chủ đề <b>'+esc(topTopic)+'</b>':'')+' hiệu quả nhất — ưu tiên sản xuất.':'')+'</div></div>';
