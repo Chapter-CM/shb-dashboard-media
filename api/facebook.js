@@ -620,7 +620,7 @@ function heroRow(d,cur,prev,ser){
   var engDelta=(!cFil)?seriesDelta(PS.interactions):'';
   var erSub='<span class="ksub-'+(erAct>=TARGET_ER?'up':'down')+'">'+(erAct>=TARGET_ER?'▲ đạt':'▼ dưới')+' mục tiêu '+TARGET_ER+'%</span>';
   var k=[
-    card('Lượt tương tác'+(engAct!=null?' · hđ':''),tnum(engV),engDelta?'so kỳ trước '+engDelta:'tổng tương tác kỳ này',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Số phụ = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{icon:'👍',feat:true}),
+    card('Lượt tương tác',tnum(engV),engDelta?'so kỳ trước '+engDelta:'tổng tương tác kỳ này',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Số phụ = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{icon:'👍',feat:true}),
     card('ER (Engagement Rate)',erAct+'%',erSub,'Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.',{icon:'📊'}),
     card('Lượt tiếp cận',tnum(reachSum),'tỉ lệ tiếp cận '+reachRatio+'%','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem.',{icon:'📡'}),
     card('Người xem',tnum(viewersV),'duy nhất · cấp trang','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{icon:'👁'}),
@@ -928,14 +928,14 @@ function pageDailyChart(daily,unit){
 function executive(d,cur,prev){
   var s=d.sum,now=new Date().toLocaleDateString('vi-VN',{month:'long',year:'numeric'});
   var head='<div class="exec-h"><div style="font-size:11.5px;opacity:.85;letter-spacing:.06em;text-transform:uppercase;margin-bottom:22px">Báo cáo truyền thông Facebook · CM Team · '+now+'</div><div class="exec-k">'
-    +'<div class="exec-kp"><div class="v">'+s.engRate+'%</div><div class="l">Engagement Rate</div></div>'
-    +'<div class="exec-kp"><div class="v">'+nf(s.views)+'</div><div class="l">Views</div></div>'
-    +'<div class="exec-kp"><div class="v">'+nf(s.eng)+'</div><div class="l">Tương tác</div></div>'
-    +'<div class="exec-kp"><div class="v">'+nf(s.followers)+'</div><div class="l">Follower</div></div></div></div>';
+    +'<div class="exec-kp"><div class="v">'+s.engRate+'%</div><div class="l">Tỷ lệ tương tác (ER)</div></div>'
+    +'<div class="exec-kp"><div class="v">'+nf(s.views)+'</div><div class="l">Lượt xem</div></div>'
+    +'<div class="exec-kp"><div class="v">'+nf(s.eng)+'</div><div class="l">Lượt tương tác</div></div>'
+    +'<div class="exec-kp"><div class="v">'+nf(s.followers)+'</div><div class="l">Người theo dõi</div></div></div></div>';
   var top=d.rows.slice(0,5).map(function(r){return '<tr><td><span class="nm">'+esc(r.p.msg.slice(0,46))+'</span></td><td><span class="pill p-neutral">'+esc(r.p.type)+'</span></td><td class="num">'+nf(r.p.views)+'</td><td class="num"><b>'+nf(r.eng)+'</b></td><td class="num">'+r.er+'%</td></tr>';}).join('');
   var ins=insightsOf(d),ih='<div class="ins">';ins.slice(0,4).forEach(function(i){ih+='<div class="in '+(i.t==='warn'?'warn':'good')+'"><div class="mk"></div><div class="x">'+i.x+'</div></div>';});ih+='</div>';
   return masthead('ex')+'<div class="wrap"><section style="padding-top:22px">'+head
-    +'<div class="panel"><div class="panel-h">Top 5 bài hiệu quả</div><div class="tw"><table><thead><tr><th>Bài viết</th><th>Loại</th><th class="num">Views</th><th class="num">Tương tác</th><th class="num">ER</th></tr></thead><tbody>'+top+'</tbody></table></div></div>'
+    +'<div class="panel"><div class="panel-h">Top 5 bài hiệu quả</div><div class="tw"><table><thead><tr><th>Bài viết</th><th>Loại</th><th class="num">Lượt xem</th><th class="num">Tương tác</th><th class="num">ER</th></tr></thead><tbody>'+top+'</tbody></table></div></div>'
     +'<div style="margin-top:14px"><div class="eyebrow">Điểm chính</div>'+ih+'</div>'
     +'<div class="foot">Cập nhật '+fmtTime(Date.now())+'</div></section></div>';
 }
