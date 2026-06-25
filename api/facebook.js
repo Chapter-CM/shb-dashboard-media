@@ -652,28 +652,6 @@ function heroChart(d,ser){
     +'<div class="metric-toggle"><button class="'+(_metric==='views'?'on':'')+'" onclick="setMetric(\'views\')">Lượt xem</button><button class="'+(_metric==='eng'?'on':'')+'" onclick="setMetric(\'eng\')">Tương tác</button><button class="'+(_metric==='er'?'on':'')+'" onclick="setMetric(\'er\')">ER %</button></div></div>'
     +chart+'</div>';
 }
-function reactionPanel(d){
-  var r=d.sum.react,meta=[['love','❤️ Love','#ff7d96'],['like','👍 Like','#5b8cff'],['haha','😆 Haha','#ffc861'],['wow','😮 Wow','#8b7bff'],['sad','😢 Sad','#5bb8ff'],['angry','😡 Angry','#ff9d5b']];
-  if(reactTotal(r)===0){return '<div class="panel"><div class="panel-h">Cảm xúc &amp; Sentiment</div><div class="nd" style="padding:28px 16px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6">Nguồn Content Library của Facebook <b>không tách chi tiết 6 loại cảm xúc theo từng bài</b> — chỉ có tổng <b>Tương tác</b> (xem card Tổng quan). Phần này cần dữ liệu reaction cấp bài (chỉ bài Fanpage tự đăng mới có).</div></div>';}
-  var parts=meta.map(function(m){return {v:r[m[0]],c:m[2]};});
-  var leg=meta.map(function(m){return '<div class="dl"><i style="background:'+m[2]+'"></i>'+m[1]+'<b>'+nf(r[m[0]])+'</b></div>';}).join('');
-  var sCls=d.sum.sentiment>=40?'good':d.sum.sentiment>=0?'warn':'risk';
-  return '<div class="panel"><div class="panel-h" data-tip="Phân bố 6 loại reaction + chỉ số sentiment.">Cảm xúc &amp; Sentiment <span class="pill p-'+sCls+'">Sentiment '+d.sum.sentiment+'</span></div><div class="donut-wrap">'+donut(parts)+'<div class="dleg">'+leg+'</div></div></div>';
-}
-function engagementPanel(d){
-  var s=d.sum;function stat(l,v,cls,tip){return '<div class="dh" data-tip="'+esc(tip)+'"><div class="dh-l">'+l+'</div><div class="dh-v '+(cls||'')+'">'+v+'</div></div>';}
-  return '<div class="panel"><div class="panel-h" data-tip="Các chỉ số engagement phái sinh.">Engagement tổng hợp</div><div class="dh-grid">'
-    +stat('Engagement Rate',s.engRate+'%',s.engRate>=TARGET_ER?'good':s.engRate>=TARGET_ER-2?'warn':'risk','Tương tác ÷ views.')
-    +stat('Click Rate',s.clickRate+'%',s.clickRate>=2?'good':'warn','Clicks ÷ views.')
-    +stat('Virality',s.virality+'%',s.virality>=10?'good':'','Shares ÷ tổng tương tác — độ lan toả.')
-    +stat('Velocity 1h',s.velocity+'%',s.velocity>=20?'good':'warn','% tương tác đạt được trong 1h đầu (cần snapshot thật).')
-    +stat('Response Rate',s.responseRate+'%',s.responseRate>=70?'good':'warn','% bài có ≥1 bình luận.')
-    +stat('Bài không tương tác',s.noEngRate+'%',s.noEngRate<10?'good':s.noEngRate<25?'warn':'risk','% bài có 0 tương tác.')
-    +stat('Comment Depth',s.commentDepth+'%',s.commentDepth>=30?'good':'','Replies ÷ comments — độ sâu thảo luận.')
-    +stat('Admin Response',s.adminResponse+'%',s.adminResponse>=30?'good':'warn','% comment được Page trả lời.')
-    +stat('TB phản hồi đầu',s.avgFirst+'p','','Trung bình phút tới comment đầu tiên.')
-    +'</div></div>';
-}
 function timingPanel(d){
   var DOW=['T2','T3','T4','T5','T6','T7','CN'],max=1;d.heat.forEach(function(row){row.forEach(function(v){if(v>max)max=v;});});
   var hh='<div class="hh"></div>';for(var h=0;h<24;h++)hh+='<div class="hh">'+(h%3===0?h:'')+'</div>';
@@ -786,80 +764,6 @@ function contentSection(d){
   }
 }
 /* ── Bài Group "SHB Một Nhà" — nạp qua /api/ingest (CSV/userscript), không lấy được qua Graph API ── */
-function groupSection(){
-  var gp=(DATA.groupPosts||[]).slice();
-  if(!gp.length){
-    return '<section id="s-group"><div class="eyebrow">Bài Group "SHB Một Nhà"</div>'
-      +'<div class="panel"><div class="nd" style="text-align:center;padding:40px 20px">'
-      +'<div style="font-size:34px;color:var(--faint)">📥</div>'
-      +'<h3 style="color:var(--text-2);margin:12px 0 6px">Chưa có dữ liệu bài Group</h3>'
-      +'<div style="color:var(--muted);font-size:12.5px;max-width:520px;margin:0 auto;line-height:1.6">Số liệu bài đăng trong Group không lấy được qua Facebook Graph API (Groups API đã bị Meta gỡ 22/04/2024). Nạp dữ liệu từ <b>Thư viện nội dung → Xuất dữ liệu (CSV)</b> bằng công cụ <code>tools/csv-upload.html</code>, hoặc bật userscript <code>tools/shb-content-library.user.js</code>.</div>'
-      +'</div></div></section>';
-  }
-  // KPI tổng
-  var tReach=0,tView=0,tEng=0,tCmt=0;
-  gp.forEach(function(p){tReach+=p.reach;tView+=p.viewers;tEng+=p.engagement;tCmt+=p.comments;});
-  var src=gp[0]&&gp[0].source==='csv'?'CSV':'Content Library';
-  var upd=gp.reduce(function(a,p){return Math.max(a,p.updated||0);},0);
-  function kpi(l,v,tip){return '<div class="kpi"><div class="kpi-l" data-tip="'+esc(tip)+'">'+l+'</div><div class="kpi-v num">'+v+'</div></div>';}
-  var kpis='<div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px">'
-    +kpi('Số bài',nf(gp.length),'Tổng bài Group đã nạp.')
-    +kpi('Lượt xem',nf(tReach),'Tổng lượt xem (cột "Lượt xem" trong Content Library).')
-    +kpi('Người xem',nf(tView),'Tổng người xem duy nhất.')
-    +kpi('Tương tác',nf(tEng),'Tổng lượt tương tác.')
-    +kpi('Bình luận',nf(tCmt),'Tổng bình luận.')
-    +'</div>';
-  var id='grp';
-  regTable({id:id,rows:gp,pageSize:15,cols:6,
-    search:function(p,q){return norm(p.title).indexOf(q)>-1;},
-    sortVal:function(p,k){return k==='ts'?p.ts:k==='reach'?p.reach:k==='view'?p.viewers:k==='eng'?p.engagement:k==='cmt'?p.comments:p.reach;},
-    render:function(p){var link=p.permalink&&p.permalink!=='#'?p.permalink:'';
-      return '<tr>'+(link?'<td><a href="'+esc(link)+'" target="_blank" rel="noopener" class="nm" style="color:var(--text)">'+esc(p.title.slice(0,64))+'</a></td>':'<td><span class="nm">'+esc(p.title.slice(0,64))+'</span></td>')
-        +'<td class="num">'+(p.ts?fmtDay(p.ts):'—')+'</td>'
-        +'<td class="num">'+nf(p.reach)+'</td><td class="num" style="color:var(--good)">'+nf(p.viewers)+'</td>'
-        +'<td class="num">'+nf(p.engagement)+'</td><td class="num">'+nf(p.comments)+'</td></tr>';}});
-  return '<section id="s-group"><div class="eyebrow">Bài Group "SHB Một Nhà"<span style="margin-left:auto;font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted)">Nguồn: '+esc(src)+(upd?' · cập nhật '+fmtDay(upd):'')+'</span></div>'
-    +'<div class="so">Nội dung truyền thông (HRMS, EGP, Chuyển tiền quốc tế…) đăng trong Group — <b>không có trên Graph API</b>, nạp thủ công/bán tự động qua <b>/api/ingest</b>.</div>'
-    +kpis
-    +'<div class="panel" id="tbl-'+id+'">'+searchBox(id,'Tìm bài trong group…')
-    +'<div class="tw"><table><thead><tr><th>Bài viết</th>'
-    +th(id,'ts','Đăng')+th(id,'reach','Lượt xem','Sắp theo lượt xem')+th(id,'view','Người xem','Unique viewers')+th(id,'eng','Tương tác')+th(id,'cmt','Bình luận')
-    +'</tr></thead><tbody id="tb-'+id+'"></tbody></table></div><div class="pager" id="pg-'+id+'"></div></div></section>';
-}
-function videoSection(d){
-  var v=d.video,lives=windowLives(_days);
-  var noVid=!v||!v.n;
-  function vstat(l,val,cls,tip){return '<div class="dh" data-tip="'+esc(tip)+'"><div class="dh-l">'+l+'</div><div class="dh-v '+(cls||'')+'">'+val+'</div></div>';}
-  var kpis=noVid?'<div class="nd">Chưa có video / reel trong kỳ</div>':
-    '<div class="dh-grid">'
-    +vstat('Video / Reel',nf(v.n),'','Số bài dạng video hoặc reel trong kỳ.')
-    +vstat('Media Views',nf(v.mediaViews),'','Tổng lượt xem video — thay 3-sec views từ 06/2026 (total_video_views).')
-    +vstat('Người xem',nf(v.viewers),'good','Số người xem duy nhất — total_video_views_unique.')
-    +vstat('Watch TB',v.avgWatch+'s','','Thời gian xem trung bình mỗi video.')
-    +vstat('Completion',v.completion+'%',v.completion>=40?'good':'warn','Tỷ lệ xem hết trung bình.')
-    +vstat('Replays',nf(v.replays),'','Tổng lượt xem lại (reels replays).')
-    +'</div>';
-  // bảng chi tiết video đã chuyển vào contentSection (tab Video/Reel)
-  // livestream
-  var liveBody;
-  if(!lives.length)liveBody='<div class="nd">Chưa có buổi livestream trong kỳ <span style="display:block;font-size:11.5px;margin-top:6px;color:var(--faint)">Cần ingest /{PAGE_ID}/live_videos qua fetch.js (peak_concurrent_viewers · live_video_insights)</span></div>';
-  else{
-    var totViewers=lives.reduce(function(a,l){return a+l.viewers;},0),maxPeak=Math.max.apply(null,lives.map(function(l){return l.peak;}));
-    liveBody='<div class="dh-grid" style="margin-bottom:14px">'
-      +vstat('Buổi live',lives.length,'','Số buổi phát trực tiếp trong kỳ.')
-      +vstat('Tổng người xem',nf(totViewers),'','Người xem duy nhất cộng dồn các buổi (total_video_views_unique).')
-      +vstat('Peak đồng thời',nf(maxPeak),'good','Đỉnh người xem đồng thời cao nhất (peak_concurrent_viewers).')
-      +'</div>'
-      +'<div class="tw"><table><thead><tr><th>Buổi live</th><th class="num">Peak đồng thời</th><th class="num">Người xem</th><th class="num">Tổng views</th><th class="num">Thời lượng</th><th class="num">Tương tác</th></tr></thead><tbody>'
-      +lives.slice().sort(function(a,b){return b.ts-a.ts;}).map(function(l){return '<tr><td><span class="nm">'+esc(l.title)+'</span><span style="color:var(--faint);font-size:11px;display:block">'+fmtTime(l.ts)+'</span></td>'
-        +'<td class="num"><b>'+nf(l.peak)+'</b></td><td class="num">'+nf(l.viewers)+'</td><td class="num">'+nf(l.views)+'</td><td class="num">'+l.durationMin+'p</td><td class="num">'+nf(l.reactions+l.comments)+'</td></tr>';}).join('')
-      +'</tbody></table></div>';
-  }
-  return '<section id="s-video"><div class="eyebrow">Video / Reel &amp; Livestream</div>'
-    +'<div class="panel"><div class="panel-h" data-tip="Hiệu quả video & reel: media views, người xem duy nhất, watch time, completion. Chi tiết từng video: xem tab Video/Reel ở section Nội dung.">Video &amp; Reel · tổng hợp</div>'+kpis+'</div>'
-    +'<div class="panel" style="margin-top:16px"><div class="panel-h" data-tip="Phát trực tiếp: peak concurrent viewers, người xem duy nhất, thời lượng.">Livestream</div>'+liveBody+'</div>'
-    +'</section>';
-}
 function ageGenderPanel(ag){
   if(!ag||!ag.length)return '';
   var ages={};ag.forEach(function(b){var a=b.bucket_names[0],g=b.bucket_names[1];if(!ages[a])ages[a]={f:0,m:0};if(g==='FEMALE')ages[a].f=b.bucket_value;else if(g==='MALE')ages[a].m=b.bucket_value;});
@@ -983,16 +887,6 @@ function operational(d,cur,prev,ser){
     +audienceSection(d)+insightSection(d)+healthSection(d)+dictSection()
     +'<div class="foot">SHB CM · Facebook Dashboard · nguồn: Content Library + Page Insights (userscript) · cập nhật khi quét</div></div>';
 }
-function timingPanelMini(d){
-  var s=d.sum;function stat(l,v,cls,tip){return '<div class="dh" data-tip="'+esc(tip)+'"><div class="dh-l">'+l+'</div><div class="dh-v '+(cls||'')+'">'+v+'</div></div>';}
-  return '<div class="panel"><div class="panel-h">Tóm tắt lan toả</div><div class="dh-grid" style="grid-template-columns:1fr 1fr">'
-    +stat('Sentiment',s.sentiment,s.sentiment>=40?'good':'warn','Chỉ số cảm xúc tổng.')
-    +stat('Virality',s.virality+'%',s.virality>=10?'good':'','Shares ÷ tương tác.')
-    +stat('Tổng shares',nf(s.shares),'good','Lan toả tự nhiên.')
-    +stat('TB tương tác/bài',nf(s.avgEngPerPost),'','')
-    +'</div></div>';
-}
-/* ── Toàn trang (page-level) — số liệu Facebook + chart ngày ── */
 function pageDailyChart(daily,unit){
   if(!daily||!daily.length) return '';
   unit=unit||'';
