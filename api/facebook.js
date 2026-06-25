@@ -584,7 +584,8 @@ function heroRow(d,cur,prev,ser){
   var viewsVal=viewsAct!=null?viewsAct:s.views;
   // Các chỉ số cấp trang (activity, theo kỳ Facebook đã bắt) — fallback per-post khi lọc theo bài/loại
   function pg(pageVal,postVal){return (!cFil&&typeof pageVal==='number')?pageVal:postVal;}
-  var viewersV=pg(mx.viewers,s.mediaViewers), cmtV=pg(mx.comment,s.comments), impV=pg(mx.impression,sumPm(cur,'impression'));
+  var viewersV=pg(mx.viewers,s.mediaViewers), cmtV=pg(mx.comment,s.comments);
+  var impV=sumPm(cur,'impression');   // luôn cộng tổng từ các nội dung (per-post); lọc thì cộng theo nội dung đang lọc
   var engV=engAct!=null?engAct:s.eng, folV=m.follower||m.total_follower||s.followers;
   if(viewsVal&&viewersV)reachRate=Math.min(100,Math.round(viewersV/viewsVal*1000)/10);
   var erAct=viewsVal?pc(engV/viewsVal*100):s.engRate;            // ER theo số activity (chuẩn nhất)
@@ -600,7 +601,7 @@ function heroRow(d,cur,prev,ser){
     card('ER (Engagement Rate)',erAct,'<span class="delta '+erCls+'">'+(erAct>=TARGET_ER?'≥':'<')+' mục tiêu '+TARGET_ER+'%</span>','','Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.',{icon:'📊',unit:'%',accent:erAct>=TARGET_ER?'good':'warn'}),
     card('Lượt tiếp cận',nf(reachSum),'<span class="delta flat">tỉ lệ tiếp cận '+reachRatio+'%</span>','','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem. Nếu chỉ 1 bài thì = người xem của bài đó.',{icon:'📡',unit:'lượt',accent:'accent'}),
     card('Người xem (duy nhất)',nf(viewersV),'','','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{icon:'👁',unit:'người',accent:'accent'}),
-    card('Lượt hiển thị',nf(impV),'','','Số lần nội dung hiển thị (impressions) cấp trang. KHÁC Lượt xem.',{icon:'📺',unit:'lượt',accent:'neutral'}),
+    card('Lượt hiển thị',nf(impV),'','','Tổng số lần hiển thị (impressions), CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc. KHÁC Lượt xem.',{icon:'📺',unit:'lượt',accent:'neutral'}),
     card('Bình luận',nf(cmtV),'','','Tổng bình luận cấp trang (theo kỳ Facebook đã bắt).',{icon:'💬',unit:'',accent:'accent'})
   ].join('');
   var topType=(d.byType&&d.byType[0])?d.byType[0].name:'', topTopic=(d.byTopic&&d.byTopic[0])?d.byTopic[0].name:'';
