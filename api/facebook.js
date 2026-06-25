@@ -278,6 +278,15 @@ section{padding-top:28px;scroll-margin-top:122px}
 .gauge-card .gc-sub{font-size:11.5px;opacity:.82;margin-top:14px;position:relative;z-index:1;line-height:1.5}
 .gauge-wrap{display:flex;justify-content:center;margin:4px 0;position:relative;z-index:1}
 .kpi-col{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+/* Bento grid Tổng quan: gauge lớn 2 hàng, thẻ Lượt tương tác rộng 2 cột */
+.bento{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s3);grid-auto-rows:1fr;align-items:stretch}
+.bento .gauge-card{grid-column:1;grid-row:1/3;display:flex;flex-direction:column;justify-content:center}
+.bento .kpi{display:flex;flex-direction:column;justify-content:center}
+.bento .kpi.feat{grid-column:span 2}
+.bento .kpi.feat .kv{font-size:34px}
+.tnum{cursor:help;border-bottom:1px dotted var(--faint)}
+@media(max-width:920px){.bento{grid-template-columns:1fr 1fr}.bento .gauge-card{grid-column:1/3;grid-row:auto}.bento .kpi.feat{grid-column:1/3}}
+@media(max-width:560px){.bento{grid-template-columns:1fr}.bento .gauge-card,.bento .kpi.feat{grid-column:1}}
 .kpi{background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r-sm);padding:var(--s4) 18px;backdrop-filter:blur(18px);box-shadow:var(--sh-1);position:relative;transition:transform .17s,border-color .17s,box-shadow .17s}
 .kpi::before{content:'';position:absolute;top:0;left:14px;right:14px;height:1px;background:linear-gradient(90deg,transparent,var(--stroke-2),transparent)}
 .kpi:hover{transform:translateY(-3px);border-color:var(--stroke-2);box-shadow:var(--sh-2)}
@@ -313,6 +322,23 @@ section{padding-top:28px;scroll-margin-top:122px}
 .rlbl{width:120px;font-size:12px;color:var(--text-2)}
 .rbar{flex:1;height:9px;background:var(--hair);border-radius:99px;overflow:hidden}.rbar span{display:block;height:100%;border-radius:99px;transition:width .8s cubic-bezier(.16,1,.3,1)}
 .rval{width:64px;text-align:right;font-size:12px;color:var(--text-2);font-family:var(--num)}
+/* Goal tracking */
+.goal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s3)}
+.goal{background:var(--glass-2);border:1px solid var(--stroke);border-radius:var(--r-sm);padding:var(--s4)}
+.goal-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.goal-l{font-size:11.5px;font-weight:700;color:var(--text-2)}
+.goal-bar{height:10px;background:var(--hair);border-radius:99px;overflow:hidden;margin:12px 0 9px;position:relative}
+.goal-bar i{display:block;height:100%;border-radius:99px;transition:width .9s cubic-bezier(.16,1,.3,1)}
+.goal-bar i.g-good{background:var(--good)}.goal-bar i.g-warn{background:var(--warn)}.goal-bar i.g-risk{background:var(--risk)}
+.goal-sub{font-size:12px;font-family:var(--num);color:var(--text-2)}.goal-sub b{color:var(--text)}
+/* Dự án / Sáng kiến */
+.ini-list{display:flex;flex-direction:column;gap:var(--s1)}
+.ini-row{display:flex;align-items:center;gap:var(--s3);padding:9px 10px;border-radius:var(--r-xs);transition:background .15s}
+.ini-row:hover{background:var(--glass)}.ini-row.on{background:var(--accent-bg)}
+.ini-name{width:210px;flex:none;font-size:12.5px;font-weight:600;color:var(--text)}
+.ini-meta{display:block;font-size:10.5px;font-weight:500;color:var(--faint);margin-top:2px}
+.ini-bar{flex:1;height:9px;background:var(--hair);border-radius:99px;overflow:hidden}.ini-bar span{display:block;height:100%;border-radius:99px;transition:width .8s cubic-bezier(.16,1,.3,1)}
+@media(max-width:920px){.goal-grid{grid-template-columns:1fr}.ini-name{width:140px}}
 .hc2{display:flex;align-items:flex-end;gap:3px;height:88px;margin-top:4px}
 .hcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
 .hcol .b{width:100%;border-radius:5px 5px 3px 3px;min-height:3px;background:var(--grad);transition:height .7s}
@@ -417,6 +443,10 @@ function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'
 function norm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d');}
 function jsq(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 function nf(n){return (Math.round(n)||0).toLocaleString('vi-VN');}
+// Số rút gọn kiểu VN: 132700 -> "132,7K", 1230000 -> "1,2M". Dưới 10K giữ nguyên đầy đủ.
+function nfk(n){n=Math.round(n)||0;var a=Math.abs(n);function t(v,s){var x=(Math.round(v*10)/10).toString().replace('.',',');return x.replace(/,0$/,'')+s;}if(a>=1e9)return t(n/1e9,'B');if(a>=1e6)return t(n/1e6,'M');if(a>=1e4)return t(n/1e3,'K');return nf(n);}
+// Ô số: hiện bản rút gọn, hover xem đủ (title). Chỉ bọc span khi thực sự rút gọn.
+function tnum(n){var full=nf(n),k=nfk(n);return k===full?full:'<span class="tnum" title="'+full+'">'+k+'</span>';}
 function pc(n){return (Math.round(n*10)/10);}
 function fmtTime(ms){if(!ms)return '—';var d=new Date(ms);return d.toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});}
 function fmtDay(ms){var d=new Date(ms);return d.getDate()+'/'+(d.getMonth()+1);}
@@ -573,7 +603,7 @@ function toggleDrill(pid){var r=document.getElementById('dr-'+pid);if(r)r.style.
 function heroRow(d,cur,prev,ser){
   var s=d.sum;
   cur=(cur||[]).filter(function(p){return matchFilter(p,_filter||{});});   // tôn trọng lọc chéo (post/loại/chủ đề)
-  function card(label,val,dH,spH,tip,o){o=o||{};var ic=o.icon?'<span class="ki">'+o.icon+'</span>':'';var un=o.unit?'<span class="ku">'+o.unit+'</span>':'';var ac=o.accent?' k-'+o.accent:'';return '<div class="kpi'+ac+'" data-tip="'+esc(tip)+'"><div class="kl">'+ic+'<span>'+label+'</span></div><div class="kv">'+val+un+'</div><div class="krow">'+(dH||'<span class="delta flat"></span>')+(spH||'')+'</div></div>';}
+  function card(label,val,dH,spH,tip,o){o=o||{};var ic=o.icon?'<span class="ki">'+o.icon+'</span>':'';var un=o.unit?'<span class="ku">'+o.unit+'</span>':'';var ac=o.accent?' k-'+o.accent:'';var ft=o.feat?' feat':'';return '<div class="kpi'+ac+ft+'" data-tip="'+esc(tip)+'"><div class="kl">'+ic+'<span>'+label+'</span></div><div class="kv">'+val+un+'</div><div class="krow">'+(dH||'<span class="delta flat"></span>')+(spH||'')+'</div></div>';}
   var fv=ser.map(function(b){return b.followers;}),vv=ser.map(function(b){return b.views;});
   var reachRate=s.reachRate;
   var PS=(DATA.pageInsights&&DATA.pageInsights.series)||{};
@@ -586,29 +616,31 @@ function heroRow(d,cur,prev,ser){
   var viewsVal=viewsAct!=null?viewsAct:s.views;
   // Các chỉ số cấp trang (activity, theo kỳ Facebook đã bắt) — fallback per-post khi lọc theo bài/loại
   function pg(pageVal,postVal){return (!cFil&&typeof pageVal==='number')?pageVal:postVal;}
-  var viewersV=pg(mx.viewers,s.mediaViewers), cmtV=pg(mx.comment,s.comments);
-  var impV=sumPm(cur,'impression');   // luôn cộng tổng từ các nội dung (per-post); lọc thì cộng theo nội dung đang lọc
+  var viewersV=pg(mx.viewers,s.mediaViewers);
+  // Lượt hiển thị & Bình luận: LUÔN cộng tổng từ các nội dung (per-post); lọc thì cộng theo nội dung đang lọc
+  var impV=sumPm(cur,'impression');
+  var cmtV=cur.reduce(function(t,p){return t+(p.comments||pmv(p,'comment'));},0);
   var engV=engAct!=null?engAct:s.eng, folV=m.follower||m.total_follower||s.followers;
   if(viewsVal&&viewersV)reachRate=Math.min(100,Math.round(viewersV/viewsVal*1000)/10);
   var erAct=viewsVal?pc(engV/viewsVal*100):s.engRate;            // ER theo số activity (chuẩn nhất)
   var erArc=Math.min(100,Math.round(erAct/TARGET_ER*100));        // vòng cung = ER so với mục tiêu
   var actTag='<span style="font-size:9px;color:rgba(255,255,255,.7);font-weight:600;text-transform:none"> · ngày hoạt động</span>';
   var vDelta=(!cFil)?seriesDelta(PS.views):'';
-  var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem theo ngày hoạt động. Vòng cung = ER (Tương tác ÷ Lượt xem) so với mục tiêu '+TARGET_ER+'%; vạch trắng = mốc mục tiêu."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(erArc,100,nf(viewsVal),'ER '+erAct+'%')+'</div><div class="gc-sub">'+(vDelta?vDelta+' so kỳ trước · ':'')+'ER '+erAct+'% '+(erAct>=TARGET_ER?'✓ đạt':'(mục tiêu '+TARGET_ER+'%)')+' · '+s.nPosts+' bài</div></div>';
+  var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem theo ngày hoạt động ('+nf(viewsVal)+'). Vòng cung = ER (Tương tác ÷ Lượt xem) so với mục tiêu '+TARGET_ER+'%; vạch trắng = mốc mục tiêu."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(erArc,100,nfk(viewsVal),'ER '+erAct+'%')+'</div><div class="gc-sub">'+(vDelta?vDelta+' so kỳ trước · ':'')+'ER '+erAct+'% '+(erAct>=TARGET_ER?'✓ đạt':'(mục tiêu '+TARGET_ER+'%)')+' · '+s.nPosts+' bài</div></div>';
   var erCls=erAct>=TARGET_ER?'up':'down';
   var reachSum=sumPm(cur,'viewers');                                   // Lượt tiếp cận = Σ người xem mọi nội dung (kể cả trùng)
   var reachRatio=viewsVal?pc(Math.min(999,reachSum/viewsVal*100)):0;   // Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem
   var k=[
-    card('Lượt tương tác'+(engAct!=null?' ·hđ':''),nf(engV),(!cFil?seriesDelta(PS.interactions):''),'',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Delta = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{icon:'👍',unit:'lượt',accent:'accent'}),
+    card('Lượt tương tác'+(engAct!=null?' ·hđ':''),tnum(engV),(!cFil?seriesDelta(PS.interactions):''),'',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Delta = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{icon:'👍',unit:'lượt',accent:'accent',feat:true}),
     card('ER (Engagement Rate)',erAct,'<span class="delta '+erCls+'">'+(erAct>=TARGET_ER?'≥':'<')+' mục tiêu '+TARGET_ER+'%</span>','','Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.',{icon:'📊',unit:'%',accent:erAct>=TARGET_ER?'good':'warn'}),
-    card('Lượt tiếp cận',nf(reachSum),'<span class="delta flat">tỉ lệ tiếp cận '+reachRatio+'%</span>','','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem. Nếu chỉ 1 bài thì = người xem của bài đó.',{icon:'📡',unit:'lượt',accent:'accent'}),
-    card('Người xem (duy nhất)',nf(viewersV),'','','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{icon:'👁',unit:'người',accent:'accent'}),
-    card('Lượt hiển thị',nf(impV),'','','Tổng số lần hiển thị (impressions), CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc. KHÁC Lượt xem.',{icon:'📺',unit:'lượt',accent:'neutral'}),
-    card('Bình luận',nf(cmtV),'','','Tổng bình luận cấp trang (theo kỳ Facebook đã bắt).',{icon:'💬',unit:'',accent:'accent'})
+    card('Lượt tiếp cận',tnum(reachSum),'<span class="delta flat">tỉ lệ tiếp cận '+reachRatio+'%</span>','','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem. Nếu chỉ 1 bài thì = người xem của bài đó.',{icon:'📡',unit:'lượt',accent:'accent'}),
+    card('Người xem (duy nhất)',tnum(viewersV),'','','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{icon:'👁',unit:'người',accent:'accent'}),
+    card('Lượt hiển thị',tnum(impV),'','','Tổng số lần hiển thị (impressions), CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc. KHÁC Lượt xem.',{icon:'📺',unit:'lượt',accent:'neutral'}),
+    card('Bình luận',tnum(cmtV),'','','Tổng bình luận CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc.',{icon:'💬',unit:'',accent:'accent'})
   ].join('');
   var topType=(d.byType&&d.byType[0])?d.byType[0].name:'', topTopic=(d.byTopic&&d.byTopic[0])?d.byTopic[0].name:'';
   var summary='<div class="so" style="margin-top:16px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:15px">💡</span><div>Kỳ này: <b>'+nf(viewsVal)+'</b> lượt xem'+(vDelta?' ('+vDelta+' so kỳ trước)':'')+' · <b>'+nf(engV)+'</b> lượt tương tác · ER <b>'+erAct+'%</b>'+(erAct>=TARGET_ER?' ✓ đạt mục tiêu':' (mục tiêu '+TARGET_ER+'%)')+'.'+(topType?' Định dạng <b>'+esc(topType)+'</b>'+(topTopic?' &amp; chủ đề <b>'+esc(topTopic)+'</b>':'')+' hiệu quả nhất — ưu tiên sản xuất.':'')+'</div></div>';
-  return '<div class="hero-row">'+gauge+'<div class="kpi-col">'+k+'</div></div>'+summary;
+  return '<div class="bento">'+gauge+k+'</div>'+summary;
 }
 function sumKey(posts,k){var t=0;posts.forEach(function(p){if(k==='reactions')t+=reactTotal(p.react);else if(k==='eng')t+=engOf(p);else t+=p[k]||0;});return t;}
 function sumPm(posts,k){var t=0;posts.forEach(function(p){if(p.pm&&typeof p.pm[k]==='number')t+=p.pm[k];});return t;}
@@ -833,7 +865,38 @@ function filterBar(d){var F=_filter||{},o=d.opts||{};
   function topicSel(){var list=o.topic||[],cur=F.topic||'';var label=cur||'Tất cả chủ đề';var opts='<div class="csel-opt'+(cur?'':' on')+'" onclick="pickTopic(\'\')">Tất cả chủ đề</div>'+list.map(function(v){return '<div class="csel-opt'+(v===cur?' on':'')+'" onclick="pickTopic(\''+jsq(v)+'\')">'+esc(v)+'</div>';}).join('');
     return '<div class="csel"><div class="csel-btn" onclick="openTopicSel(event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div><div class="csel-dd" id="topic-dd" style="display:none"><input class="csel-inp" placeholder="🔍 Tìm chủ đề…" oninput="filterTopicSel(this.value)" onclick="event.stopPropagation()"><div class="csel-list" id="topic-list">'+opts+'</div></div></div>';}
   return '<div class="fbar"><span class="flbl">Lọc</span>'+topicSel()+sel('type','Mọi định dạng')+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa tất cả</button>':'')+'</div>';}
-function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-content">Nội dung</a><a href="#s-mix">Phân tích</a><a href="#s-time">Khung giờ</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
+function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-content">Nội dung</a><a href="#s-mix">Phân tích</a><a href="#s-goal">Mục tiêu</a><a href="#s-time">Khung giờ</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
+// Mục tiêu kỳ — SỬA Ở ĐÂY khi đổi KPI mục tiêu (er theo TARGET_ER).
+var GOALS={er:TARGET_ER,views:300000,posts:80};
+// Section: Mục tiêu & Dự án/Sáng kiến (nhóm theo chủ đề). Goal tracking + breakdown theo dự án.
+function goalSection(d){
+  var s=d.sum;
+  function gbar(label,cur,target,fmt,tip){
+    var rr=target?cur/target*100:0,pct=Math.max(0,Math.min(100,rr)),cls=rr>=100?'good':rr>=70?'warn':'risk';
+    return '<div class="goal" data-tip="'+esc(tip)+'"><div class="goal-top"><span class="goal-l">'+label+'</span><span class="pill p-'+cls+'">'+Math.round(rr)+'%</span></div>'
+      +'<div class="goal-bar"><i class="g-'+cls+'" style="width:'+pct.toFixed(1)+'%"></i></div>'
+      +'<div class="goal-sub"><b>'+fmt(cur)+'</b> <span style="color:var(--faint)">/ mục tiêu '+fmt(target)+'</span></div></div>';
+  }
+  var goals='<div class="goal-grid">'
+    +gbar('ER (Engagement Rate)',s.engRate,GOALS.er,function(v){return v+'%';},'ER kỳ này so với mục tiêu '+GOALS.er+'%.')
+    +gbar('Lượt xem',s.views,GOALS.views,function(v){return nfk(v);},'Tổng lượt xem (theo ngày đăng) so với mục tiêu kỳ.')
+    +gbar('Số bài đăng',s.nPosts,GOALS.posts,function(v){return nf(v);},'Số bài đăng so với mục tiêu nhịp đăng.')
+    +'</div>';
+  var topics=(d.byTopic||[]).filter(function(t){return t.name;});
+  var maxV=Math.max.apply(null,topics.map(function(t){return t.views;}).concat([1]));
+  var rows=topics.map(function(t){
+    var on=(_filter&&_filter.topic===t.name)?' on':'';
+    var cls=t.er>=GOALS.er?'good':t.er>=GOALS.er*.7?'warn':'risk';
+    return '<div class="ini-row'+on+'" style="cursor:pointer" onclick="setFilter(\'topic\',\''+jsq(t.name)+'\')" data-tip="Bấm để lọc TOÀN dashboard theo dự án này (bấm lại để bỏ)">'
+      +'<div class="ini-name">'+esc(t.name)+'<span class="ini-meta">'+t.n+' bài · '+tnum(t.views)+' lượt xem</span></div>'
+      +'<div class="ini-bar"><span style="width:'+(t.views/maxV*100).toFixed(1)+'%;background:var(--grad)"></span></div>'
+      +'<span class="pill p-'+cls+'">ER '+t.er+'%</span></div>';
+  }).join('')||'<div class="nd">Chưa có dữ liệu chủ đề/dự án.</div>';
+  return '<section id="s-goal"><div class="eyebrow">Mục tiêu &amp; Dự án</div>'
+    +'<div class="panel"><div class="panel-h" data-tip="Tiến độ so với mục tiêu kỳ. Sửa số mục tiêu trong biến GOALS (đầu clientCode).">Tiến độ mục tiêu</div>'+goals+'</div>'
+    +'<div class="panel" style="margin-top:16px"><div class="panel-h" data-tip="Hiệu quả theo Dự án/Sáng kiến (nhóm theo chủ đề). Thanh = tỉ trọng Lượt xem; pill = ER so mục tiêu. Bấm để lọc.">Theo Dự án / Sáng kiến <span style="font-weight:600;color:var(--muted);font-size:11px">· '+topics.length+' dự án</span></div><div class="ini-list">'+rows+'</div></div>'
+    +'</section>';
+}
 // Phễu hiệu quả: Tiếp cận (Lượt xem) -> Tương tác -> Chuyển đổi (theo dõi thực).
 // Dùng đúng định nghĩa hiện có: views & interactions theo ngày hoạt động; follow = net_follow per-post.
 function funnelPanel(d){
@@ -882,7 +945,7 @@ function operational(d,cur,prev,ser){
   return masthead('op')+'<div class="subnav"><div class="subnav-in">'+navLinks()+'</div></div>'+filterStatusBar()
     +'<div class="wrap">'+filterBar(d)
     +'<section id="s-ov" style="padding-top:14px"><div class="eyebrow">Tổng quan</div>'+heroRow(d,cur,prev,ser)+heroChart(d,ser)+funnelPanel(d)+'</section>'
-    +contentSection(d)+mixSection(d)
+    +contentSection(d)+mixSection(d)+goalSection(d)
     +'<section id="s-time"><div class="eyebrow">Khung giờ hiệu quả</div>'+timingPanel(d)+'</section>'
     +audienceSection(d)+insightSection(d)+healthSection(d)+dictSection()
     +'<div class="foot">SHB CM · Facebook Dashboard · nguồn: Content Library + Page Insights (userscript) · cập nhật khi quét</div></div>';
@@ -890,18 +953,26 @@ function operational(d,cur,prev,ser){
 function pageDailyChart(daily,unit){
   if(!daily||!daily.length) return '';
   unit=unit||'';
-  var W=820,H=150,pl=8,pr=8,pt=12,pb=22,n=daily.length;
+  var W=820,H=150,pl=8,pr=8,pt=22,pb=22,n=daily.length;
   var max=Math.max.apply(null,daily.map(function(p){return p.value;}))||1;
   function X(i){return pl+(n===1?(W-pl-pr)/2:(i/(n-1))*(W-pl-pr));}
   function Y(v){return pt+(1-v/max)*(H-pt-pb);}
   var pts=daily.map(function(p,i){return X(i).toFixed(1)+','+Y(p.value).toFixed(1);});
   var area='M'+pl+','+(H-pb)+' L'+pts.join(' L')+' L'+(W-pr).toFixed(1)+','+(H-pb)+' Z';
   var line='M'+pts.join(' L');
-  var dots=daily.map(function(p,i){return '<circle class="dot" cx="'+X(i).toFixed(1)+'" cy="'+Y(p.value).toFixed(1)+'" r="3" fill="var(--accent)" data-tip="'+esc(fmtDay(p.ms)+': '+(unit==='%'?p.value+'%':nf(p.value)))+'"></circle>';}).join('');
+  // peak: ngày đỉnh
+  var pk=0;daily.forEach(function(p,i){if(p.value>daily[pk].value)pk=i;});
+  var dots=daily.map(function(p,i){return i===pk?'':'<circle class="dot" cx="'+X(i).toFixed(1)+'" cy="'+Y(p.value).toFixed(1)+'" r="3" fill="var(--accent)" data-tip="'+esc(fmtDay(p.ms)+': '+(unit==='%'?p.value+'%':nf(p.value)))+'"></circle>';}).join('');
+  // annotation đỉnh: đường gióng đứt + nhãn ngày + giá trị
+  var px=X(pk),py=Y(daily[pk].value),pv=unit==='%'?daily[pk].value+'%':nfk(daily[pk].value);
+  var anchor=px>W-130?'end':px<130?'start':'middle',lx=px+(anchor==='end'?-6:anchor==='start'?6:0);
+  var ann='<line x1="'+px.toFixed(1)+'" y1="'+py.toFixed(1)+'" x2="'+px.toFixed(1)+'" y2="'+(H-pb)+'" stroke="var(--accent)" stroke-width="1" stroke-dasharray="3 3" opacity=".5"/>'
+    +'<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="4.5" fill="var(--accent)" stroke="var(--bg)" stroke-width="1.5" data-tip="'+esc('Đỉnh '+fmtDay(daily[pk].ms)+': '+(unit==='%'?daily[pk].value+'%':nf(daily[pk].value)))+'"/>'
+    +'<text x="'+lx.toFixed(1)+'" y="'+(py-8).toFixed(1)+'" fill="var(--accent)" font-size="9.5" font-weight="700" text-anchor="'+anchor+'" font-family="var(--num)">▲ '+esc(fmtDay(daily[pk].ms))+' · '+esc(pv)+'</text>';
   var labels='';[0,Math.floor(n/4),Math.floor(n/2),Math.floor(3*n/4),n-1].forEach(function(i){if(daily[i])labels+='<text x="'+X(i).toFixed(1)+'" y="'+(H-6)+'" fill="var(--faint)" font-size="9" text-anchor="middle" font-family="var(--num)">'+esc(fmtDay(daily[i].ms))+'</text>';});
   return '<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'">'
     +'<defs><linearGradient id="pgGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".34"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>'
-    +'<path d="'+area+'" fill="url(#pgGrad)"/><path d="'+line+'" fill="none" stroke="var(--accent)" stroke-width="2"/>'+dots+labels+'</svg>';
+    +'<path d="'+area+'" fill="url(#pgGrad)"/><path d="'+line+'" fill="none" stroke="var(--accent)" stroke-width="2"/>'+dots+ann+labels+'</svg>';
 }
 function executive(d,cur,prev){
   var s=d.sum,now=new Date().toLocaleDateString('vi-VN',{month:'long',year:'numeric'});
@@ -963,7 +1034,7 @@ function initTooltip(){if(_tipInited)return;_tipInited=true;var box=document.cre
   document.addEventListener('mouseover',function(e){var el=e.target.closest('[data-tip]');if(!el){box.style.display='none';return;}box.innerHTML=el.getAttribute('data-tip');box.style.display='block';});
   document.addEventListener('mousemove',function(e){if(box.style.display==='none')return;var x=e.clientX+16,y=e.clientY+16,w=box.offsetWidth,h=box.offsetHeight;if(x+w>innerWidth-8)x=e.clientX-w-16;if(y+h>innerHeight-8)y=e.clientY-h-16;box.style.left=x+'px';box.style.top=y+'px';});
   document.addEventListener('mouseout',function(e){if(!e.relatedTarget||!e.relatedTarget.closest('[data-tip]'))box.style.display='none';});}
-function countUp(){try{if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;document.querySelectorAll('.kv,.tier .tv,.exec-kp .v,.dh-v').forEach(function(el){var txt=el.textContent.trim(),m=txt.match(/^([\d.,]+)(.*)$/);if(!m)return;var target=parseFloat(m[1].replace(/[.,]/g,function(c){return c===','?'':'';})||m[1].replace(/,/g,''));var raw=parseFloat(m[1].replace(/\./g,'').replace(/,/g,'.'));var val=isNaN(raw)?parseFloat(m[1].replace(/,/g,'')):raw;var suf=m[2]||'';if(isNaN(val)||val<=0)return;var start=performance.now();function tick(now){var p=Math.min(1,(now-start)/650);var e=1-Math.pow(1-p,3);el.textContent=nf(val*e)+suf;if(p<1)requestAnimationFrame(tick);else el.textContent=txt;}requestAnimationFrame(tick);});}catch(e){}}
+function countUp(){try{if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;document.querySelectorAll('.kv,.tier .tv,.exec-kp .v,.dh-v').forEach(function(el){var txt=el.textContent.trim(),m=txt.match(/^([\d.,]+)(.*)$/);if(!m)return;if(/[KMB]/.test(m[2]||''))return;var target=parseFloat(m[1].replace(/[.,]/g,function(c){return c===','?'':'';})||m[1].replace(/,/g,''));var raw=parseFloat(m[1].replace(/\./g,'').replace(/,/g,'.'));var val=isNaN(raw)?parseFloat(m[1].replace(/,/g,'')):raw;var suf=m[2]||'';if(isNaN(val)||val<=0)return;var start=performance.now();function tick(now){var p=Math.min(1,(now-start)/650);var e=1-Math.pow(1-p,3);el.textContent=nf(val*e)+suf;if(p<1)requestAnimationFrame(tick);else el.textContent=txt;}requestAnimationFrame(tick);});}catch(e){}}
 function wireChart(){try{document.querySelectorAll('.hero-chart').forEach(function(box){var svg=box.querySelector('svg.chart-svg');if(!svg)return;box.style.position='relative';var tip=document.createElement('div');tip.className='ctip';tip.style.display='none';box.appendChild(tip);var dots=svg.querySelectorAll('circle.dot');if(!dots.length)return;
   svg.addEventListener('mousemove',function(e){var rect=svg.getBoundingClientRect(),x=e.clientX-rect.left,best=null,bd=1e9;dots.forEach(function(d){var dr=d.getBoundingClientRect();var cx=dr.left+dr.width/2-rect.left;var dd=Math.abs(cx-x);if(dd<bd){bd=dd;best=d;}});if(!best||bd>60)return;var t=best.querySelector('title');if(!t)return;var br=best.getBoundingClientRect(),bb=box.getBoundingClientRect();tip.textContent=t.textContent;tip.style.display='block';tip.style.left=(br.left+br.width/2-bb.left)+'px';tip.style.top=(br.top-bb.top-40)+'px';dots.forEach(function(d){d.setAttribute('r',d===best?'5':'3');});});
   svg.addEventListener('mouseleave',function(){tip.style.display='none';dots.forEach(function(d){d.setAttribute('r','3');});});});}catch(e){}}

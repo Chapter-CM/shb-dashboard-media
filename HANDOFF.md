@@ -43,13 +43,18 @@ fix toggle lọc chéo + giữ scroll (Lô 18); visual polish (eyebrow bar, KPI 
   elevation 2 tầng `--sh-1/--sh-2`; `.kpi` dùng elevation (nghỉ sh-1 → hover sh-2).
 - ✅ **Dọn code chết**: đã gỡ 5 hàm `reactionPanel/engagementPanel/videoSection/groupSection/timingPanelMini`.
 
-## ⚠️ Việc cần làm tiếp — roadmap còn lại
-3. **Bento grid** khu Tổng quan
-4. **Số rút gọn** 132,7K (hover xem đủ)
-5. **Annotation** trên chart (đánh dấu ngày đỉnh / chiến dịch)
-6. **View Dự án/Sáng kiến + Goal tracking**
+### Phiên 25/06 (tiếp) — PR #25, roadmap #3–6 + sửa Bình luận
+- ✅ **Bình luận** cũng cộng tổng per-post (bỏ `mx.comment`).
+- ✅ **#3 Bento grid** khu Tổng quan (gauge lớn 2 hàng, thẻ Lượt tương tác `feat` rộng 2 cột).
+- ✅ **#4 Số rút gọn** `nfk()` (132,7K/1,3M) + `tnum()` hover xem đủ; `countUp` bỏ qua số K/M/B.
+- ✅ **#5 Annotation chart** — đánh dấu **ngày đỉnh** (đường gióng đứt + nhãn ▲ ngày·giá trị).
+- ✅ **#6 Section Mục tiêu & Dự án** (`goalSection`): goal tracking ER/Lượt xem/Số bài vs `GOALS`
+  (sửa số mục tiêu ở biến `GOALS` đầu clientCode) + breakdown theo **Dự án/Sáng kiến** (nhóm theo chủ đề), bấm để lọc chéo.
 
-> Token nền đã có: dùng `--s*` cho spacing, `--sh-1/--sh-2` cho elevation, `--r*` cho bo góc khi làm bento.
+## ⚠️ Còn lại / cần chú ý
+- **Annotation chart**: hiện chỉ đánh dấu ngày đỉnh. Nếu cần mốc **chiến dịch** thì phải có dữ liệu ngày chiến dịch (chưa có nguồn).
+- **`GOALS`** đang để số placeholder (views 300K, posts 80) — team chỉnh theo mục tiêu thật.
+- Token nền: `--s*` spacing, `--sh-1/--sh-2` elevation, `--r*` bo góc.
 
 Khi cần dữ liệu mới: nhắc user bắt lại ở **khoảng ngày rộng** trên cả 3 trang (Lượt xem / Lượt tương tác / Đối tượng).
 
