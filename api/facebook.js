@@ -401,6 +401,12 @@ tbody tr[onclick]{cursor:pointer}td.num,th.num{text-align:right;font-family:var(
 .csel-list{max-height:240px;overflow-y:auto}
 .csel-opt{padding:8px 14px;font-size:12.5px;cursor:pointer;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .csel-opt:hover{background:var(--glass-2);color:var(--text)}.csel-opt.on{color:var(--accent);font-weight:700}
+.csel-btn.act{border-color:var(--accent);color:var(--accent)}
+.msel-opt{display:flex;align-items:center;gap:9px;padding:8px 14px;font-size:12.5px;cursor:pointer;color:var(--text-2);white-space:nowrap}
+.msel-opt:hover{background:var(--glass-2);color:var(--text)}
+.msel-opt.on{color:var(--text);font-weight:600}
+.msel-ck{width:16px;height:16px;flex:none;border:1.5px solid var(--stroke-2);border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#fff;line-height:1}
+.msel-opt.on .msel-ck{background:var(--accent);border-color:var(--accent)}
 .fclear{background:none;border:none;color:var(--muted);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;text-decoration:underline}.fclear:hover{color:var(--risk)}
 [data-density="compact"] td{padding:9px 10px}[data-density="compact"] .kpi{padding:13px 15px}[data-density="compact"] .kpi .kv{font-size:24px}[data-density="compact"] section{padding-top:20px}[data-density="compact"] .panel{padding:15px 17px}
 #tip{position:fixed;z-index:9999;display:none;background:color-mix(in srgb,var(--bg) 90%,transparent);border:1px solid var(--stroke-2);color:var(--text-2);font-size:12px;padding:9px 13px;border-radius:12px;max-width:260px;pointer-events:none;backdrop-filter:blur(18px)}
@@ -473,11 +479,12 @@ function gaugeBig(pct,target,main,sub){
   var p=Math.max(0,Math.min(100,pct||0)),cx=110,cy=110,r=88,sw=18,A0=-135,SPAN=270;
   var valEnd=A0+p/100*SPAN,tickA=A0+Math.max(0,Math.min(100,target))/100*SPAN;
   var ti=gPolar(cx,cy,r,tickA),to=gPolar(cx,cy,r+11,tickA);
+  var tick=(target>0&&target<100)?'<line x1="'+ti[0].toFixed(1)+'" y1="'+ti[1].toFixed(1)+'" x2="'+to[0].toFixed(1)+'" y2="'+to[1].toFixed(1)+'" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>':'';
   var fs=main.length>8?24:main.length>6?30:38;
   return '<svg width="220" height="200" viewBox="0 0 220 200"><defs><linearGradient id="ggv" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#e7e0ff"/></linearGradient><filter id="glow2"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>'
     +'<path d="'+gArc(cx,cy,r,A0,A0+SPAN)+'" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="'+sw+'" stroke-linecap="round"/>'
-    +'<path d="'+gArc(cx,cy,r,A0,valEnd)+'" fill="none" stroke="url(#ggv)" stroke-width="'+sw+'" stroke-linecap="round" filter="url(#glow2)"/>'
-    +'<line x1="'+ti[0].toFixed(1)+'" y1="'+ti[1].toFixed(1)+'" x2="'+to[0].toFixed(1)+'" y2="'+to[1].toFixed(1)+'" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>'
+    +(p>0?'<path d="'+gArc(cx,cy,r,A0,valEnd)+'" fill="none" stroke="url(#ggv)" stroke-width="'+sw+'" stroke-linecap="round" filter="url(#glow2)"/>':'')
+    +tick
     +'<text x="110" y="102" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="'+fs+'" font-weight="700">'+esc(main)+'</text>'
     +'<text x="110" y="128" text-anchor="middle" fill="rgba(255,255,255,.82)" font-size="11.5" font-weight="600">'+esc(sub)+'</text></svg>';
 }
@@ -561,14 +568,16 @@ function slotOf(ts){var h=new Date(ts).getHours();return h<5?'Đêm (0–5h)':h<
 function dayTypeOf(ts){var d=new Date(ts).getDay();return (d===0||d===6)?'Cuối tuần':'Ngày thường';}
 function mediaOf(p){return p.video?'Video / Reel':'Ảnh / Text / Link';}
 function distinct(posts,fn){var s={};posts.forEach(function(p){s[fn(p)]=1;});return Object.keys(s);}
+// Mỗi _filter[key] là MẢNG giá trị đã chọn (multi-select). Rỗng/không có = không lọc key đó.
+function inF(F,key,val){var a=F&&F[key];return !a||!a.length||a.indexOf(val)>-1;}
+function isSel(key,val){var a=_filter&&_filter[key];return !!(a&&a.indexOf(val)>-1);}
 function matchFilter(p,F){
-  if(F.post&&p.id!==F.post)return false;
-  if(F.type&&p.type!==F.type)return false;
-  if(F.topic&&p.topic!==F.topic)return false;
-  if(F.project&&projectOf(p)!==F.project)return false;
-  if(F.slot&&slotOf(p.ts)!==F.slot)return false;
-  if(F.dayType&&dayTypeOf(p.ts)!==F.dayType)return false;
-  if(F.media&&mediaOf(p)!==F.media)return false;
+  if(!inF(F,'post',p.id))return false;
+  if(!inF(F,'type',p.type))return false;
+  if(!inF(F,'project',projectOf(p)))return false;
+  if(!inF(F,'slot',slotOf(p.ts)))return false;
+  if(!inF(F,'dayType',dayTypeOf(p.ts)))return false;
+  if(!inF(F,'media',mediaOf(p)))return false;
   return true;
 }
 function windowPosts(days,back){
@@ -698,9 +707,9 @@ function timingPanel(d){
 function mixSection(d){
   var F=_filter||{},s=d.sum;
   function barsER(list,key){var max=Math.max.apply(null,list.map(function(x){return x.eng;}).concat([1]));
-    return list.map(function(x){var on=F[key]===x.name;return '<div class="rrow" style="cursor:pointer;'+(on?'background:var(--accent-bg);border-radius:8px':'')+'" onclick="setFilter(\''+key+'\',\''+jsq(x.name)+'\')" data-tip="Bấm để lọc chéo (bấm lại để bỏ)"><span class="rlbl">'+esc(x.name)+' <span style="color:var(--faint)">('+x.n+')</span></span><div class="rbar"><span style="width:'+(x.eng/max*100).toFixed(1)+'%;background:var(--grad)"></span></div><span class="rval">'+x.er+'%</span></div>';}).join('');}
+    return list.map(function(x){var on=isSel(key,x.name);return '<div class="rrow" style="cursor:pointer;'+(on?'background:var(--accent-bg);border-radius:8px':'')+'" onclick="setFilter(\''+key+'\',\''+jsq(x.name)+'\')" data-tip="Bấm để lọc chéo (bấm lại để bỏ)"><span class="rlbl">'+esc(x.name)+' <span style="color:var(--faint)">('+x.n+')</span></span><div class="rbar"><span style="width:'+(x.eng/max*100).toFixed(1)+'%;background:var(--grad)"></span></div><span class="rval">'+x.er+'%</span></div>';}).join('');}
   function barsShare(list,key){var tot=list.reduce(function(a,x){return a+(x.views||0);},0)||1;
-    return list.slice().sort(function(a,b){return b.views-a.views;}).map(function(x){var pct=x.views/tot*100,on=F[key]===x.name;
+    return list.slice().sort(function(a,b){return b.views-a.views;}).map(function(x){var pct=x.views/tot*100,on=isSel(key,x.name);
       return '<div class="rrow" style="cursor:pointer;'+(on?'background:var(--accent-bg);border-radius:8px':'')+'" onclick="setFilter(\''+key+'\',\''+jsq(x.name)+'\')" data-tip="Tỉ trọng Lượt xem — bấm để lọc chéo"><span class="rlbl">'+esc(x.name)+'</span><div class="rbar"><span style="width:'+pct.toFixed(1)+'%;background:var(--grad)"></span></div><span class="rval">'+pc(pct)+'%</span></div>';}).join('');}
   return '<section id="s-mix"><div class="eyebrow">Phân tích nội dung — bấm để lọc chéo</div>'
     +'<div class="row2">'
@@ -721,9 +730,9 @@ function contentSection(d){
     search:function(r,q){return norm(r.p.msg).indexOf(q)>-1||norm(r.p.topic).indexOf(q)>-1;},
     sortVal:function(r,k){var p=r.p,vw=pViews(p),imp=pmv(p,'impression');return k==='ts'?p.ts:k==='views'?vw:k==='vw'?pmv(p,'viewers'):k==='imp'?imp:k==='eng'?(pmv(p,'engagement')||r.eng):k==='cmt'?(pmv(p,'comment')||p.comments):k==='er'?r.er:k==='vhr'?(imp?vw/imp:0):k==='vrate'?(vw?pmv(p,'viewers')/vw:0):k==='ntf'?pmv(p,'net_follow'):pViews(p);},
     render:function(r){var p=r.p,vw=pViews(p),eng=pmv(p,'engagement')||r.eng,er=vw?pc(eng/vw*100):0,vc=r.vsAvg>=0?'p-good':'p-risk';
-      return '<tr onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer'+(F.post===p.id?';background:var(--accent-bg)':'')+'" data-tip="Bấm để lọc TOÀN dashboard theo bài này (bấm lại để bỏ)"><td>'+postLink(p,p.msg.slice(0,50))+'</td>'
+      return '<tr onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer'+(isSel("post",p.id)?';background:var(--accent-bg)':'')+'" data-tip="Bấm để lọc TOÀN dashboard theo bài này (bấm lại để bỏ)"><td>'+postLink(p,p.msg.slice(0,50))+'</td>'
         +'<td class="num">'+(p.ts?fmtDay(p.ts):'—')+'</td>'
-        +'<td onclick="event.stopPropagation();setFilter(\'type\',\''+jsq(p.type)+'\')" style="cursor:pointer" data-tip="Bấm để lọc chéo theo loại này"><span class="pill '+(F.type===p.type?'p-good':'p-neutral')+'">'+esc(p.type)+'</span></td>'
+        +'<td onclick="event.stopPropagation();setFilter(\'type\',\''+jsq(p.type)+'\')" style="cursor:pointer" data-tip="Bấm để lọc chéo theo loại này"><span class="pill '+(isSel("type",p.type)?'p-good':'p-neutral')+'">'+esc(p.type)+'</span></td>'
         +'<td class="num">'+nf(vw)+'</td><td class="num">'+nf(pmv(p,'viewers'))+'</td>'
         +'<td class="num">'+nf(pmv(p,'impression'))+'</td><td class="num">'+nf(eng)+'</td>'
         +'<td class="num">'+nf(pmv(p,'comment')||p.comments)+'</td><td class="num">'+er+'%</td>'
@@ -740,7 +749,7 @@ function contentSection(d){
     search:function(r,q){return norm(r.p.msg).indexOf(q)>-1;},
     sortVal:function(r,k){var p=r.p;return k==='ts'?p.ts:k==='views'?pViews(p):k==='vw'?pmv(p,'viewers'):k==='s3'?pmv(p,'video_view_three_second'):k==='m1'?pmv(p,'video_view_one_min'):k==='wt'?pmv(p,'video_view_avg_watch_time'):pViews(p);},
     render:function(r){var p=r.p;
-      return '<tr onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer'+(F.post===p.id?';background:var(--accent-bg)':'')+'" data-tip="Bấm để lọc TOÀN dashboard theo bài này"><td>'+postLink(p,p.msg.slice(0,50))+'</td>'
+      return '<tr onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer'+(isSel("post",p.id)?';background:var(--accent-bg)':'')+'" data-tip="Bấm để lọc TOÀN dashboard theo bài này"><td>'+postLink(p,p.msg.slice(0,50))+'</td>'
         +'<td class="num">'+(p.ts?fmtDay(p.ts):'—')+'</td>'
         +'<td class="num">'+nf(pViews(p))+'</td><td class="num" style="color:var(--good)">'+nf(pmv(p,'viewers'))+'</td>'
         +'<td class="num">'+nf(pmv(p,'video_view_three_second'))+'</td><td class="num">'+nf(pmv(p,'video_view_one_min'))+'</td>'
@@ -827,14 +836,18 @@ function dictSection(){
 }
 
 /* ── filter bar / nav / masthead ── */
-function filterStatusBar(){var F=_filter||{};var active=Object.keys(F).filter(function(k){return F[k];});if(!active.length)return '';
-  var L={post:'Bài',type:'Định dạng',topic:'Chủ đề',project:'Dự án',media:'Media',slot:'Khung giờ',dayType:'Ngày'};var chips=active.map(function(k){var disp=F[k];if(k==='post'){var pp=(DATA.posts||[]).filter(function(x){return x.id===F[k];})[0];disp=pp?pp.msg.slice(0,42):F[k];}return '<span class="f-chip">'+(L[k]||k)+': <b>'+esc(disp)+'</b> <span class="cx" onclick="clearFilter(\''+k+'\')">×</span></span>';}).join('');
-  return '<div class="filter-status"><span class="lbl">Đang lọc</span>'+chips+'<button class="f-clear-all" onclick="clearAllFilters()">× Xóa tất cả</button></div>';}
+function filterStatusBar(){var F=_filter||{};var active=Object.keys(F).filter(function(k){return F[k]&&F[k].length;});if(!active.length)return '';
+  var L={post:'Bài',type:'Định dạng',project:'Dự án',slot:'Khung giờ',dayType:'Ngày'};
+  var chips=[];active.forEach(function(k){(F[k]||[]).forEach(function(v){var disp=v;if(k==='post'){var pp=(DATA.posts||[]).filter(function(x){return x.id===v;})[0];disp=pp?pp.msg.slice(0,42):v;}chips.push('<span class="f-chip">'+(L[k]||k)+': <b>'+esc(disp)+'</b> <span class="cx" onclick="setFilter(\''+k+'\',\''+jsq(v)+'\')">×</span></span>');});});
+  return '<div class="filter-status"><span class="lbl">Đang lọc</span>'+chips.join('')+'<button class="f-clear-all" onclick="clearAllFilters()">× Xóa tất cả</button></div>';}
 function filterBar(d){var F=_filter||{},o=d.opts||{};
-  function sel(key,allLabel){var list=o[key]||[];if(!list.length)return '';var cur=F[key]||'';return '<select onchange="setFilter(\''+key+'\',this.value)"><option value="">'+allLabel+'</option>'+list.map(function(v){return '<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(v)+'</option>';}).join('')+'</select>';}
-  function projSel(){var list=o.project||[],cur=F.project||'';var label=cur||'Mọi dự án';var opts='<div class="csel-opt'+(cur?'':' on')+'" onclick="pickTopic(\'\')">Mọi dự án</div>'+list.map(function(v){return '<div class="csel-opt'+(v===cur?' on':'')+'" onclick="pickTopic(\''+jsq(v)+'\')">'+esc(v)+'</div>';}).join('');
-    return '<div class="csel"><div class="csel-btn" onclick="openTopicSel(event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div><div class="csel-dd" id="topic-dd" style="display:none"><input class="csel-inp" placeholder="🔍 Tìm dự án…" oninput="filterTopicSel(this.value)" onclick="event.stopPropagation()"><div class="csel-list" id="topic-list">'+opts+'</div></div></div>';}
-  return '<div class="fbar"><span class="flbl">Lọc</span>'+projSel()+sel('type','Mọi định dạng')+sel('media','Mọi loại media')+sel('slot','Mọi khung giờ')+sel('dayType','Mọi loại ngày')+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa tất cả</button>':'')+'</div>';}
+  // Multi-select: bấm chọn nhiều giá trị; dropdown giữ mở tới khi bấm ra ngoài.
+  function msel(key,allLabel){var list=o[key]||[];if(!list.length)return '';var sel=F[key]||[];
+    var label=!sel.length?allLabel:(sel.length===1?sel[0]:allLabel+' · '+sel.length);
+    var open=_openMsel===key;
+    var opts=list.map(function(v){var on=sel.indexOf(v)>-1;return '<div class="msel-opt'+(on?' on':'')+'" onclick="event.stopPropagation();setFilter(\''+key+'\',\''+jsq(v)+'\')"><span class="msel-ck">'+(on?'✓':'')+'</span><span class="msel-tx">'+esc(v)+'</span></div>';}).join('');
+    return '<div class="csel"><div class="csel-btn'+(sel.length?' act':'')+'" onclick="toggleMsel(\''+key+'\',event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div>'+(open?'<div class="csel-dd" onclick="event.stopPropagation()"><div class="csel-list">'+opts+'</div></div>':'')+'</div>';}
+  return '<div class="fbar"><span class="flbl">Lọc</span>'+msel('project','Mọi dự án')+msel('type','Mọi định dạng')+msel('slot','Mọi khung giờ')+msel('dayType','Mọi loại ngày')+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa tất cả</button>':'')+'</div>';}
 function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-content">Nội dung</a><a href="#s-mix">Phân tích</a><a href="#s-goal">Dự án</a><a href="#s-time">Khung giờ</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
 // Ngưỡng ER mục tiêu để tô màu pill theo Dự án (theo TARGET_ER).
 var GOALS={er:TARGET_ER};
@@ -843,7 +856,7 @@ function goalSection(d){
   var projs=(d.byProject||[]).filter(function(t){return t.name;}).slice().sort(function(a,b){return b.views-a.views;});
   var maxV=Math.max.apply(null,projs.map(function(t){return t.views;}).concat([1]));
   var rows=projs.map(function(t){
-    var on=(_filter&&_filter.project===t.name)?' on':'';
+    var on=isSel("project",t.name)?' on':'';
     var cls=t.er>=GOALS.er?'good':t.er>=GOALS.er*.7?'warn':'risk';
     return '<div class="ini-row'+on+'" style="cursor:pointer" onclick="setFilter(\'project\',\''+jsq(t.name)+'\')" data-tip="Bấm để lọc TOÀN dashboard theo dự án này (bấm lại để bỏ)">'
       +'<div class="ini-name">'+esc(t.name)+'<span class="ini-meta">'+t.n+' bài · '+tnum(t.views)+' lượt xem</span></div>'
@@ -937,15 +950,18 @@ try{var _st=localStorage.getItem('shb-fb-theme');if(_st)_theme=_st;}catch(e){}
 try{var _sd=localStorage.getItem('shb-fb-density');if(_sd)_density=_sd;}catch(e){}
 function applyTheme(){if(_theme==='light')document.documentElement.setAttribute('data-theme','light');else document.documentElement.removeAttribute('data-theme');}
 function applyDensity(){document.documentElement.setAttribute('data-density',_density);}
-function setFilter(k,v){if(v===''||v==null||_filter[k]===v)delete _filter[k];else _filter[k]=v;paint();}
+function setFilter(k,v){if(v===''||v==null){delete _filter[k];paint();return;}var a=_filter[k]||[];var i=a.indexOf(v);if(i>-1)a.splice(i,1);else a.push(v);if(a.length)_filter[k]=a;else delete _filter[k];paint();}
 function clearFilter(k){delete _filter[k];paint();}
-function clearAllFilters(){_filter={};paint();}
+function clearAllFilters(){_filter={};_openMsel=null;paint();}
+var _openMsel=null;
+function toggleMsel(k,e){if(e)e.stopPropagation();_openMsel=(_openMsel===k)?null:k;paint();}
+function closeMsel(){if(_openMsel!==null){_openMsel=null;paint();}}
 function setMetric(m){_metric=m;paint();}
 function openTopicSel(e){e.stopPropagation();var dd=document.getElementById('topic-dd');if(!dd)return;var open=dd.style.display==='block';dd.style.display=open?'none':'block';if(!open){var inp=dd.querySelector('.csel-inp');if(inp){inp.value='';inp.focus();filterTopicSel('');}}}
 function filterTopicSel(q){var list=document.getElementById('topic-list');if(!list)return;var qq=norm(q);list.querySelectorAll('.csel-opt').forEach(function(el){el.style.display=(qq===''||norm(el.textContent).indexOf(qq)>-1)?'':'none';});}
 function pickTopic(v){setFilter('project',v);var dd=document.getElementById('topic-dd');if(dd)dd.style.display='none';}
 function toggleDtPop(e){e.stopPropagation();var p=document.getElementById('dt-pop');if(p)p.style.display=p.style.display==='block'?'none':'block';}
-document.addEventListener('click',function(){var dd=document.getElementById('topic-dd');if(dd)dd.style.display='none';var dp=document.getElementById('dt-pop');if(dp)dp.style.display='none';});
+document.addEventListener('click',function(){var dd=document.getElementById('topic-dd');if(dd)dd.style.display='none';var dp=document.getElementById('dt-pop');if(dp)dp.style.display='none';closeMsel();});
 function jump(sel){var el=document.querySelector(sel);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
 
 function render(){
