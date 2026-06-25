@@ -757,7 +757,7 @@ function contentSection(d){
     return '<section id="s-content">'+tabs+'<div class="panel" id="tbl-'+vid+'">'
       +searchBox(vid,'Tìm video / reel…')
       +'<div class="tw"><table><thead><tr><th>Video</th>'
-      +th(vid,'ts','Đăng')+th(vid,'views','Lượt xem')+th(vid,'vw','Người xem','Người xem duy nhất — tô xanh')+th(vid,'s3','Xem ≥3s','Lượt xem tối thiểu 3 giây')+th(vid,'m1','Xem ≥1ph','Lượt xem tối thiểu 1 phút')+th(vid,'wt','TG xem TB','Thời gian xem trung bình')+th(vid,'imp','Hiển thị')
+      +th(vid,'ts','Đăng')+th(vid,'views','Lượt xem')+th(vid,'vw','Người xem','Người xem duy nhất — tô xanh')+th(vid,'s3','Xem ≥3s','Lượt xem tối thiểu 3 giây')+th(vid,'m1','Xem ≥1ph','Lượt xem tối thiểu 1 phút')+th(vid,'wt','TG xem TB','Thời gian xem trung bình')+th(vid,'imp','Lượt hiển thị','Số lần hiển thị trên màn hình')
       +'</tr></thead><tbody id="tb-'+vid+'"></tbody></table></div><div class="pager" id="pg-'+vid+'"></div></div></section>';
   }
 }
@@ -775,9 +775,9 @@ function audienceSection(d){
   var t=d.tiers;function tier(v,n,lbl,col,tip){return '<div class="tier" data-tip="'+esc(tip)+'"><div class="tv">'+v+'</div><div class="tn"><span class="dt" style="color:'+col+'"></span>'+n+'</div><div class="td">'+lbl+'</div></div>';}
   return '<section id="s-aud"><div class="eyebrow">Đối tượng &amp; phân loại nội dung</div>'
     +'<div class="tiers">'
-    +tier(t.hot.length,'Hot','ER ≥ 1.2× TB','var(--good)','Bài bùng nổ — học công thức để nhân bản.')
-    +tier(t.warm.length,'Warm','ER quanh mức TB','var(--warn)','Bài ổn định quanh trung bình.')
-    +tier(t.cold.length,'Cold','ER < 0.8× TB','var(--risk)','Bài kém — xem lại định dạng/thời điểm.')
+    +tier(t.hot.length,'Nổi bật','ER ≥ 1.2× TB','var(--good)','Bài bùng nổ — học công thức để nhân bản.')
+    +tier(t.warm.length,'Ổn định','ER quanh mức TB','var(--warn)','Bài ổn định quanh trung bình.')
+    +tier(t.cold.length,'Yếu','ER < 0.8× TB','var(--risk)','Bài kém — xem lại định dạng/thời điểm.')
     +tier(d.sum.noEng,'Im lặng','0 tương tác','var(--muted)','Bài không có tương tác nào.')
     +'</div>'
     +(pi&&pi.ageGender?'<div class="row2" style="margin-top:16px">'+ageGenderPanel(pi.ageGender)+'<div class="panel"><div class="panel-h">Ghi chú đối tượng</div><div class="so" style="margin-top:0">Độ tuổi/giới tính là của <b>người theo dõi trang</b> (Facebook không cấp nhân khẩu học của người xem bài Group). Tỉnh/thành &amp; Quốc gia: FB báo chưa đủ dữ liệu.</div></div></div>':'')
