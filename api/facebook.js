@@ -481,9 +481,9 @@ function gaugeBig(pct,target,main,sub){
   var ti=gPolar(cx,cy,r,tickA),to=gPolar(cx,cy,r+11,tickA);
   var tick=(target>0&&target<100)?'<line x1="'+ti[0].toFixed(1)+'" y1="'+ti[1].toFixed(1)+'" x2="'+to[0].toFixed(1)+'" y2="'+to[1].toFixed(1)+'" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>':'';
   var fs=main.length>8?24:main.length>6?30:38;
-  return '<svg width="220" height="200" viewBox="0 0 220 200"><defs><linearGradient id="ggv" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#e7e0ff"/></linearGradient><filter id="glow2"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>'
-    +'<path d="'+gArc(cx,cy,r,A0,A0+SPAN)+'" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="'+sw+'" stroke-linecap="round"/>'
-    +(p>0?'<path d="'+gArc(cx,cy,r,A0,valEnd)+'" fill="none" stroke="url(#ggv)" stroke-width="'+sw+'" stroke-linecap="round" filter="url(#glow2)"/>':'')
+  return '<svg width="220" height="200" viewBox="0 0 220 200">'
+    +'<path d="'+gArc(cx,cy,r,A0,A0+SPAN)+'" fill="none" stroke="rgba(255,255,255,.20)" stroke-width="'+sw+'" stroke-linecap="round"/>'
+    +(p>0?'<path d="'+gArc(cx,cy,r,A0,valEnd)+'" fill="none" stroke="#ffffff" stroke-width="'+sw+'" stroke-linecap="round"/>':'')
     +tick
     +'<text x="110" y="102" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="'+fs+'" font-weight="700">'+esc(main)+'</text>'
     +'<text x="110" y="128" text-anchor="middle" fill="rgba(255,255,255,.82)" font-size="11.5" font-weight="600">'+esc(sub)+'</text></svg>';
@@ -841,13 +841,18 @@ function filterStatusBar(){var F=_filter||{};var active=Object.keys(F).filter(fu
   var chips=[];active.forEach(function(k){(F[k]||[]).forEach(function(v){var disp=v;if(k==='post'){var pp=(DATA.posts||[]).filter(function(x){return x.id===v;})[0];disp=pp?pp.msg.slice(0,42):v;}chips.push('<span class="f-chip">'+(L[k]||k)+': <b>'+esc(disp)+'</b> <span class="cx" onclick="setFilter(\''+k+'\',\''+jsq(v)+'\')">×</span></span>');});});
   return '<div class="filter-status"><span class="lbl">Đang lọc</span>'+chips.join('')+'<button class="f-clear-all" onclick="clearAllFilters()">× Xóa tất cả</button></div>';}
 function filterBar(d){var F=_filter||{},o=d.opts||{};
-  // Multi-select: bấm chọn nhiều giá trị; dropdown giữ mở tới khi bấm ra ngoài.
-  function msel(key,allLabel){var list=o[key]||[];if(!list.length)return '';var sel=F[key]||[];
-    var label=!sel.length?allLabel:(sel.length===1?sel[0]:allLabel+' · '+sel.length);
+  // Multi-select: bấm chọn nhiều giá trị; dropdown giữ mở tới khi bấm ra ngoài; có ô tìm kiếm khi nhiều lựa chọn.
+  // pairs = [[value,label],...]; msel hỗ trợ cả lọc theo bài (value=id, label=tiêu đề).
+  function msel(key,allLabel,pairs){if(!pairs||!pairs.length)return '';var sel=F[key]||[];
+    function lbl(v){for(var i=0;i<pairs.length;i++)if(pairs[i][0]===v)return pairs[i][1];return v;}
+    var label=!sel.length?allLabel:(sel.length===1?lbl(sel[0]):allLabel+' · '+sel.length);
     var open=_openMsel===key;
-    var opts=list.map(function(v){var on=sel.indexOf(v)>-1;return '<div class="msel-opt'+(on?' on':'')+'" onclick="event.stopPropagation();setFilter(\''+key+'\',\''+jsq(v)+'\')"><span class="msel-ck">'+(on?'✓':'')+'</span><span class="msel-tx">'+esc(v)+'</span></div>';}).join('');
-    return '<div class="csel"><div class="csel-btn'+(sel.length?' act':'')+'" onclick="toggleMsel(\''+key+'\',event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div>'+(open?'<div class="csel-dd" onclick="event.stopPropagation()"><div class="csel-list">'+opts+'</div></div>':'')+'</div>';}
-  return '<div class="fbar"><span class="flbl">Lọc</span>'+msel('project','Mọi dự án')+msel('type','Mọi định dạng')+msel('slot','Mọi khung giờ')+msel('dayType','Mọi loại ngày')+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa tất cả</button>':'')+'</div>';}
+    var search=pairs.length>6?'<input class="csel-inp" placeholder="🔍 Tìm…" oninput="mselSearch(this.value)" onclick="event.stopPropagation()">':'';
+    var opts=pairs.map(function(pr){var v=pr[0],on=sel.indexOf(v)>-1;return '<div class="msel-opt'+(on?' on':'')+'" data-tx="'+esc(pr[1])+'" onclick="event.stopPropagation();setFilter(\''+key+'\',\''+jsq(v)+'\')"><span class="msel-ck">'+(on?'✓':'')+'</span><span class="msel-tx">'+esc(pr[1])+'</span></div>';}).join('');
+    return '<div class="csel"><div class="csel-btn'+(sel.length?' act':'')+'" onclick="toggleMsel(\''+key+'\',event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div>'+(open?'<div class="csel-dd msel-dd" onclick="event.stopPropagation()">'+search+'<div class="csel-list">'+opts+'</div></div>':'')+'</div>';}
+  function pr(list){return (list||[]).map(function(v){return [v,v];});}
+  var postPairs=windowPosts(_days,0).slice().sort(function(a,b){return b.ts-a.ts;}).map(function(p){return [p.id,(p.ts?fmtDay(p.ts)+' · ':'')+(p.msg||'(không tiêu đề)').slice(0,46)];});
+  return '<div class="fbar"><span class="flbl">Lọc</span>'+msel('post','Mọi bài viết',postPairs)+msel('project','Mọi dự án',pr(o.project))+msel('type','Mọi định dạng',pr(o.type))+msel('slot','Mọi khung giờ',pr(o.slot))+msel('dayType','Mọi loại ngày',pr(o.dayType))+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa tất cả</button>':'')+'</div>';}
 function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-content">Nội dung</a><a href="#s-mix">Phân tích</a><a href="#s-goal">Dự án</a><a href="#s-time">Khung giờ</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
 // Ngưỡng ER mục tiêu để tô màu pill theo Dự án (theo TARGET_ER).
 var GOALS={er:TARGET_ER};
@@ -956,6 +961,7 @@ function clearAllFilters(){_filter={};_openMsel=null;paint();}
 var _openMsel=null;
 function toggleMsel(k,e){if(e)e.stopPropagation();_openMsel=(_openMsel===k)?null:k;paint();}
 function closeMsel(){if(_openMsel!==null){_openMsel=null;paint();}}
+function mselSearch(q){var dd=document.querySelector('.msel-dd');if(!dd)return;var qq=norm(q);dd.querySelectorAll('.msel-opt').forEach(function(el){var t=el.getAttribute('data-tx')||el.textContent;el.style.display=(qq===''||norm(t).indexOf(qq)>-1)?'':'none';});}
 function setMetric(m){_metric=m;paint();}
 function openTopicSel(e){e.stopPropagation();var dd=document.getElementById('topic-dd');if(!dd)return;var open=dd.style.display==='block';dd.style.display=open?'none':'block';if(!open){var inp=dd.querySelector('.csel-inp');if(inp){inp.value='';inp.focus();filterTopicSel('');}}}
 function filterTopicSel(q){var list=document.getElementById('topic-list');if(!list)return;var qq=norm(q);list.querySelectorAll('.csel-opt').forEach(function(el){el.style.display=(qq===''||norm(el.textContent).indexOf(qq)>-1)?'':'none';});}
