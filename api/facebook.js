@@ -322,15 +322,6 @@ section{padding-top:28px;scroll-margin-top:122px}
 .rlbl{width:120px;font-size:12px;color:var(--text-2)}
 .rbar{flex:1;height:9px;background:var(--hair);border-radius:99px;overflow:hidden}.rbar span{display:block;height:100%;border-radius:99px;transition:width .8s cubic-bezier(.16,1,.3,1)}
 .rval{width:64px;text-align:right;font-size:12px;color:var(--text-2);font-family:var(--num)}
-/* Goal tracking */
-.goal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s3)}
-.goal{background:var(--glass-2);border:1px solid var(--stroke);border-radius:var(--r-sm);padding:var(--s4)}
-.goal-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.goal-l{font-size:11.5px;font-weight:700;color:var(--text-2)}
-.goal-bar{height:10px;background:var(--hair);border-radius:99px;overflow:hidden;margin:12px 0 9px;position:relative}
-.goal-bar i{display:block;height:100%;border-radius:99px;transition:width .9s cubic-bezier(.16,1,.3,1)}
-.goal-bar i.g-good{background:var(--good)}.goal-bar i.g-warn{background:var(--warn)}.goal-bar i.g-risk{background:var(--risk)}
-.goal-sub{font-size:12px;font-family:var(--num);color:var(--text-2)}.goal-sub b{color:var(--text)}
 /* Dự án / Sáng kiến */
 .ini-list{display:flex;flex-direction:column;gap:var(--s1)}
 .ini-row{display:flex;align-items:center;gap:var(--s3);padding:9px 10px;border-radius:var(--r-xs);transition:background .15s}
@@ -338,7 +329,7 @@ section{padding-top:28px;scroll-margin-top:122px}
 .ini-name{width:210px;flex:none;font-size:12.5px;font-weight:600;color:var(--text)}
 .ini-meta{display:block;font-size:10.5px;font-weight:500;color:var(--faint);margin-top:2px}
 .ini-bar{flex:1;height:9px;background:var(--hair);border-radius:99px;overflow:hidden}.ini-bar span{display:block;height:100%;border-radius:99px;transition:width .8s cubic-bezier(.16,1,.3,1)}
-@media(max-width:920px){.goal-grid{grid-template-columns:1fr}.ini-name{width:140px}}
+@media(max-width:920px){.ini-name{width:140px}}
 .hc2{display:flex;align-items:flex-end;gap:3px;height:88px;margin-top:4px}
 .hcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
 .hcol .b{width:100%;border-radius:5px 5px 3px 3px;min-height:3px;background:var(--grad);transition:height .7s}
@@ -704,32 +695,7 @@ function mixSection(d){
     +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate (Tương tác ÷ Lượt xem) theo định dạng. Bấm để lọc.">Hiệu quả theo định dạng <span style="font-weight:600;color:var(--muted);font-size:11px">· ER</span></div>'+barsER(d.byType,'type')+'</div>'
     +'</div>'
     +'<div style="margin-top:16px"><div class="panel"><div class="panel-h" data-tip="Engagement Rate theo chủ đề (hashtag chính). Bấm để lọc.">Theo chủ đề <span style="font-weight:600;color:var(--muted);font-size:11px">· ER</span></div>'+barsER(d.byTopic,'topic')+'</div></div>'
-    +contentMatrix(d)
     +'</section>';
-}
-// Ma trận hiệu quả: trục X = Lượt xem (tiếp cận), trục Y = ER (tương tác). Chia 4 góc phần tư
-// quanh trung vị -> nhận diện Ngôi sao / Tiềm năng ẩn / Phủ rộng nhạt / Yếu. (BCG-style content matrix)
-function contentMatrix(d){
-  var rows=(d.rows||[]).filter(function(r){return pViews(r.p)>0;});
-  if(rows.length<4)return '';
-  var xs=rows.map(function(r){return pViews(r.p);}).slice().sort(function(a,b){return a-b;});
-  var ys=rows.map(function(r){return r.er;}).slice().sort(function(a,b){return a-b;});
-  var mx=xs[Math.floor(xs.length/2)],my=ys[Math.floor(ys.length/2)];
-  var maxX=xs[xs.length-1]*1.06||1,maxY=ys[ys.length-1]*1.06||1;
-  var W=720,H=320,pl=46,pr=16,pt=26,pb=36;
-  function X(v){return pl+(v/maxX)*(W-pl-pr);}
-  function Y(v){return pt+(1-v/maxY)*(H-pt-pb);}
-  var dots=rows.map(function(r){var x=pViews(r.p),y=r.er;var col=(x>=mx&&y>=my)?'var(--good)':(x<mx&&y>=my)?'var(--accent)':(x>=mx&&y<my)?'var(--warn)':'var(--faint)';
-    return '<circle cx="'+X(x).toFixed(1)+'" cy="'+Y(y).toFixed(1)+'" r="5" fill="'+col+'" fill-opacity=".82" stroke="'+col+'" style="cursor:pointer" onclick="setFilter(\'post\',\''+r.p.id+'\')" data-tip="'+esc(fmtDay(r.p.ts)+' · '+r.p.msg.slice(0,38)+' — '+nf(x)+' xem · ER '+r.er+'%')+'"></circle>';}).join('');
-  var mxX=X(mx).toFixed(1),myY=Y(my).toFixed(1);
-  var lines='<line x1="'+mxX+'" y1="'+pt+'" x2="'+mxX+'" y2="'+(H-pb)+'" stroke="var(--stroke-2)" stroke-dasharray="4 4"/><line x1="'+pl+'" y1="'+myY+'" x2="'+(W-pr)+'" y2="'+myY+'" stroke="var(--stroke-2)" stroke-dasharray="4 4"/>';
-  function ql(x,y,t,c){return '<text x="'+x+'" y="'+y+'" fill="'+c+'" font-size="10" font-weight="700" opacity=".75">'+t+'</text>';}
-  var labels=ql(W-pr-78,pt+12,'★ Ngôi sao','var(--good)')+ql(pl+6,pt+12,'◆ Tiềm năng ẩn','var(--accent)')+ql(W-pr-120,H-pb-8,'Phủ rộng, ít tương tác','var(--warn)')+ql(pl+6,H-pb-8,'Yếu','var(--faint)');
-  var axis='<text x="'+(pl+(W-pl-pr)/2)+'" y="'+(H-6)+'" fill="var(--muted)" font-size="10" text-anchor="middle">Lượt xem →</text>'
-    +'<text x="14" y="'+(pt+(H-pt-pb)/2)+'" fill="var(--muted)" font-size="10" text-anchor="middle" transform="rotate(-90 14 '+(pt+(H-pt-pb)/2)+')">ER % →</text>';
-  return '<div style="margin-top:16px"><div class="panel"><div class="panel-h" data-tip="Mỗi điểm là 1 bài. Trục ngang = Lượt xem (độ phủ), trục dọc = ER (sức hút). Vạch = trung vị. Bấm điểm để lọc theo bài.">Ma trận hiệu quả nội dung <span style="font-weight:600;color:var(--muted);font-size:11px">· Phủ × Sức hút</span></div>'
-    +'<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'">'+lines+axis+dots+labels+'</svg>'
-    +'<div class="so" style="margin-top:8px;font-size:11.5px">★ <b>Ngôi sao</b>: phủ rộng &amp; hút mạnh — nhân bản công thức. ◆ <b>Tiềm năng ẩn</b>: ER cao nhưng ít người thấy — nên đẩy phân phối/đăng lại.</div></div></div>';
 }
 function setCtab(t){_ctab=t;paint();}
 function isVideoPost(p){return /Reel|Video|Live/i.test(p.type||'')||pmv(p,'video_view_time')>0||pmv(p,'video_view_three_second')>0;}
@@ -784,7 +750,7 @@ function contentSection(d){
     return '<section id="s-content">'+tabs+'<div class="panel" id="tbl-'+id+'">'
       +searchBox(id,'Tìm bài viết / chủ đề…')
       +'<div class="tw"><table><thead><tr><th>Bài viết</th>'
-      +th(id,'ts','Đăng','Sắp theo ngày đăng')+'<th data-tip="Định dạng — bấm ô để lọc chéo">Loại</th>'+th(id,'views','Lượt xem','Số lần nội dung được xem')+th(id,'vw','Người xem','Người xem duy nhất')+th(id,'imp','Lượt hiển thị','Số lần hiển thị trên màn hình')+th(id,'eng','Lượt tương tác','Cảm xúc + bình luận + chia sẻ + lưu')+th(id,'cmt','Bình luận')+th(id,'er','ER','Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem')+th(id,'vrate','Người xem/Xem','Tỉ lệ Người xem ÷ Lượt xem — mức độ xem lặp lại')+th(id,'ntf','NgTd thực','Số người theo dõi thực tăng từ bài')
+      +th(id,'ts','Đăng','Sắp theo ngày đăng')+'<th data-tip="Định dạng — bấm ô để lọc chéo">Loại</th>'+th(id,'views','Lượt xem','Số lần nội dung được xem')+th(id,'vw','Người xem','Người xem duy nhất')+th(id,'imp','Lượt hiển thị','Số lần hiển thị trên màn hình')+th(id,'eng','Lượt tương tác','Cảm xúc + bình luận + chia sẻ + lưu')+th(id,'cmt','Bình luận')+th(id,'er','ER','Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem')+th(id,'vrate','Người xem/Xem','Tỉ lệ Người xem ÷ Lượt xem — mức độ xem lặp lại')+th(id,'ntf','Theo dõi +','Số người theo dõi thực tăng thêm từ bài')
       +'</tr></thead><tbody id="tb-'+id+'"></tbody></table></div><div class="pager" id="pg-'+id+'"></div></div></section>';
   } else {
     var vid='posts-vid';
@@ -835,7 +801,7 @@ function healthSection(d){
     +'<div class="dh" data-tip="Bài lấy từ Content Library (userscript). Page Insights lấy từ trang Thông tin chi tiết."><div class="dh-l">Nguồn dữ liệu</div><div class="dh-v '+(live?'good':'warn')+'">'+(live?'LIVE':'DEMO')+'</div><div class="dh-s">Content Library + Page Insights</div></div>'
     +'<div class="dh"><div class="dh-l">Số bài phân tích</div><div class="dh-v">'+d.sum.nPosts+'</div><div class="dh-s">theo ngày đăng</div></div>'
     +'<div class="dh"><div class="dh-l">Chuỗi theo ngày hoạt động</div><div class="dh-v '+(hasSeries?'good':'warn')+'">'+(hasSeries?(pi.series.views.length+' ngày'):'thiếu')+'</div><div class="dh-s">'+(hasSeries?'Lượt xem/Tương tác/Follower':'Quét trang Insights')+'</div></div>'
-    +'</div><div class="so" style="margin-top:14px">Số <b>theo ngày hoạt động</b> (Lượt xem, Lượt tương tác, Follower) lấy từ chuỗi page-level Facebook — chính xác &amp; co theo khoảng ngày. Số <b>per-post</b> (bảng Nội dung) theo ngày đăng. Người xem/Hiển thị/Bình luận là số <b>tổng cấp trang</b> theo kỳ rộng nhất đã quét (Facebook không cấp chuỗi ngày cho chúng).</div></div></section>';
+    +'</div><div class="so" style="margin-top:14px">Số <b>theo ngày hoạt động</b> (Lượt xem, Lượt tương tác, Follower) lấy từ chuỗi page-level Facebook — chính xác &amp; co theo khoảng ngày. Số <b>per-post</b> (bảng Nội dung) theo ngày đăng. <b>Lượt hiển thị</b> &amp; <b>Bình luận</b> cộng dồn từ các nội dung (per-post). <b>Người xem (duy nhất)</b> là số tổng cấp trang theo kỳ rộng nhất đã quét (Facebook không cấp chuỗi ngày cho chúng).</div></div></section>';
 }
 function dictSection(){
   var items=[
@@ -865,23 +831,11 @@ function filterBar(d){var F=_filter||{},o=d.opts||{};
   function topicSel(){var list=o.topic||[],cur=F.topic||'';var label=cur||'Tất cả chủ đề';var opts='<div class="csel-opt'+(cur?'':' on')+'" onclick="pickTopic(\'\')">Tất cả chủ đề</div>'+list.map(function(v){return '<div class="csel-opt'+(v===cur?' on':'')+'" onclick="pickTopic(\''+jsq(v)+'\')">'+esc(v)+'</div>';}).join('');
     return '<div class="csel"><div class="csel-btn" onclick="openTopicSel(event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div><div class="csel-dd" id="topic-dd" style="display:none"><input class="csel-inp" placeholder="🔍 Tìm chủ đề…" oninput="filterTopicSel(this.value)" onclick="event.stopPropagation()"><div class="csel-list" id="topic-list">'+opts+'</div></div></div>';}
   return '<div class="fbar"><span class="flbl">Lọc</span>'+topicSel()+sel('type','Mọi định dạng')+(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa tất cả</button>':'')+'</div>';}
-function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-content">Nội dung</a><a href="#s-mix">Phân tích</a><a href="#s-goal">Mục tiêu</a><a href="#s-time">Khung giờ</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
-// Mục tiêu kỳ — SỬA Ở ĐÂY khi đổi KPI mục tiêu (er theo TARGET_ER).
-var GOALS={er:TARGET_ER,views:300000,posts:80};
+function navLinks(){return '<a href="#s-ov" class="on">Tổng quan</a><a href="#s-content">Nội dung</a><a href="#s-mix">Phân tích</a><a href="#s-goal">Dự án</a><a href="#s-time">Khung giờ</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Insight</a><a href="#s-health">Sức khỏe</a><a href="#s-dict">Từ điển</a>';}
+// Ngưỡng ER mục tiêu để tô màu pill theo Dự án (theo TARGET_ER).
+var GOALS={er:TARGET_ER};
 // Section: Mục tiêu & Dự án/Sáng kiến (nhóm theo chủ đề). Goal tracking + breakdown theo dự án.
 function goalSection(d){
-  var s=d.sum;
-  function gbar(label,cur,target,fmt,tip){
-    var rr=target?cur/target*100:0,pct=Math.max(0,Math.min(100,rr)),cls=rr>=100?'good':rr>=70?'warn':'risk';
-    return '<div class="goal" data-tip="'+esc(tip)+'"><div class="goal-top"><span class="goal-l">'+label+'</span><span class="pill p-'+cls+'">'+Math.round(rr)+'%</span></div>'
-      +'<div class="goal-bar"><i class="g-'+cls+'" style="width:'+pct.toFixed(1)+'%"></i></div>'
-      +'<div class="goal-sub"><b>'+fmt(cur)+'</b> <span style="color:var(--faint)">/ mục tiêu '+fmt(target)+'</span></div></div>';
-  }
-  var goals='<div class="goal-grid">'
-    +gbar('ER (Engagement Rate)',s.engRate,GOALS.er,function(v){return v+'%';},'ER kỳ này so với mục tiêu '+GOALS.er+'%.')
-    +gbar('Lượt xem',s.views,GOALS.views,function(v){return nfk(v);},'Tổng lượt xem (theo ngày đăng) so với mục tiêu kỳ.')
-    +gbar('Số bài đăng',s.nPosts,GOALS.posts,function(v){return nf(v);},'Số bài đăng so với mục tiêu nhịp đăng.')
-    +'</div>';
   var topics=(d.byTopic||[]).filter(function(t){return t.name;});
   var maxV=Math.max.apply(null,topics.map(function(t){return t.views;}).concat([1]));
   var rows=topics.map(function(t){
@@ -892,9 +846,8 @@ function goalSection(d){
       +'<div class="ini-bar"><span style="width:'+(t.views/maxV*100).toFixed(1)+'%;background:var(--grad)"></span></div>'
       +'<span class="pill p-'+cls+'">ER '+t.er+'%</span></div>';
   }).join('')||'<div class="nd">Chưa có dữ liệu chủ đề/dự án.</div>';
-  return '<section id="s-goal"><div class="eyebrow">Mục tiêu &amp; Dự án</div>'
-    +'<div class="panel"><div class="panel-h" data-tip="Tiến độ so với mục tiêu kỳ. Sửa số mục tiêu trong biến GOALS (đầu clientCode).">Tiến độ mục tiêu</div>'+goals+'</div>'
-    +'<div class="panel" style="margin-top:16px"><div class="panel-h" data-tip="Hiệu quả theo Dự án/Sáng kiến (nhóm theo chủ đề). Thanh = tỉ trọng Lượt xem; pill = ER so mục tiêu. Bấm để lọc.">Theo Dự án / Sáng kiến <span style="font-weight:600;color:var(--muted);font-size:11px">· '+topics.length+' dự án</span></div><div class="ini-list">'+rows+'</div></div>'
+  return '<section id="s-goal"><div class="eyebrow">Dự án / Sáng kiến — bấm để lọc chéo</div>'
+    +'<div class="panel"><div class="panel-h" data-tip="Nhóm bài theo chủ đề (Dự án/Sáng kiến). Thanh = tỉ trọng Lượt xem; pill = ER (đạt mục tiêu '+GOALS.er+'% thì xanh). Bấm để lọc.">Xếp hạng theo Lượt xem <span style="font-weight:600;color:var(--muted);font-size:11px">· '+topics.length+' dự án</span></div><div class="ini-list">'+rows+'</div></div>'
     +'</section>';
 }
 // Phễu hiệu quả: Tiếp cận (Lượt xem) -> Tương tác -> Chuyển đổi (theo dõi thực).
