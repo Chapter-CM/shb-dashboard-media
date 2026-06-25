@@ -288,18 +288,15 @@ section{padding-top:28px;scroll-margin-top:122px}
 @media(max-width:920px){.bento{grid-template-columns:1fr 1fr}.bento .gauge-card{grid-column:1/3;grid-row:auto}.bento .kpi.feat{grid-column:1/3}}
 @media(max-width:560px){.bento{grid-template-columns:1fr}.bento .gauge-card,.bento .kpi.feat{grid-column:1}}
 .kpi{background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r-sm);padding:var(--s4) 18px;backdrop-filter:blur(18px);box-shadow:var(--sh-1);position:relative;transition:transform .17s,border-color .17s,box-shadow .17s}
-.kpi::before{content:'';position:absolute;top:0;left:14px;right:14px;height:1px;background:linear-gradient(90deg,transparent,var(--stroke-2),transparent)}
 .kpi:hover{transform:translateY(-3px);border-color:var(--stroke-2);box-shadow:var(--sh-2)}
 .kpi .kl{font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:7px}
 .kpi .ki{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:7px;font-size:12px;line-height:1;background:var(--accent-bg);flex:none}
-.kpi.k-good .ki{background:var(--good-bg)}.kpi.k-warn .ki{background:var(--warn-bg)}.kpi.k-risk .ki{background:var(--risk-bg)}.kpi.k-neutral .ki{background:var(--glass-2,rgba(255,255,255,.05))}
-.kpi.k-good{border-color:color-mix(in srgb,var(--good) 32%,var(--stroke))}.kpi.k-warn{border-color:color-mix(in srgb,var(--warn) 32%,var(--stroke))}.kpi.k-risk{border-color:color-mix(in srgb,var(--risk) 32%,var(--stroke))}
-.kpi.k-good::before{background:linear-gradient(90deg,transparent,var(--good),transparent)}.kpi.k-warn::before{background:linear-gradient(90deg,transparent,var(--warn),transparent)}.kpi.k-risk::before{background:linear-gradient(90deg,transparent,var(--risk),transparent)}.kpi.k-accent::before{background:linear-gradient(90deg,transparent,var(--accent),transparent)}
-.kpi .kv{font-size:27px;font-weight:700;letter-spacing:-.03em;margin-top:9px;line-height:1;font-family:var(--num)}
-.kpi .ku{font-size:13px;font-weight:600;color:var(--faint);margin-left:4px;letter-spacing:0;font-family:var(--num)}
-.kpi .krow{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:11px}
+.kpi .kv{font-size:27px;font-weight:700;letter-spacing:-.03em;margin-top:12px;line-height:1;font-family:var(--num)}
+.kpi .ksub{font-size:11px;color:var(--muted);font-weight:500;margin-top:10px;min-height:14px;line-height:1.2}
+.ksub-up{color:var(--good);font-weight:600}.ksub-down{color:var(--warn);font-weight:600}
+.kpi .ksub .delta{background:none;padding:0;font-size:11px}
 .delta{font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:3px;font-family:var(--num);padding:2px 7px;border-radius:99px}
-.delta.up{color:var(--good);background:var(--good-bg)}.delta.down{color:var(--risk);background:var(--risk-bg)}.delta.flat{color:var(--muted)}
+.delta.up{color:var(--good)}.delta.down{color:var(--risk)}.delta.flat{color:var(--muted)}
 .spark{height:30px;flex:1;max-width:118px}
 .hero-chart{background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r);padding:20px 22px;margin-top:16px;box-shadow:var(--shadow);position:relative}
 .hc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:10px}
@@ -594,7 +591,7 @@ function toggleDrill(pid){var r=document.getElementById('dr-'+pid);if(r)r.style.
 function heroRow(d,cur,prev,ser){
   var s=d.sum;
   cur=(cur||[]).filter(function(p){return matchFilter(p,_filter||{});});   // tôn trọng lọc chéo (post/loại/chủ đề)
-  function card(label,val,dH,spH,tip,o){o=o||{};var ic=o.icon?'<span class="ki">'+o.icon+'</span>':'';var un=o.unit?'<span class="ku">'+o.unit+'</span>':'';var ac=o.accent?' k-'+o.accent:'';var ft=o.feat?' feat':'';return '<div class="kpi'+ac+ft+'" data-tip="'+esc(tip)+'"><div class="kl">'+ic+'<span>'+label+'</span></div><div class="kv">'+val+un+'</div><div class="krow">'+(dH||'<span class="delta flat"></span>')+(spH||'')+'</div></div>';}
+  function card(label,val,sub,tip,o){o=o||{};var ic=o.icon?'<span class="ki">'+o.icon+'</span>':'';var ft=o.feat?' feat':'';return '<div class="kpi'+ft+'" data-tip="'+esc(tip)+'"><div class="kl">'+ic+'<span>'+label+'</span></div><div class="kv">'+val+'</div><div class="ksub">'+(sub||'')+'</div></div>';}
   var fv=ser.map(function(b){return b.followers;}),vv=ser.map(function(b){return b.views;});
   var reachRate=s.reachRate;
   var PS=(DATA.pageInsights&&DATA.pageInsights.series)||{};
@@ -618,16 +615,17 @@ function heroRow(d,cur,prev,ser){
   var actTag='<span style="font-size:9px;color:rgba(255,255,255,.7);font-weight:600;text-transform:none"> · ngày hoạt động</span>';
   var vDelta=(!cFil)?seriesDelta(PS.views):'';
   var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem theo ngày hoạt động ('+nf(viewsVal)+'). Vòng cung = ER (Tương tác ÷ Lượt xem) so với mục tiêu '+TARGET_ER+'%; vạch trắng = mốc mục tiêu."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(erArc,100,nfk(viewsVal),'ER '+erAct+'%')+'</div><div class="gc-sub">'+(vDelta?vDelta+' so kỳ trước · ':'')+'ER '+erAct+'% '+(erAct>=TARGET_ER?'✓ đạt':'(mục tiêu '+TARGET_ER+'%)')+' · '+s.nPosts+' bài</div></div>';
-  var erCls=erAct>=TARGET_ER?'up':'down';
   var reachSum=sumPm(cur,'viewers');                                   // Lượt tiếp cận = Σ người xem mọi nội dung (kể cả trùng)
   var reachRatio=viewsVal?pc(Math.min(999,reachSum/viewsVal*100)):0;   // Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem
+  var engDelta=(!cFil)?seriesDelta(PS.interactions):'';
+  var erSub='<span class="ksub-'+(erAct>=TARGET_ER?'up':'down')+'">'+(erAct>=TARGET_ER?'▲ đạt':'▼ dưới')+' mục tiêu '+TARGET_ER+'%</span>';
   var k=[
-    card('Lượt tương tác'+(engAct!=null?' ·hđ':''),tnum(engV),(!cFil?seriesDelta(PS.interactions):''),'',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Delta = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{icon:'👍',unit:'lượt',accent:'accent',feat:true}),
-    card('ER (Engagement Rate)',erAct,'<span class="delta '+erCls+'">'+(erAct>=TARGET_ER?'≥':'<')+' mục tiêu '+TARGET_ER+'%</span>','','Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.',{icon:'📊',unit:'%',accent:erAct>=TARGET_ER?'good':'warn'}),
-    card('Lượt tiếp cận',tnum(reachSum),'<span class="delta flat">tỉ lệ tiếp cận '+reachRatio+'%</span>','','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem. Nếu chỉ 1 bài thì = người xem của bài đó.',{icon:'📡',unit:'lượt',accent:'accent'}),
-    card('Người xem (duy nhất)',tnum(viewersV),'','','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{icon:'👁',unit:'người',accent:'accent'}),
-    card('Lượt hiển thị',tnum(impV),'','','Tổng số lần hiển thị (impressions), CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc. KHÁC Lượt xem.',{icon:'📺',unit:'lượt',accent:'neutral'}),
-    card('Bình luận',tnum(cmtV),'','','Tổng bình luận CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc.',{icon:'💬',unit:'',accent:'accent'})
+    card('Lượt tương tác',tnum(engV),engDelta?'so kỳ trước '+engDelta:'tổng tương tác kỳ này',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Số phụ = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{icon:'👍',feat:true}),
+    card('ER (Engagement Rate)',erAct+'%',erSub,'Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.',{icon:'📊'}),
+    card('Lượt tiếp cận',tnum(reachSum),'tỉ lệ tiếp cận '+reachRatio+'%','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem.',{icon:'📡'}),
+    card('Người xem',tnum(viewersV),'duy nhất · cấp trang','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{icon:'👁'}),
+    card('Lượt hiển thị',tnum(impV),'tổng từ các bài','Tổng số lần hiển thị (impressions), CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc. KHÁC Lượt xem.',{icon:'📺'}),
+    card('Bình luận',tnum(cmtV),'tổng từ các bài','Tổng bình luận CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc.',{icon:'💬'})
   ].join('');
   var topType=(d.byType&&d.byType[0])?d.byType[0].name:'', topTopic=(d.byTopic&&d.byTopic[0])?d.byTopic[0].name:'';
   var summary='<div class="so" style="margin-top:16px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:15px">💡</span><div>Kỳ này: <b>'+nf(viewsVal)+'</b> lượt xem'+(vDelta?' ('+vDelta+' so kỳ trước)':'')+' · <b>'+nf(engV)+'</b> lượt tương tác · ER <b>'+erAct+'%</b>'+(erAct>=TARGET_ER?' ✓ đạt mục tiêu':' (mục tiêu '+TARGET_ER+'%)')+'.'+(topType?' Định dạng <b>'+esc(topType)+'</b>'+(topTopic?' &amp; chủ đề <b>'+esc(topTopic)+'</b>':'')+' hiệu quả nhất — ưu tiên sản xuất.':'')+'</div></div>';
@@ -930,14 +928,14 @@ function pageDailyChart(daily,unit){
 function executive(d,cur,prev){
   var s=d.sum,now=new Date().toLocaleDateString('vi-VN',{month:'long',year:'numeric'});
   var head='<div class="exec-h"><div style="font-size:11.5px;opacity:.85;letter-spacing:.06em;text-transform:uppercase;margin-bottom:22px">Báo cáo truyền thông Facebook · CM Team · '+now+'</div><div class="exec-k">'
-    +'<div class="exec-kp"><div class="v">'+s.engRate+'%</div><div class="l">Engagement Rate</div></div>'
-    +'<div class="exec-kp"><div class="v">'+nf(s.views)+'</div><div class="l">Views</div></div>'
-    +'<div class="exec-kp"><div class="v">'+nf(s.eng)+'</div><div class="l">Tương tác</div></div>'
-    +'<div class="exec-kp"><div class="v">'+nf(s.followers)+'</div><div class="l">Follower</div></div></div></div>';
+    +'<div class="exec-kp"><div class="v">'+s.engRate+'%</div><div class="l">Tỷ lệ tương tác (ER)</div></div>'
+    +'<div class="exec-kp"><div class="v">'+nf(s.views)+'</div><div class="l">Lượt xem</div></div>'
+    +'<div class="exec-kp"><div class="v">'+nf(s.eng)+'</div><div class="l">Lượt tương tác</div></div>'
+    +'<div class="exec-kp"><div class="v">'+nf(s.followers)+'</div><div class="l">Người theo dõi</div></div></div></div>';
   var top=d.rows.slice(0,5).map(function(r){return '<tr><td><span class="nm">'+esc(r.p.msg.slice(0,46))+'</span></td><td><span class="pill p-neutral">'+esc(r.p.type)+'</span></td><td class="num">'+nf(r.p.views)+'</td><td class="num"><b>'+nf(r.eng)+'</b></td><td class="num">'+r.er+'%</td></tr>';}).join('');
   var ins=insightsOf(d),ih='<div class="ins">';ins.slice(0,4).forEach(function(i){ih+='<div class="in '+(i.t==='warn'?'warn':'good')+'"><div class="mk"></div><div class="x">'+i.x+'</div></div>';});ih+='</div>';
   return masthead('ex')+'<div class="wrap"><section style="padding-top:22px">'+head
-    +'<div class="panel"><div class="panel-h">Top 5 bài hiệu quả</div><div class="tw"><table><thead><tr><th>Bài viết</th><th>Loại</th><th class="num">Views</th><th class="num">Tương tác</th><th class="num">ER</th></tr></thead><tbody>'+top+'</tbody></table></div></div>'
+    +'<div class="panel"><div class="panel-h">Top 5 bài hiệu quả</div><div class="tw"><table><thead><tr><th>Bài viết</th><th>Loại</th><th class="num">Lượt xem</th><th class="num">Tương tác</th><th class="num">ER</th></tr></thead><tbody>'+top+'</tbody></table></div></div>'
     +'<div style="margin-top:14px"><div class="eyebrow">Điểm chính</div>'+ih+'</div>'
     +'<div class="foot">Cập nhật '+fmtTime(Date.now())+'</div></section></div>';
 }
