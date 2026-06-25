@@ -279,8 +279,13 @@ section{padding-top:28px;scroll-margin-top:122px}
 .kpi{background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r-sm);padding:17px 18px;backdrop-filter:blur(18px);box-shadow:var(--shadow);position:relative;transition:transform .17s,border-color .17s}
 .kpi::before{content:'';position:absolute;top:0;left:14px;right:14px;height:1px;background:linear-gradient(90deg,transparent,var(--stroke-2),transparent)}
 .kpi:hover{transform:translateY(-3px);border-color:var(--stroke-2)}
-.kpi .kl{font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.kpi .kl{font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:7px}
+.kpi .ki{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:7px;font-size:12px;line-height:1;background:var(--accent-bg);flex:none}
+.kpi.k-good .ki{background:var(--good-bg)}.kpi.k-warn .ki{background:var(--warn-bg)}.kpi.k-risk .ki{background:var(--risk-bg)}.kpi.k-neutral .ki{background:var(--glass-2,rgba(255,255,255,.05))}
+.kpi.k-good{border-color:color-mix(in srgb,var(--good) 32%,var(--stroke))}.kpi.k-warn{border-color:color-mix(in srgb,var(--warn) 32%,var(--stroke))}.kpi.k-risk{border-color:color-mix(in srgb,var(--risk) 32%,var(--stroke))}
+.kpi.k-good::before{background:linear-gradient(90deg,transparent,var(--good),transparent)}.kpi.k-warn::before{background:linear-gradient(90deg,transparent,var(--warn),transparent)}.kpi.k-risk::before{background:linear-gradient(90deg,transparent,var(--risk),transparent)}.kpi.k-accent::before{background:linear-gradient(90deg,transparent,var(--accent),transparent)}
 .kpi .kv{font-size:27px;font-weight:700;letter-spacing:-.03em;margin-top:9px;line-height:1;font-family:var(--num)}
+.kpi .ku{font-size:13px;font-weight:600;color:var(--faint);margin-left:4px;letter-spacing:0;font-family:var(--num)}
 .kpi .krow{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:11px}
 .delta{font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:3px;font-family:var(--num);padding:2px 7px;border-radius:99px}
 .delta.up{color:var(--good);background:var(--good-bg)}.delta.down{color:var(--risk);background:var(--risk-bg)}.delta.flat{color:var(--muted)}
@@ -566,7 +571,7 @@ function toggleDrill(pid){var r=document.getElementById('dr-'+pid);if(r)r.style.
 function heroRow(d,cur,prev,ser){
   var s=d.sum;
   cur=(cur||[]).filter(function(p){return matchFilter(p,_filter||{});});   // tôn trọng lọc chéo (post/loại/chủ đề)
-  function card(label,val,dH,spH,tip){return '<div class="kpi" data-tip="'+esc(tip)+'"><div class="kl">'+label+'</div><div class="kv">'+val+'</div><div class="krow">'+(dH||'<span class="delta flat"></span>')+(spH||'')+'</div></div>';}
+  function card(label,val,dH,spH,tip,o){o=o||{};var ic=o.icon?'<span class="ki">'+o.icon+'</span>':'';var un=o.unit?'<span class="ku">'+o.unit+'</span>':'';var ac=o.accent?' k-'+o.accent:'';return '<div class="kpi'+ac+'" data-tip="'+esc(tip)+'"><div class="kl">'+ic+'<span>'+label+'</span></div><div class="kv">'+val+un+'</div><div class="krow">'+(dH||'<span class="delta flat"></span>')+(spH||'')+'</div></div>';}
   var fv=ser.map(function(b){return b.followers;}),vv=ser.map(function(b){return b.views;});
   var reachRate=s.reachRate;
   var PS=(DATA.pageInsights&&DATA.pageInsights.series)||{};
@@ -591,12 +596,12 @@ function heroRow(d,cur,prev,ser){
   var reachSum=sumPm(cur,'viewers');                                   // Lượt tiếp cận = Σ người xem mọi nội dung (kể cả trùng)
   var reachRatio=viewsVal?pc(Math.min(999,reachSum/viewsVal*100)):0;   // Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem
   var k=[
-    card('Lượt tương tác'+(engAct!=null?' ·hđ':''),nf(engV),(!cFil?seriesDelta(PS.interactions):''),'',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Delta = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.'),
-    card('ER (Engagement Rate)',erAct+'%','<span class="delta '+erCls+'">'+(erAct>=TARGET_ER?'≥':'<')+' mục tiêu '+TARGET_ER+'%</span>','','Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.'),
-    card('Lượt tiếp cận',nf(reachSum),'<span class="delta flat">tỉ lệ tiếp cận '+reachRatio+'%</span>','','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem. Nếu chỉ 1 bài thì = người xem của bài đó.'),
-    card('Người xem (duy nhất)',nf(viewersV),'','','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).'),
-    card('Lượt hiển thị',nf(impV),'','','Số lần nội dung hiển thị (impressions) cấp trang. KHÁC Lượt xem.'),
-    card('Bình luận',nf(cmtV),'','','Tổng bình luận cấp trang (theo kỳ Facebook đã bắt).')
+    card('Lượt tương tác'+(engAct!=null?' ·hđ':''),nf(engV),(!cFil?seriesDelta(PS.interactions):''),'',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Delta = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{icon:'👍',unit:'lượt',accent:'accent'}),
+    card('ER (Engagement Rate)',erAct,'<span class="delta '+erCls+'">'+(erAct>=TARGET_ER?'≥':'<')+' mục tiêu '+TARGET_ER+'%</span>','','Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.',{icon:'📊',unit:'%',accent:erAct>=TARGET_ER?'good':'warn'}),
+    card('Lượt tiếp cận',nf(reachSum),'<span class="delta flat">tỉ lệ tiếp cận '+reachRatio+'%</span>','','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem. Nếu chỉ 1 bài thì = người xem của bài đó.',{icon:'📡',unit:'lượt',accent:'accent'}),
+    card('Người xem (duy nhất)',nf(viewersV),'','','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{icon:'👁',unit:'người',accent:'accent'}),
+    card('Lượt hiển thị',nf(impV),'','','Số lần nội dung hiển thị (impressions) cấp trang. KHÁC Lượt xem.',{icon:'📺',unit:'lượt',accent:'neutral'}),
+    card('Bình luận',nf(cmtV),'','','Tổng bình luận cấp trang (theo kỳ Facebook đã bắt).',{icon:'💬',unit:'',accent:'accent'})
   ].join('');
   var topType=(d.byType&&d.byType[0])?d.byType[0].name:'', topTopic=(d.byTopic&&d.byTopic[0])?d.byTopic[0].name:'';
   var summary='<div class="so" style="margin-top:16px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:15px">💡</span><div>Kỳ này: <b>'+nf(viewsVal)+'</b> lượt xem'+(vDelta?' ('+vDelta+' so kỳ trước)':'')+' · <b>'+nf(engV)+'</b> lượt tương tác · ER <b>'+erAct+'%</b>'+(erAct>=TARGET_ER?' ✓ đạt mục tiêu':' (mục tiêu '+TARGET_ER+'%)')+'.'+(topType?' Định dạng <b>'+esc(topType)+'</b>'+(topTopic?' &amp; chủ đề <b>'+esc(topTopic)+'</b>':'')+' hiệu quả nhất — ưu tiên sản xuất.':'')+'</div></div>';
