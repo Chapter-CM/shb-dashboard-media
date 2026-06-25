@@ -34,18 +34,24 @@ fix toggle lọc chéo + giữ scroll (Lô 18); visual polish (eyebrow bar, KPI 
 - **Lọc chéo thẻ Tổng quan**: bấm post/loại → **Lượt tiếp cận / Lượt hiển thị / Bình luận** giờ đổi theo
   (trước đó `cur` không lọc → thẻ đứng yên). Đã fix.
 
-## ⚠️ Việc cần làm tiếp (mai) — bắt đầu từ mục 1
-1. **Kiểm tra "Lượt hiển thị" (impression)** — vẫn nghi sai khi **KHÔNG lọc** (đang dùng `metricsMax.impression`).
-   Đối chiếu số FB thật; lệch thì đổi nguồn (lấy từ trang cụ thể) hoặc bỏ.
-2. **Roadmap UX (đã chốt thứ tự):**
-   1. Lưới KPI có **icon + đơn vị + màu ngữ nghĩa**
-   2. Tinh chỉnh **design tokens** (màu / bo góc / shadow / spacing 4px)
-   3. **Bento grid** khu Tổng quan
-   4. **Số rút gọn** 132,7K (hover xem đủ)
-   5. **Annotation** trên chart (đánh dấu ngày đỉnh / chiến dịch)
-   6. **View Dự án/Sáng kiến + Goal tracking**
-3. **Dọn code chết**: `reactionPanel, engagementPanel, videoSection, groupSection, timingPanelMini` (định nghĩa nhưng không gọi).
-4. Khi cần dữ liệu mới: nhắc user bắt lại ở **khoảng ngày rộng** trên cả 3 trang (Lượt xem / Lượt tương tác / Đối tượng).
+### Phiên tiếp 25/06 (branch `claude/laughing-ride-5tk6cn` — đã deploy)
+- ✅ **Roadmap #1 — lưới KPI**: `card()` nhận `{icon, unit, accent}`; icon trong badge bo góc, đơn vị mờ
+  sau số (`.ku`), ER tự đổi xanh/vàng theo mục tiêu, viền + gạch top theo màu ngữ nghĩa.
+- ✅ **Lượt hiển thị**: bỏ `metricsMax.impression`; luôn `sumPm(cur,'impression')` — cộng tổng per-post,
+  lọc thì cộng theo nội dung đang lọc (theo quyết định của user).
+- ✅ **Roadmap #2 — design tokens**: thêm thang spacing 4px `--s1..--s6`, `--r-xs/--r-pill`,
+  elevation 2 tầng `--sh-1/--sh-2`; `.kpi` dùng elevation (nghỉ sh-1 → hover sh-2).
+- ✅ **Dọn code chết**: đã gỡ 5 hàm `reactionPanel/engagementPanel/videoSection/groupSection/timingPanelMini`.
+
+## ⚠️ Việc cần làm tiếp — roadmap còn lại
+3. **Bento grid** khu Tổng quan
+4. **Số rút gọn** 132,7K (hover xem đủ)
+5. **Annotation** trên chart (đánh dấu ngày đỉnh / chiến dịch)
+6. **View Dự án/Sáng kiến + Goal tracking**
+
+> Token nền đã có: dùng `--s*` cho spacing, `--sh-1/--sh-2` cho elevation, `--r*` cho bo góc khi làm bento.
+
+Khi cần dữ liệu mới: nhắc user bắt lại ở **khoảng ngày rộng** trên cả 3 trang (Lượt xem / Lượt tương tác / Đối tượng).
 
 ## Lưu ý kỹ thuật
 - Sửa `api/facebook.js` xong: `node --check api/facebook.js`.
