@@ -18,35 +18,35 @@ module.exports = (req, res) => {
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
-.bar{flex:none;display:flex;align-items:center;gap:18px;padding:11px 22px;background:var(--bar);border-bottom:1px solid var(--stroke);backdrop-filter:blur(20px);z-index:2}
-.brand{display:flex;align-items:center;gap:11px}
-.logo{width:34px;height:34px;border-radius:10px;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px}
-.brand .tt{font-size:15px;font-weight:800;letter-spacing:-.01em}
-.brand .ss{font-size:11.5px;color:var(--muted);margin-top:1px}
-.tabs{display:flex;gap:6px;margin-left:8px}
-.tab{display:flex;align-items:center;gap:8px;background:transparent;border:1px solid transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:700;padding:8px 18px;border-radius:11px;cursor:pointer;transition:.16s}
-.tab:hover{color:var(--text);background:rgba(255,255,255,.05)}
-.tab.on{color:#fff;background:var(--grad);box-shadow:0 8px 22px -10px rgba(124,92,255,.8)}
-.tab .ic{font-size:15px;line-height:1}
+.bar{height:54px;flex:none;display:flex;align-items:center;gap:16px;padding:0 20px;background:var(--bar);border-bottom:1px solid var(--stroke);backdrop-filter:blur(20px) saturate(150%);z-index:2}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:30px;height:30px;border-radius:9px;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:12px;box-shadow:0 6px 16px -6px rgba(124,92,255,.85)}
+.brand .tt{font-size:14.5px;font-weight:800;letter-spacing:-.01em}
+.seg{display:flex;gap:3px;background:rgba(255,255,255,.05);border:1px solid var(--stroke);border-radius:12px;padding:3px}
+.tab{display:flex;align-items:center;gap:7px;background:transparent;border:0;color:var(--muted);font:inherit;font-size:13px;font-weight:700;padding:7px 16px;border-radius:9px;cursor:pointer;transition:.16s}
+.tab:hover{color:var(--text)}
+.tab.on{color:#fff;background:var(--grad);box-shadow:0 6px 16px -8px rgba(124,92,255,.9)}
+.tab .ic{font-size:14px;line-height:1}
 .spacer{flex:1}
-.hint{font-size:11.5px;color:var(--muted)}
+.ext{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);text-decoration:none;font-weight:600;padding:6px 11px;border-radius:9px;border:1px solid var(--stroke);transition:.16s}
+.ext:hover{color:var(--text);background:rgba(255,255,255,.06)}
 .stage{flex:1;position:relative;background:var(--bg)}
 .stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
 .stage iframe[hidden]{display:none}
 .ld{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;gap:10px}
 .sp{width:16px;height:16px;border:2px solid var(--stroke);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
-@media(max-width:640px){.brand .ss{display:none}.tab{padding:8px 13px}.hint{display:none}}
+@media(max-width:560px){.brand .tt{display:none}.ext{display:none}.tab{padding:7px 12px}}
 </style></head>
 <body>
 <div class="bar">
-  <div class="brand"><div class="logo">SHB</div><div><div class="tt">CM Dashboard</div><div class="ss">Change Management · Truyền thông nội bộ</div></div></div>
-  <div class="tabs">
+  <div class="brand"><div class="logo">SHB</div><span class="tt">CM Dashboard</span></div>
+  <div class="seg">
     <button class="tab on" id="tab-fb" onclick="show('fb')"><span class="ic">📘</span>Facebook</button>
     <button class="tab" id="tab-email" onclick="show('email')"><span class="ic">✉️</span>Email</button>
   </div>
   <div class="spacer"></div>
-  <div class="hint">Bản gộp demo · chuyển tab để xem từng dashboard</div>
+  <a class="ext" id="ext" href="/api/fb-dashboard" target="_blank" rel="noopener" title="Mở dashboard hiện tại ở tab mới">↗ Mở rộng</a>
 </div>
 <div class="stage">
   <div class="ld" id="ld"><span class="sp"></span><span>Đang tải…</span></div>
@@ -65,6 +65,7 @@ function show(k){
   });
   setLoad(!loaded[k]);
   ensure(k);
+  var ext=document.getElementById('ext');if(ext)ext.href=SRC[k];
   try{location.hash=k;}catch(e){}
 }
 // mở theo hash (#email/#fb) nếu có
