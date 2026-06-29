@@ -20,6 +20,15 @@ Cả hai đang chạy trên hạ tầng ngoài (GitHub, Vercel, Supabase — Sin
 ### 1.2 Định hướng: chuyển dịch ĐỒNG THỜI và HỢP NHẤT
 Thay vì migrate 2 hệ thống độc lập rồi mới gộp, ta **xin hạ tầng dùng chung ngay từ đầu** (1 DB, 1 GitLab repo, 1 pipeline, 1 DNS) và gộp thành **1 dashboard 2 tab (Email / Facebook)**. Cả hai vốn dùng **cùng design system** và đều là Node module in ra 1 trang HTML → gộp tự nhiên.
 
+### 1.3 ✅ ĐÃ GỘP XONG Ở MÔI TRƯỜNG NGOÀI (25/06/2026) — điểm khởi đầu mới cho migration
+Việc hợp nhất code đã hoàn tất TRƯỚC trên Vercel để test/demo, nên migration nội bộ giờ **chỉ cần bê NGUYÊN 1 repo unified này vào trong** (không còn 2 hệ thống rời):
+- **1 repo**: `Chapter-CM/shb-dashboard-Facebook` chứa tất cả. **1 Vercel project** `shb-fb-dashboard` chạy tất cả; link demo: `shb-fb-dashboard.vercel.app/` (portal 2 tab).
+- **File theo sản phẩm** (tên = route; URL cũ giữ qua `rewrites` nên VBA/userscript không phải đổi):
+  `api/portal.js` (portal) · `api/fb-dashboard.js` (/api/facebook) · `api/email-dashboard.js` (/api/email) · `api/fb-ingest.js` (/api/ingest) · `api/fb-fetch.js` (cron) · `api/email-track.js` (/api/track).
+- **2 Supabase tách bằng env**: FB `SUPABASE_*`; Email `EMAIL_SUPABASE_*`.
+- **VBA v4.9** đã trỏ `/api/track` của project gộp; userscript vẫn `/api/ingest`.
+➡️ Migration nội bộ = đưa **repo unified này** lên GitLab/EKS + đổi `SUPABASE_*`/`EMAIL_SUPABASE_*` sang DB nội bộ + chuyển dashboard sang `sync.js` build tĩnh. Repo `email-tracker-data` chỉ còn là nguồn đối chiếu (sẽ nghỉ).
+
 ---
 
 ## 2. Hệ thống hiện tại
@@ -134,18 +143,18 @@ VBA Macro (Outlook Desktop) ──gửi beacon (sent/open/click/read)──►
 - **Điều kiện sang G1:** câu 1–4 ✅.
 
 ### Giai đoạn 1 — Code migration + hợp nhất (5–7 ngày)
+> Bắt đầu từ repo unified `shb-dashboard-Facebook` (đã gộp ở §1.3) — KHÔNG còn bước "gộp repo".
+
 | Task | Mô tả |
 |---|---|
-| Gộp repo | 1 repo: `tracker/` (Node ingest cho cả track + ingest), `dashboard/` (sync.js + HTML 2 tab) |
-| `track.js` | Vercel → Node HTTP server (thêm `url.parse()` thủ công ~10 dòng) |
-| `ingest.js` | Vercel → cùng Node server, giữ check `x-ingest-secret` |
-| **Bỏ `fetch.js`** | Theo Phương án A — userscript là nguồn FB duy nhất |
-| `sync.js` chung | Đọc DB nội bộ (events + fb_*) → `index.html` 2 tab, data baked-in |
-| Hợp nhất UI | 2 dashboard cùng design system → 1 trang, tab Email / Facebook |
-| `Dockerfile` + `.gitlab-ci.yml` | tracker (Node :3001) + dashboard (nginx) + schedule sync |
+| `api/email-track.js` + `api/fb-ingest.js` | Vercel handler → Node HTTP server (:3001) (thêm `url.parse()` thủ công ~10 dòng cho track); giữ check `x-ingest-secret` |
+| **Bỏ `api/fb-fetch.js`** | Theo Phương án A — userscript là nguồn FB duy nhất, server khỏi egress |
+| `sync.js` chung | Đọc DB nội bộ (events + fb_*) → bake HTML cho `portal/fb-dashboard/email-dashboard` (thay tầng đọc Supabase REST) |
+| Đổi env DB | `SUPABASE_*` (FB) + `EMAIL_SUPABASE_*` (Email) → credentials DB nội bộ |
+| `Dockerfile` + `.gitlab-ci.yml` | ingest (Node :3001) + dashboard (nginx static) + schedule sync |
 | Font | Google Fonts → font nội bộ/system |
-| Cập nhật bộ thu thập | VBA: đổi URL beacon · Userscript: đổi `INGEST` URL + `@connect` |
-| Test | Toàn bộ chức năng trên dev |
+| Cập nhật bộ thu thập | VBA: đổi URL beacon sang nội bộ · Userscript: đổi `INGEST` URL + `@connect` nội bộ |
+| Test | Toàn bộ chức năng (2 tab) trên dev |
 
 ### Giai đoạn 2 — Deploy & kiểm thử (2–3 ngày)
 - [ ] Pipeline chạy lần đầu → ECR → ArgoCD deploy EKS.
