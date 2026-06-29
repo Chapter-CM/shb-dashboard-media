@@ -5,26 +5,28 @@
 > Branch dev: `claude/laughing-ride-5tk6cn` → PR vào `claude/loving-planck-y6lw57` (production, Vercel auto-deploy).
 
 ## 🧩 Cấu trúc HỢP NHẤT (1 repo + 1 Vercel) — PR #33
-| File | Vai trò | Env / nguồn |
-|---|---|---|
-| `api/index.js` | **Portal** — header SHB + tab Facebook/Email, nhúng same-origin (iframe, `#hash`) | — |
-| `api/facebook.js` | Dashboard Facebook | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (Supabase FB) |
-| `api/email.js` | Dashboard Email (copy từ email-tracker-data/dashboard.js) | `EMAIL_SUPABASE_URL`, `EMAIL_SUPABASE_SERVICE_KEY` |
-| `api/ingest.js` | Nạp bài Group từ userscript (FB) | `SUPABASE_*` + `INGEST_SECRET` |
-| `api/fetch.js` | Cron Graph API FB (phụ; migration nội bộ sẽ bỏ) | `SUPABASE_*` + `FB_*` |
-| `api/track.js` | **Beacon Email** (pixel/click/read) | `EMAIL_SUPABASE_*` |
-| `vercel.json` | rewrite `/` → `/api/index`; cron `/api/fetch`; maxDuration | — |
-- **1 Vercel project** `shb-fb-dashboard` chạy tất cả. URL: `/`=portal · `/api/facebook` · `/api/email` · `/api/ingest` · `/api/track`.
-- ⚠️ **Đồng bộ**: `api/email.js` + `api/track.js` là **bản copy** từ repo `email-tracker-data`. Sửa dashboard/track Email gốc thì đồng bộ lại 2 file này (hoặc ngược lại). Sau migration nội bộ thì repo email gốc nghỉ hẳn.
-- ⚠️ **CHƯA hoàn tất chuyển VBA**: VBA Outlook vẫn gửi beacon tới URL email cũ (`email-tracker-vercel-rho.vercel.app/api/track`). Muốn tắt hẳn Vercel email cũ → **repoint VBA sang `shb-fb-dashboard.vercel.app/api/track`** trước, rồi mới xoá project/repo email cũ.
-- 🧹 Nhánh thừa cần xoá thủ công trên GitHub: `claude/cm-portal` (đã merge vào production), `claude/friendly-cannon-m06mlh` (cũ).
+Tên file = **route**; đặt theo sản phẩm để mở ra hiểu ngay. URL cũ giữ nguyên qua `rewrites` (không cần sửa VBA/userscript).
+
+| File (route) | Vai trò | Env / nguồn | Alias URL cũ (rewrite) |
+|---|---|---|---|
+| `api/portal.js` | **Portal** — header SHB + tab Facebook/Email (iframe, `#hash`) | — | `/` |
+| `api/fb-dashboard.js` | Dashboard Facebook (**file UI chính**) | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | `/api/facebook` |
+| `api/email-dashboard.js` | Dashboard Email (copy từ email-tracker-data/dashboard.js) | `EMAIL_SUPABASE_URL`, `EMAIL_SUPABASE_SERVICE_KEY` | `/api/email` |
+| `api/fb-ingest.js` | Nạp bài Group từ userscript (FB) | `SUPABASE_*` + `INGEST_SECRET` | `/api/ingest` |
+| `api/fb-fetch.js` | Cron Graph API FB (phụ; migration nội bộ sẽ bỏ) | `SUPABASE_*` + `FB_*` | (cron) |
+| `api/email-track.js` | **Beacon Email** (pixel/click/read) | `EMAIL_SUPABASE_*` | `/api/track` |
+| `vercel.json` | rewrites giữ URL cũ; cron `/api/fb-fetch`; maxDuration | — | — |
+- **1 Vercel project** `shb-fb-dashboard` chạy tất cả. URL công khai (qua rewrite) giữ nguyên: `/` · `/api/facebook` · `/api/email` · `/api/ingest` · `/api/track`. Userscript (`/api/ingest`) & VBA (`/api/track`) KHÔNG cần đổi.
+- ⚠️ **Đồng bộ**: `api/email-dashboard.js` + `api/email-track.js` là **bản copy** từ repo `email-tracker-data`. Sửa gốc thì đồng bộ lại (hoặc ngược lại). Sau migration nội bộ repo email gốc nghỉ hẳn.
+- ✅ **VBA đã cập nhật**: `CampaignTracker.bas` v4.9 (repo email-tracker-data) đã đổi `TRACK_URL` → `shb-fb-dashboard.vercel.app/api/track`. User cần cài bản này vào Outlook + test trước khi tắt Vercel email cũ.
+- 🧹 Nhánh `claude/cm-portal` + `claude/friendly-cannon-m06mlh` — xoá thủ công trên GitHub (đã merge/cũ).
 
 ## Kiến trúc dữ liệu
 ```
 Userscript (tools/shb-content-library.user.js v3.6, Tampermonkey)
   ├─ Content Library  → per-post  → /api/ingest → fb_group_posts (+ cột metrics jsonb: full chỉ số per-post)
   └─ Page Insights    → page-level → /api/ingest {kind:'page'} → fb_page_insights (metrics + series jsonb)
-api/facebook.js  → đọc cả 2 bảng, render 1 trang HTML (clientCode extract bằng toString)
+api/fb-dashboard.js  → đọc cả 2 bảng, render 1 trang HTML (clientCode extract bằng toString)
 ```
 - **Bắt dữ liệu**: mở `professional_dashboard` của SHB → **Ctrl+Shift+Y** (auto-tour) hoặc F5 từng trang.
   Quan trọng: đặt **khoảng ngày rộng** (vd 1/11–25/6) ở từng trang để chuỗi dài.

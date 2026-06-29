@@ -1,7 +1,7 @@
 'use strict';
 /*
  * Portal gộp 2 dashboard CM về 1 URL: tab Email | Facebook.
- * Mỗi tab nhúng same-origin /api/email và /api/facebook (đều là trang HTML đầy đủ).
+ * Mỗi tab nhúng same-origin /api/fb-dashboard và /api/email-dashboard (đều là trang HTML đầy đủ).
  * Iframe lazy-load (chỉ set src khi mở lần đầu) + giữ trạng thái khi chuyển tab.
  * Đây là bước "gộp 1 project" để test/demo trên Vercel trước khi migrate nội bộ.
  */
@@ -54,7 +54,7 @@ body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--b
   <iframe id="if-email" title="Email Dashboard" hidden></iframe>
 </div>
 <script>
-var SRC={fb:'/api/facebook',email:'/api/email'},loaded={},cur='fb';
+var SRC={fb:'/api/fb-dashboard',email:'/api/email-dashboard'},loaded={},cur='fb';
 function setLoad(on){var l=document.getElementById('ld');if(l)l.style.display=on?'flex':'none';}
 function ensure(k){var f=document.getElementById('if-'+k);if(!loaded[k]){setLoad(true);f.onload=function(){loaded[k]=1;if(cur===k)setLoad(false);};f.src=SRC[k];}else if(cur===k){setLoad(false);}}
 function show(k){
