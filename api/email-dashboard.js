@@ -1,4 +1,7 @@
 'use strict';
+/* ===== [EMAIL] Dashboard Email — route /api/email-dashboard (alias cũ /api/email).
+ * Đọc Supabase Email qua EMAIL_SUPABASE_URL / EMAIL_SUPABASE_SERVICE_KEY.
+ * Là bản copy từ repo email-tracker-data/api/dashboard.js — đồng bộ khi sửa gốc. ===== */
 const https = require('https');
 // Đổi tên env để KHÔNG đụng Facebook (cùng 1 Vercel project, 2 Supabase khác nhau).
 // Fallback tên cũ để vẫn chạy nếu chỉ set 1 bộ.

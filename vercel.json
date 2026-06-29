@@ -1,13 +1,17 @@
 {
   "crons": [
-    { "path": "/api/fetch", "schedule": "0 1 * * *" }
+    { "path": "/api/fb-fetch", "schedule": "0 1 * * *" }
   ],
   "functions": {
-    "api/index.js": { "maxDuration": 5 },
-    "api/email.js": { "maxDuration": 15 },
-    "api/facebook.js": { "maxDuration": 15 }
+    "api/portal.js": { "maxDuration": 5 },
+    "api/fb-dashboard.js": { "maxDuration": 15 },
+    "api/email-dashboard.js": { "maxDuration": 15 }
   },
   "rewrites": [
-    { "source": "/", "destination": "/api/index" }
+    { "source": "/", "destination": "/api/portal" },
+    { "source": "/api/track", "destination": "/api/email-track" },
+    { "source": "/api/ingest", "destination": "/api/fb-ingest" },
+    { "source": "/api/facebook", "destination": "/api/fb-dashboard" },
+    { "source": "/api/email", "destination": "/api/email-dashboard" }
   ]
 }

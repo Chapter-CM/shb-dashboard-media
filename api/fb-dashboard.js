@@ -1,4 +1,6 @@
 'use strict';
+/* ===== [FACEBOOK] Dashboard Facebook — route /api/fb-dashboard (alias cũ /api/facebook).
+ * Đọc Supabase FB qua SUPABASE_URL / SUPABASE_SERVICE_KEY. Đây là FILE LÀM VIỆC CHÍNH cho UI FB. ===== */
 /*
  * SHB Facebook Dashboard — kế thừa toàn bộ UX/UI của email-tracker + nâng cấp:
  *  - Bảng SORT được theo cột · drill-down từng bài · donut sentiment · heatmap
