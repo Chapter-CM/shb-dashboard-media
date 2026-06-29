@@ -2,7 +2,12 @@
   "crons": [
     { "path": "/api/fetch", "schedule": "0 1 * * *" }
   ],
+  "functions": {
+    "api/index.js": { "maxDuration": 5 },
+    "api/email.js": { "maxDuration": 15 },
+    "api/facebook.js": { "maxDuration": 15 }
+  },
   "rewrites": [
-    { "source": "/", "destination": "/api/facebook" }
+    { "source": "/", "destination": "/api/index" }
   ]
 }
