@@ -1,174 +1,214 @@
-# Kế hoạch Chuyển dịch SHB Facebook Dashboard
-## Từ GitHub + Vercel + Supabase → GitLab Nội bộ SHB
+# Kế hoạch Chuyển dịch & Hợp nhất 2 Dashboard CM vào Hạ tầng Nội bộ SHB
+## Email Tracker + Facebook Dashboard → 1 hệ thống trên GitLab Nội bộ SHB
 
 **Người soạn:** Change Management Team
 **Ngày:** 25/06/2026
 **Trạng thái:** Chờ phê duyệt
-**Tham chiếu:** Mirror kế hoạch `KE_HOACH_MIGRATION.md` của Email Tracker — dùng chung khuôn mẫu, đánh dấu rõ các điểm KHÁC.
+**Ghi chú:** Hợp nhất 2 kế hoạch riêng (Email Tracker — bản 21/06; Facebook Dashboard — bản 25/06). Xin **hạ tầng dùng chung** một lần để khỏi migrate 2 lần rồi gộp lại.
 
 ---
 
 ## 1. Tổng quan
 
 ### 1.1 Mục đích
-Facebook Dashboard đo hiệu quả truyền thông Group "SHB Một Nhà" của team Change Management. Hiện chạy trên hạ tầng ngoài (GitHub, Vercel, Supabase). Lý do chuyển vào nội bộ giống hệt Email Tracker: **bảo mật dữ liệu, tuân thủ IT, ổn định, dễ bảo trì**.
+Hai dashboard đo hiệu quả truyền thông nội bộ của team Change Management:
+- **Email Tracker** — đo reach/engagement email campaign gửi từ Outlook.
+- **Facebook Dashboard** — đo hiệu quả bài Group "SHB Một Nhà".
 
-### 1.2 Hệ thống hiện tại
-```
-[Nguồn CHÍNH] Userscript Tampermonkey (trình duyệt admin, đăng nhập facebook.com)
-    │  hook fetch/XHR → bắt response GraphQL Professional Dashboard
-    │  (Content Library group + Page Insights), POST kèm secret
-    ▼
-api/ingest.js   ← Vercel (Singapore)   ──ghi──►  Supabase
-                                                  (fb_group_posts, fb_page_insights)
-[Nguồn PHỤ]  api/fetch.js  ← Vercel cron → gọi graph.facebook.com (Page token) ──ghi──► Supabase
-api/facebook.js ← Vercel (Singapore)   ◄─đọc──   Supabase
-```
+Cả hai đang chạy trên hạ tầng ngoài (GitHub, Vercel, Supabase — Singapore). Chuyển vào nội bộ SHB để: **bảo mật dữ liệu, tuân thủ chính sách IT, ổn định (không phụ thuộc dịch vụ ngoài), dễ bảo trì (IT hỗ trợ trực tiếp)**.
 
-| Thành phần | Dịch vụ | Vị trí |
-|---|---|---|
-| Source code | GitHub | Nước ngoài |
-| Hosting API | Vercel Serverless | Singapore |
-| Database | Supabase PostgreSQL | Singapore |
-| Tracking/ingest URL | `shb-fb-dashboard.vercel.app` | Nước ngoài |
+### 1.2 Định hướng: chuyển dịch ĐỒNG THỜI và HỢP NHẤT
+Thay vì migrate 2 hệ thống độc lập rồi mới gộp, ta **xin hạ tầng dùng chung ngay từ đầu** (1 DB, 1 GitLab repo, 1 pipeline, 1 DNS) và gộp thành **1 dashboard 2 tab (Email / Facebook)**. Cả hai vốn dùng **cùng design system** và đều là Node module in ra 1 trang HTML → gộp tự nhiên.
 
 ---
 
-## 2. Phân tích kỹ thuật — ĐIỂM KHÁC CỐT LÕI so với Email Tracker
+## 2. Hệ thống hiện tại
 
-### 2.1 Khác biệt căn bản về cách lấy dữ liệu
+### 2.1 Email Tracker
+```
+VBA Macro (Outlook Desktop) ──gửi beacon (sent/open/click/read)──►
+  api/track.js  ← Vercel  ──ghi──►  Supabase (events)
+  api/dashboard.js ← Vercel ◄─đọc──  Supabase
+```
+
+### 2.2 Facebook Dashboard
+```
+[Nguồn CHÍNH] Userscript Tampermonkey (trình duyệt admin, đăng nhập facebook.com)
+   ──hook fetch/XHR bắt GraphQL Professional Dashboard, POST kèm secret──►
+  api/ingest.js ← Vercel ──ghi──►  Supabase (fb_group_posts, fb_page_insights)
+  api/facebook.js ← Vercel ◄─đọc── Supabase
+[Nguồn PHỤ] api/fetch.js ← Vercel cron → graph.facebook.com (Page token) → Supabase
+```
+
+| | Source | Hosting | DB | URL |
+|---|---|---|---|---|
+| Email | GitHub | Vercel | Supabase | `email-tracker-vercel-rho.vercel.app` |
+| Facebook | GitHub | Vercel | Supabase | `shb-fb-dashboard.vercel.app` |
+
+---
+
+## 3. Phân tích cốt lõi: 2 cách lấy dữ liệu khác nhau
+
+Đây là điểm KHÁC quan trọng nhất giữa 2 dashboard — nhưng **cả hai đều quy về cùng một mô hình "bộ thu thập bên ngoài, chỉ đổi URL đích"**:
 
 | | Email Tracker | Facebook Dashboard |
 |---|---|---|
-| Cơ chế nạp | Outlook **tự fetch** beacon URL → server ghi log. Không cần phiên đăng nhập, không cần trình duyệt | Phải có **admin đăng nhập facebook.com**, userscript hook GraphQL nội bộ rồi POST |
-| Bộ thu thập | VBA macro (Outlook) | **Userscript Tampermonkey** (trình duyệt) |
-| Phụ thuộc Internet ra ngoài của server | **KHÔNG** | `api/fetch.js` cần egress tới `graph.facebook.com` |
-| Yếu tố con người | Tự động khi gửi email | **Thủ công**: admin mở Professional Dashboard, Ctrl+Shift+Y để bắt |
+| Bộ thu thập | **VBA macro** (Outlook) | **Userscript Tampermonkey** (trình duyệt) |
+| Cơ chế | Outlook **tự fetch** beacon URL → server ghi log | Admin đăng nhập facebook.com, userscript hook GraphQL nội bộ → POST |
+| Phụ thuộc phiên đăng nhập | Không | **Có** (cookie admin facebook.com) |
+| Yếu tố con người | Tự động khi gửi | **Thủ công** (admin mở Pro Dashboard, Ctrl+Shift+Y) |
+| Để migrate, bộ thu thập cần | **Đổi URL beacon** | **Đổi URL `INGEST` + `@connect`** |
 
-### 2.2 Bốn thành phần (Email chỉ có 2)
+**Kết luận quan trọng:** Userscript (giống VBA) **không cần và không thể đưa "vào trong"** — nó bắt buộc chạy ở trình duyệt admin vì Meta đã gỡ Groups API công khai (22/04/2024) và post-insights Graph đã chết. Nhưng điều đó **KHÔNG cản trở migration**: ta chỉ đổi URL đích của nó sang nội bộ, y như VBA. Toàn bộ phần server (ingest/track/dashboard/DB) migrate vào trong bình thường.
 
-- **Userscript** (`tools/shb-content-library.user.js`) — chạy **bên ngoài**, trên trình duyệt admin. Bắt response Content Library (bài Group) + Page Insights time-series. **Nguồn dữ liệu CHÍNH** (Groups API công khai đã bị Meta gỡ 22/04/2024; post-level Insights qua Graph đã chết — probe 23/06/2026 trả #100).
-- **`api/ingest.js`** — endpoint nhận POST của userscript, kiểm tra header `x-ingest-secret`, upsert vào Supabase. (Tương đương `track.js` của Email.)
-- **`api/fetch.js`** — cron gọi Graph API Page (reactions/comments/shares qua edge expansion; page insights v25). **Nguồn PHỤ**, cần egress Internet.
-- **`api/facebook.js`** — dashboard, đọc Supabase, render HTML (Node module in ra 1 trang). (Tương đương `dashboard.js` của Email.)
-
-### 2.3 Bảng dữ liệu Supabase
-- `fb_group_posts` — per-post (title, reach, viewers, engagement, comments, cột `metrics` jsonb).
-- `fb_page_insights` — page-level (`metrics` + `series` jsonb: views/interactions/followers time-series, nhân khẩu học).
-- (Legacy) `fb_posts`, `fb_page_snapshots` từ `fetch.js`.
-- Migrations: `db/schema.sql`, `migrate_01..04`.
-
-### 2.4 Env cần migrate
-| Biến | Dùng ở | Ghi chú |
-|---|---|---|
-| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | ingest + fetch + dashboard | → credentials DB nội bộ |
-| `INGEST_SECRET` | ingest + userscript | Giữ, đồng bộ 2 nơi |
-| `FB_GROUP_ID` | ingest | Giữ |
-| `FB_PAGE_ID`, `FB_PAGE_TOKEN`, `GRAPH_VERSION`, `FB_*_METRICS` | fetch | Chỉ cần nếu giữ `fetch.js` |
-| `TARGET_ER` (=6), `MIN_N` | dashboard | Giữ |
+### 3.1 Quyết định về `api/fetch.js` (Graph cron) — Phương án A: BỎ
+- `fetch.js` là **nguồn PHỤ**, chỉ nuôi bảng legacy `fb_posts`/`fb_page_snapshots`; **post-insights Graph đã chết** (#100, probe 23/06/2026).
+- Đã kiểm tra `loadData()` của `facebook.js`: có nhánh `!hasPage && hasGroup → mapSupabase([], …)` → **dashboard chạy đầy đủ chỉ với dữ liệu userscript** (`fb_group_posts` + `fb_page_insights`).
+- ➡️ **Bỏ hẳn `fetch.js`.** Hệ quả tích cực: **không còn phụ thuộc egress ra Internet** từ server nội bộ → migration sạch y như Email (server hoàn toàn không gọi ra ngoài). Câu hỏi egress với IT trở nên **không cần thiết**.
 
 ---
 
-## 3. Trả lời câu hỏi: "Có chuyển userscript vào trong được không?"
-
-**KHÔNG cần và không thể đưa userscript 'vào trong' — nhưng điều đó KHÔNG cản trở migration.**
-
-Userscript đóng đúng vai trò của VBA macro trong kế hoạch Email: **bộ thu thập chạy bên ngoài, chỉ cần đổi URL đích**. Lý do bắt buộc chạy ngoài:
-- Cần **cookie/phiên đăng nhập admin** trên facebook.com để đọc GraphQL nội bộ của Professional Dashboard.
-- Không còn API công khai cho nội dung Group (Meta gỡ 22/04/2024) và post-insights Graph đã chết.
-
-➡️ Việc migrate **chỉ đổi 1 dòng** trong userscript:
-```
-var INGEST = 'https://<dashboard-nội-bộ>/api/ingest';   // thay vercel.app
-// và thêm @connect <domain-nội-bộ> trong header userscript
-```
-Giống hệt VBA macro của Email chỉ đổi URL beacon.
-
----
-
-## 4. Kiến trúc đề xuất sau migration
+## 4. Kiến trúc hợp nhất sau migration
 
 ```
-[Bên ngoài, không đổi bản chất]
-  Userscript TM (trình duyệt admin) ──POST /api/ingest──┐   (đổi URL + @connect)
-                                                        │
-┌───────────────────────────────────────────────────────────────┐
-│              AWS EKS Nội bộ SHB                                │
-│   fb-dashboard.dev-saha.aws.shb.com.vn                         │
-│   nginx (80)                                                   │
-│   ├── POST /api/ingest → Node.js Ingest Server (:3001) ──ghi──►│ DB nội bộ
-│   └── GET  /           → Static Dashboard HTML                 │
-└───────────────────────────────────────────────────────────────┘
-                         ▲ build theo schedule
-        GitLab CI/CD Schedule → sync.js đọc DB nội bộ → index.html (data baked-in)
-
-[TUỲ CHỌN] api/fetch.js (Graph cron) — CHỈ chạy nếu có egress tới facebook.com
+[Bên ngoài — bộ thu thập, chỉ đổi URL]
+  VBA macro (Outlook) ───POST/GET beacon──────────┐
+  Userscript TM (browser admin) ──POST /api/ingest─┤
+                                                   ▼
+┌──────────────────────────────────────────────────────────────┐
+│             AWS EKS Nội bộ SHB                                │
+│   cm-dashboard.dev-saha.aws.shb.com.vn                        │
+│   nginx (80)                                                  │
+│   ├── GET  /api/track   → Node Ingest Server (:3001) ──┐      │
+│   ├── POST /api/ingest  → Node Ingest Server (:3001) ──┤ghi   │
+│   └── GET  /            → Dashboard HTML tĩnh (2 tab)   ▼      │
+└──────────────────────────────────────────────────────  DB nội bộ
+                         ▲ build theo schedule (1h)
+        GitLab CI/CD Schedule → sync.js đọc DB → index.html (data baked-in)
 ```
 
-### 4.1 Luồng sau migration
-- **Nạp (thủ công, như hiện tại):** admin mở Professional Dashboard → userscript POST → ingest server (nội bộ) ghi DB nội bộ.
-- **Dashboard (schedule):** mỗi 1h GitLab CI chạy `sync.js` đọc DB → bake HTML → Docker → ECR → ArgoCD → EKS → nginx serve tĩnh. (Y hệt Email.)
+- **1 DB nội bộ** chứa cả `events` (email) lẫn `fb_group_posts`/`fb_page_insights` (facebook).
+- **1 Node ingest server** phục vụ cả `/api/track` (email beacon) và `/api/ingest` (facebook userscript).
+- **1 trang dashboard** 2 tab Email / Facebook, build tĩnh bằng **1 `sync.js`** chung.
+- **1 GitLab repo, 1 pipeline, 1 DNS.**
 
 ---
 
-## 5. Phân tích rủi ro (khác Email được tô đậm)
+## 5. So sánh trước / sau
 
-| Rủi ro | Mức độ | Cách xử lý |
+| | Hiện tại (×2 hệ thống) | Sau migration (hợp nhất) |
 |---|---|---|
-| **Userscript cần reach domain nội bộ** | Trung bình | Máy admin phải ở mạng SHB tới được dashboard nội bộ; sửa `@connect` + giữ CORS `*` + secret ở ingest |
-| **`api/fetch.js` cần egress ra facebook.com** ⚠️ KHÁC EMAIL | Trung bình | Nếu mạng nội bộ chặn outbound: **bỏ/đặt fetch.js ở nơi có egress**. Không nghiêm trọng vì nguồn chính là userscript (post-insights Graph đã chết) |
-| Ingest không thể là static file | Thấp | Cần 1 Node server (:3001) như Email |
-| Dashboard không real-time | Thấp | Delay ≤1h, chấp nhận được |
-| Data migration từ Supabase | Thấp | Export `fb_group_posts` + `fb_page_insights` (kèm cột jsonb) → import DB nội bộ |
-| Google Fonts bị chặn | Thấp | Font nội bộ / system font |
-| **Con người vẫn phải bắt thủ công** | — | Không đổi; quy trình Ctrl+Shift+Y giữ nguyên |
+| Source | 2 repo GitHub | 1 GitLab repo nội bộ |
+| Hosting | 2 dự án Vercel | 1 cụm AWS EKS |
+| Database | 2 Supabase | 1 DB nội bộ |
+| Dashboard | 2 trang real-time | 1 trang 2 tab, cập nhật schedule (≤1h) |
+| Bộ thu thập | VBA + Userscript (đổi URL) | Giữ nguyên, chỉ đổi URL về nội bộ |
+| Egress Internet của server | Email: không · FB: có (fetch.js) | **Không** (bỏ fetch.js) |
 
 ---
 
-## 6. Cần xác nhận từ IT/DevOps (bổ sung so với Email)
+## 6. Xác nhận từ IT/DevOps (đã hợp nhất, loại trùng)
 
-Toàn bộ câu hỏi 1–6 trong kế hoạch Email **áp dụng y nguyên** (DB nội bộ, EKS/CI connect DB, Node server :3001 song song nginx, GitLab repo, DNS subdomain). **Bổ sung riêng cho Facebook:**
+| # | Câu hỏi | Người xác nhận | Trạng thái |
+|---|---|---|---|
+| 1 | Cấp **PostgreSQL/MySQL nội bộ** (~100MB cho cả 2) | Nam Tran Hoang (DevOps) | Chờ |
+| 2 | **EKS pods** connect được DB đó | Nam Tran Hoang | Chờ |
+| 3 | **GitLab CI runner** connect được DB đó | Nam Tran Hoang | Chờ |
+| 4 | Deploy **1 Node server (:3001)** song song nginx | Nam Tran Hoang | Chờ |
+| 5 | Tạo **GitLab repo** nội bộ + cấp quyền | Quang Doan Van (GitLab Admin) | Chờ |
+| 6 | Cấp **DNS subdomain** nội bộ (1 domain chung) | Mạnh (System) | Chờ |
+| 7 | Máy **admin chạy userscript** reach được domain nội bộ để POST `/api/ingest` | CM Team | ✅ **CÓ** (đã xác nhận) |
+| ~~8~~ | ~~Egress tới graph.facebook.com~~ | — | **Không cần** (đã bỏ `fetch.js` — Phương án A) |
 
-| # | Câu hỏi | Tại sao |
+**Lưu ý:** egress Internet không còn là điều kiện chặn nhờ bỏ `fetch.js`. Beacon Email (Outlook) và POST userscript (browser admin) đều phát từ **trong mạng SHB** tới domain nội bộ — đã xác nhận khả thi (câu 7).
+
+---
+
+## 7. Kế hoạch thực hiện
+
+### Giai đoạn 0 — Chuẩn bị (1–2 tuần)
+- [ ] Họp Nam: xác nhận DB nội bộ + connectivity (câu 1–4).
+- [ ] Họp Quang: tạo 1 GitLab repo hợp nhất.
+- [ ] Thống nhất 1 DNS chung với Mạnh.
+- [ ] Export toàn bộ data: Supabase Email (`events`, ~40k) + Supabase FB (`fb_group_posts`, `fb_page_insights`).
+- **Điều kiện sang G1:** câu 1–4 ✅.
+
+### Giai đoạn 1 — Code migration + hợp nhất (5–7 ngày)
+| Task | Mô tả |
+|---|---|
+| Gộp repo | 1 repo: `tracker/` (Node ingest cho cả track + ingest), `dashboard/` (sync.js + HTML 2 tab) |
+| `track.js` | Vercel → Node HTTP server (thêm `url.parse()` thủ công ~10 dòng) |
+| `ingest.js` | Vercel → cùng Node server, giữ check `x-ingest-secret` |
+| **Bỏ `fetch.js`** | Theo Phương án A — userscript là nguồn FB duy nhất |
+| `sync.js` chung | Đọc DB nội bộ (events + fb_*) → `index.html` 2 tab, data baked-in |
+| Hợp nhất UI | 2 dashboard cùng design system → 1 trang, tab Email / Facebook |
+| `Dockerfile` + `.gitlab-ci.yml` | tracker (Node :3001) + dashboard (nginx) + schedule sync |
+| Font | Google Fonts → font nội bộ/system |
+| Cập nhật bộ thu thập | VBA: đổi URL beacon · Userscript: đổi `INGEST` URL + `@connect` |
+| Test | Toàn bộ chức năng trên dev |
+
+### Giai đoạn 2 — Deploy & kiểm thử (2–3 ngày)
+- [ ] Pipeline chạy lần đầu → ECR → ArgoCD deploy EKS.
+- [ ] Mạnh cấp DNS.
+- [ ] Test email: gửi thử → beacon ghi DB nội bộ.
+- [ ] Test facebook: chạy userscript → ingest ghi DB nội bộ.
+- [ ] Test schedule: chờ 1 chu kỳ → data tự cập nhật, cả 2 tab.
+
+### Giai đoạn 3 — Chạy song song & cutover (1 tuần)
+- [ ] Ngày 1–5: bộ thu thập gửi tới CẢ 2 đích (Vercel + nội bộ).
+- [ ] Ngày 5: so dữ liệu 2 hệ thống.
+- [ ] Ngày 6: chuyển VBA + userscript chỉ còn URL nội bộ.
+- [ ] Ngày 7: tắt Vercel + Supabase (cả 2 dự án).
+
+---
+
+## 8. Rủi ro & xử lý (hợp nhất)
+
+| Rủi ro | Mức độ | Xử lý |
 |---|---|---|
-| 7 | Máy admin (chạy userscript trên facebook.com) có **reach được domain dashboard nội bộ** để POST `/api/ingest` không? | Đường nạp dữ liệu chính |
-| 8 | Có cho **egress tới `graph.facebook.com`** từ EKS/CI không? | Quyết định giữ hay bỏ `api/fetch.js` |
+| VBA + userscript cần đổi URL | Trung bình | Thao tác một lần, có hướng dẫn |
+| Userscript reach domain nội bộ | Thấp | Đã xác nhận CÓ (câu 7); sửa `@connect` + giữ CORS+secret ở ingest |
+| Dashboard không real-time | Thấp | Delay ≤1h — chấp nhận được |
+| Data migration từ 2 Supabase | Thấp | Export → import một lần (events + fb_* kèm cột jsonb) |
+| Google Fonts bị chặn | Thấp | Font nội bộ |
+| Bỏ `fetch.js` mất số Graph | Thấp | Dashboard không dùng tới (đã kiểm chứng loadData). Nếu sau cần: mở rộng userscript bắt thêm — không cần egress server |
+| Gián đoạn khi cutover | Trung bình | Chạy song song 1 tuần trước khi tắt |
 
 ---
 
-## 7. Code migration (mirror Email, 3–4 ngày)
+## 9. Tổng thời gian
+| Giai đoạn | Thời gian |
+|---|---|
+| G0 Chuẩn bị | 1–2 tuần |
+| G1 Code + hợp nhất | 5–7 ngày |
+| G2 Deploy | 2–3 ngày |
+| G3 Cutover | 1 tuần |
+| **Tổng** | **~4–5 tuần** |
 
-| Task | Mô tả | Khác Email? |
-|---|---|---|
-| `sync.js` | Đọc DB nội bộ (`fb_group_posts` + `fb_page_insights`) → `index.html` data baked-in | Tương tự, nhưng đọc 2 bảng + cột jsonb |
-| `ingest.js` | Vercel handler → Node HTTP server (parse body thủ công, giữ check secret) | Có sẵn body-parse; ít sửa |
-| `fetch.js` | Giữ (nếu có egress) chạy như cron CI, hoặc loại bỏ | **Quyết định theo câu 8** |
-| `facebook.js` | Serverless → `sync.js` build tĩnh (in HTML string giữ nguyên `clientCode`) | Giống `dashboard.js` Email |
-| `Dockerfile` + `.gitlab-ci.yml` | tracker/ingest (Node) + dashboard (nginx) + schedule sync | Giống Email |
-| Font | Google Fonts → nội bộ | Giống Email |
-| Userscript | Đổi `INGEST` URL + `@connect` | Giống "VBA đổi URL" |
-
-**Lưu ý kỹ thuật:** `api/facebook.js` là Node module in HTML; toàn bộ browser logic nằm trong `clientCode()` extract bằng `toString()` — chuyển sang sync.js không đổi logic client, chỉ thay tầng đọc dữ liệu (Supabase REST → đọc DB nội bộ).
-
----
-
-## 8. Giai đoạn & cutover
-Giống Email: **G0 chuẩn bị (1–2 tuần)** → **G1 code (3–4 ngày)** → **G2 deploy & test (2–3 ngày)** → **G3 chạy song song + cutover (1 tuần, userscript POST tới CẢ 2 URL rồi mới cắt Vercel)**.
-
----
-
-## 9. Hướng GỘP 2 DASHBOARD (định hướng tương lai)
-Sau khi cả 2 vào nội bộ, có thể hợp nhất:
-- **Chung DB nội bộ** (2 nhóm bảng: `events` của Email + `fb_*` của Facebook).
-- **2 đường nạp độc lập**: beacon (Outlook→track) và userscript (browser→ingest) — giữ nguyên, chỉ chung hạ tầng.
-- **1 trang dashboard** có 2 tab Email / Facebook (cả hai đều là Node module in HTML string, cùng design system → gộp tự nhiên), build chung bằng 1 `sync.js`.
-- 1 GitLab repo, 1 pipeline, 1 DNS.
+**Không cần:** mua license, đổi quy trình gửi email, training lại người dùng (giao diện giữ nguyên, chỉ thêm tab).
 
 ---
 
 ## 10. Phương án dự phòng
-Nếu **không cấp được DB nội bộ**: Hybrid — migrate dashboard + sync vào nội bộ, **giữ ingest.js + Supabase ngoài** (dashboard đọc Supabase lúc build). Đưa được giao diện vào kiểm soát nội bộ, dữ liệu vẫn qua ngoài.
+Nếu **không cấp được DB nội bộ** (câu 1 = ❌): **Hybrid** — migrate dashboard hợp nhất + `sync.js` vào nội bộ (đọc Supabase lúc build), giữ track.js + ingest.js + Supabase ở ngoài. Đưa được giao diện vào kiểm soát nội bộ; dữ liệu vẫn qua ngoài.
 
 ---
 
-*Tài liệu mirror kế hoạch Email Tracker, điều chỉnh cho đặc thù Facebook (userscript thay VBA, thêm phụ thuộc egress của fetch.js). Trình phê duyệt cùng kế hoạch Email để triển khai đồng bộ.*
+## 11. Checklist trước khi tắt Vercel
+```
+□ Pipeline GitLab chạy thành công
+□ Docker image trong ECR; ArgoCD deploy pod EKS
+□ URL nội bộ accessible từ mạng SHB
+□ Tắt internet → dashboard vẫn load (không CDN ngoài)
+□ Email: gửi test → event ghi DB nội bộ
+□ Facebook: userscript → ingest ghi DB nội bộ
+□ Dashboard hiển thị đúng cả 2 tab sau 1 chu kỳ schedule
+□ Data cũ từ 2 Supabase đã import đầy đủ
+□ VBA + userscript đã đổi URL nội bộ
+□ Không lỗi browser console
+□ Thông báo team CM URL mới
+```
+
+---
+
+*Tài liệu hợp nhất từ 2 kế hoạch migration. Câu 7 = CÓ; bỏ `fetch.js` (Phương án A) nên không cần egress Internet. Trình phê duyệt một lần cho cả 2 dashboard.*
