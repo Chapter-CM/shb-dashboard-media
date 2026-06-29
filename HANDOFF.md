@@ -1,7 +1,23 @@
-# HANDOFF — SHB Facebook Dashboard (cập nhật 25/06/2026, sau PR #32 + kế hoạch migration)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 25/06/2026)
 
-> Dashboard đo hiệu quả bài đăng Group "SHB Một Nhà" (change management / truyền thông nội bộ).
-> Live: https://shb-fb-dashboard.vercel.app/api/facebook · Branch dev: `claude/laughing-ride-5tk6cn` → PR vào `claude/loving-planck-y6lw57` (production, Vercel auto-deploy).
+> Repo này giờ là **bản hợp nhất 1 repo + 1 Vercel** cho cả 2 dashboard CM.
+> Live (portal): https://shb-fb-dashboard.vercel.app/ → tab **Facebook | Email**.
+> Branch dev: `claude/laughing-ride-5tk6cn` → PR vào `claude/loving-planck-y6lw57` (production, Vercel auto-deploy).
+
+## 🧩 Cấu trúc HỢP NHẤT (1 repo + 1 Vercel) — PR #33
+| File | Vai trò | Env / nguồn |
+|---|---|---|
+| `api/index.js` | **Portal** — header SHB + tab Facebook/Email, nhúng same-origin (iframe, `#hash`) | — |
+| `api/facebook.js` | Dashboard Facebook | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (Supabase FB) |
+| `api/email.js` | Dashboard Email (copy từ email-tracker-data/dashboard.js) | `EMAIL_SUPABASE_URL`, `EMAIL_SUPABASE_SERVICE_KEY` |
+| `api/ingest.js` | Nạp bài Group từ userscript (FB) | `SUPABASE_*` + `INGEST_SECRET` |
+| `api/fetch.js` | Cron Graph API FB (phụ; migration nội bộ sẽ bỏ) | `SUPABASE_*` + `FB_*` |
+| `api/track.js` | **Beacon Email** (pixel/click/read) | `EMAIL_SUPABASE_*` |
+| `vercel.json` | rewrite `/` → `/api/index`; cron `/api/fetch`; maxDuration | — |
+- **1 Vercel project** `shb-fb-dashboard` chạy tất cả. URL: `/`=portal · `/api/facebook` · `/api/email` · `/api/ingest` · `/api/track`.
+- ⚠️ **Đồng bộ**: `api/email.js` + `api/track.js` là **bản copy** từ repo `email-tracker-data`. Sửa dashboard/track Email gốc thì đồng bộ lại 2 file này (hoặc ngược lại). Sau migration nội bộ thì repo email gốc nghỉ hẳn.
+- ⚠️ **CHƯA hoàn tất chuyển VBA**: VBA Outlook vẫn gửi beacon tới URL email cũ (`email-tracker-vercel-rho.vercel.app/api/track`). Muốn tắt hẳn Vercel email cũ → **repoint VBA sang `shb-fb-dashboard.vercel.app/api/track`** trước, rồi mới xoá project/repo email cũ.
+- 🧹 Nhánh thừa cần xoá thủ công trên GitHub: `claude/cm-portal` (đã merge vào production), `claude/friendly-cannon-m06mlh` (cũ).
 
 ## Kiến trúc dữ liệu
 ```
