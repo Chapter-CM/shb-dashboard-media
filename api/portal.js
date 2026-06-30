@@ -17,18 +17,21 @@ module.exports = (req, res) => {
 :root{--bg:#0b0916;--bar:rgba(20,17,38,.92);--stroke:rgba(255,255,255,.10);--text:#f2effc;--muted:#9a95bd;--accent:#8b7bff;--grad:linear-gradient(135deg,#7c5cff 0%,#5b8cff 100%)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
-.bar{height:54px;flex:none;display:flex;align-items:center;gap:16px;padding:0 20px;background:var(--bar);border-bottom:1px solid var(--stroke);backdrop-filter:blur(20px) saturate(150%);z-index:2}
+body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+/* Logo + tab nổi (overlay) lên cùng dòng với thanh điều khiển của dashboard (vùng trái masthead trống do brand đã ẩn khi nhúng) */
+.topbar{position:absolute;top:0;left:0;right:0;z-index:5;height:63px;pointer-events:none}
+.topbar-in{max-width:1200px;margin:0 auto;height:100%;display:flex;align-items:center;gap:14px;padding:0 26px}
+.topbar-in>*{pointer-events:auto}
 .brand{display:flex;align-items:center;gap:9px}
 .logo{flex:none;display:block;border-radius:8px;box-shadow:0 6px 16px -7px rgba(238,115,37,.7)}
 .wm{font-size:16px;font-weight:800;letter-spacing:.01em;color:#fff;line-height:1}
 .pn{font-size:12px;color:var(--muted);font-weight:600;padding-left:10px;margin-left:2px;border-left:1px solid var(--stroke)}
-.seg{display:flex;gap:3px;background:rgba(255,255,255,.05);border:1px solid var(--stroke);border-radius:12px;padding:3px}
+.seg{display:flex;gap:3px;background:rgba(255,255,255,.06);border:1px solid var(--stroke);border-radius:12px;padding:3px;backdrop-filter:blur(8px)}
 .tab{display:flex;align-items:center;gap:7px;background:transparent;border:0;color:var(--muted);font:inherit;font-size:13px;font-weight:700;padding:7px 16px;border-radius:9px;cursor:pointer;transition:.16s}
 .tab:hover{color:var(--text)}
 .tab.on{color:#fff;background:var(--grad);box-shadow:0 6px 16px -8px rgba(124,92,255,.9)}
 .tab .ic{font-size:14px;line-height:1}
-.stage{flex:1;position:relative;background:var(--bg)}
+.stage{position:absolute;inset:0;background:var(--bg)}
 .stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
 .stage iframe[hidden]{display:none}
 .ld{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;gap:10px}
@@ -37,7 +40,12 @@ body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--b
 @media(max-width:560px){.pn{display:none}.tab{padding:7px 12px}}
 </style></head>
 <body>
-<div class="bar">
+<div class="stage">
+  <div class="ld" id="ld"><span class="sp"></span><span>Đang tải…</span></div>
+  <iframe id="if-fb" title="Facebook Dashboard"></iframe>
+  <iframe id="if-email" title="Email Dashboard" hidden></iframe>
+</div>
+<div class="topbar"><div class="topbar-in">
   <div class="brand">
     <svg class="logo" viewBox="0 0 32 32" width="30" height="30" role="img" aria-label="SHB"><rect width="32" height="32" rx="8" fill="#ee7325"/><text x="16" y="22.5" text-anchor="middle" font-family="'Space Grotesk',sans-serif" font-size="20" font-weight="800" fill="#fff">S</text></svg>
     <span class="wm">SHB</span><span class="pn">CM Dashboard</span>
@@ -46,12 +54,7 @@ body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--b
     <button class="tab on" id="tab-fb" onclick="show('fb')"><span class="ic">📘</span>Facebook</button>
     <button class="tab" id="tab-email" onclick="show('email')"><span class="ic">✉️</span>Email</button>
   </div>
-</div>
-<div class="stage">
-  <div class="ld" id="ld"><span class="sp"></span><span>Đang tải…</span></div>
-  <iframe id="if-fb" title="Facebook Dashboard"></iframe>
-  <iframe id="if-email" title="Email Dashboard" hidden></iframe>
-</div>
+</div></div>
 <script>
 var SRC={fb:'/api/fb-dashboard',email:'/api/email-dashboard'},loaded={},cur='fb';
 function setLoad(on){var l=document.getElementById('ld');if(l)l.style.display=on?'flex':'none';}
