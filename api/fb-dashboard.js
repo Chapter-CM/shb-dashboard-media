@@ -897,8 +897,7 @@ function masthead(mode){
     +dateCtrl()
     +'<button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K)">⌘K</button>'
     +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Sáng/Tối">'+(_theme==='dark'?'☼':'☾')+'</button>'
-    +'<button class="icon-btn" onclick="toggleDensity()" data-tip="Thoáng/Gọn">⇕</button>'
-    +'<span class="fresh" data-tip="Nguồn dữ liệu">● '+(DATA.live?'live':'demo')+'</span>'+mBtn+'</div></div></div>';
+    +mBtn+'</div></div></div>';
 }
 
 /* ── views ── */
@@ -937,10 +936,16 @@ function pageDailyChart(daily,unit){
 }
 function executive(d,cur,prev){
   var s=d.sum,now=new Date().toLocaleDateString('vi-VN',{month:'long',year:'numeric'});
+  // Dùng CÙNG số liệu với bảng điều hành (heroRow): Lượt xem/Tương tác theo NGÀY HOẠT ĐỘNG (page series), ER = eng÷views.
+  var PS=(DATA.pageInsights&&DATA.pageInsights.series)||{};
+  var cFil=Object.keys(_filter||{}).some(function(k){return _filter[k];});
+  var viewsV=(!cFil&&PS.views&&PS.views.length)?sumSeries(PS.views):s.views;
+  var engVv=(!cFil&&PS.interactions&&PS.interactions.length)?sumSeries(PS.interactions):s.eng;
+  var erV=viewsV?pc(engVv/viewsV*100):s.engRate;
   var head='<div class="exec-h"><div style="font-size:11.5px;opacity:.85;letter-spacing:.06em;text-transform:uppercase;margin-bottom:22px">Báo cáo truyền thông Facebook · CM Team · '+now+'</div><div class="exec-k">'
-    +'<div class="exec-kp"><div class="v">'+s.engRate+'%</div><div class="l">Tỷ lệ tương tác (ER)</div></div>'
-    +'<div class="exec-kp"><div class="v">'+nf(s.views)+'</div><div class="l">Lượt xem</div></div>'
-    +'<div class="exec-kp"><div class="v">'+nf(s.eng)+'</div><div class="l">Lượt tương tác</div></div>'
+    +'<div class="exec-kp"><div class="v">'+erV+'%</div><div class="l">Tỷ lệ tương tác (ER)</div></div>'
+    +'<div class="exec-kp"><div class="v">'+nf(viewsV)+'</div><div class="l">Lượt xem</div></div>'
+    +'<div class="exec-kp"><div class="v">'+nf(engVv)+'</div><div class="l">Lượt tương tác</div></div>'
     +'<div class="exec-kp"><div class="v">'+nf(s.followers)+'</div><div class="l">Người theo dõi</div></div></div></div>';
   var top=d.rows.slice(0,5).map(function(r){return '<tr><td><span class="nm">'+esc(r.p.msg.slice(0,46))+'</span></td><td><span class="pill p-neutral">'+esc(r.p.type)+'</span></td><td class="num">'+nf(r.p.views)+'</td><td class="num"><b>'+nf(r.eng)+'</b></td><td class="num">'+r.er+'%</td></tr>';}).join('');
   var ins=insightsOf(d),ih='<div class="ins">';ins.slice(0,4).forEach(function(i){ih+='<div class="in '+(i.t==='warn'?'warn':'good')+'"><div class="mk"></div><div class="x">'+i.x+'</div></div>';});ih+='</div>';

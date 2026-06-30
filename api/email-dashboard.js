@@ -125,6 +125,18 @@ section,.kpi,.gauge-card,.panel,.tier{animation:fade .5s cubic-bezier(.16,1,.3,1
 .seg{display:flex;background:var(--glass);border:1px solid var(--stroke);border-radius:12px;padding:3px;backdrop-filter:blur(10px)}
 .seg button{background:none;border:none;color:var(--muted);padding:6px 13px;cursor:pointer;font:inherit;font-size:12px;font-weight:600;border-radius:9px;transition:.18s}
 .seg button.on{background:var(--grad);color:#fff;box-shadow:0 6px 16px -6px rgba(124,92,255,.6)}
+.dtbtn{display:flex;align-items:center;gap:7px;background:var(--glass);border:1px solid var(--stroke);color:var(--text-2);font:inherit;font-size:12px;font-weight:600;padding:7px 12px;border-radius:11px;cursor:pointer;white-space:nowrap}
+.dtbtn:hover{color:var(--text);border-color:var(--stroke-2)}
+.dtbtn.on{background:var(--accent-bg);border-color:var(--accent);color:var(--text)}
+.dtbtn .arr{color:var(--muted);font-size:9px}
+.dtpop{padding:14px;min-width:236px}
+.dtpop-h{font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:11px}
+.dtpop-l{display:block;font-size:11px;color:var(--text-2);font-weight:600;margin-bottom:9px}
+.dtpop-l input{display:block;width:100%;margin-top:4px;background:var(--filter-bg,#1c1a2e);border:1px solid var(--stroke);color:var(--text);font:inherit;font-size:12.5px;padding:8px 10px;border-radius:10px;color-scheme:dark;outline:none}
+.dtpop-l input:focus{border-color:var(--accent)}
+[data-theme="light"] .dtpop-l input{color-scheme:light}
+.dtpop-apply{width:100%;margin-top:4px;background:var(--grad);color:#fff;border:none;font:inherit;font-size:12.5px;font-weight:700;padding:9px;border-radius:10px;cursor:pointer;box-shadow:0 8px 20px -8px rgba(124,92,255,.7)}
+.dtpop-clear{width:100%;margin-top:7px;background:none;border:none;color:var(--risk);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer}
 .seg button:hover:not(.on){color:var(--text)}
 .icon-btn{height:36px;min-width:36px;padding:0 10px;border-radius:11px;background:var(--glass);border:1px solid var(--stroke);color:var(--text-2);cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px;transition:.18s;backdrop-filter:blur(10px)}
 .icon-btn:hover{color:var(--text);border-color:var(--stroke-2);background:var(--glass-2)}
@@ -357,6 +369,7 @@ function quickMetrics(logs){
   return{sent:sent,opens:op,reach:sent>0?Math.round(op/sent*100):null};
 }
 function windowLogs(days,offset){
+  if(_from&&_to){var span=_to-_from;var hi=offset?_from:_to,lo=offset?_from-span:_from;return LOGS.filter(function(l){var t=+new Date(l.timestamp);return t>lo&&t<=hi;});}
   if(days<=0)return offset===0?LOGS:[];
   var end=Date.now()-offset*days*864e5,start=end-days*864e5;
   return LOGS.filter(function(l){var t=+new Date(l.timestamp);return t>=start&&t<end;});
@@ -1188,8 +1201,13 @@ function navLinks(d){
 }
 function masthead(mode){
   var mBtn=mode==='ex'?'<button class="mode-btn alt" onclick="setMode(\'op\')" data-tip="Chuyển sang Bảng điều hành đầy đủ dành cho CM team">Bảng điều hành</button>':'<button class="mode-btn" onclick="setMode(\'ex\')" data-tip="Tóm tắt cấp cao dành cho Ban lãnh đạo — chỉ các chỉ số quan trọng nhất">Tóm tắt lãnh đạo</button>';
+  var custom=!!(_from&&_to);
+  var presets=[[0,'Tất cả'],[7,'7N'],[30,'30N'],[90,'90N']].map(function(p){return '<button class="'+((!custom&&_days===p[0])?'on':'')+'" onclick="flt('+p[0]+')">'+p[1]+'</button>';}).join('');
+  var lbl=custom?(fmtDay(_from)+'–'+fmtDay(_to)):'Tuỳ chọn';
   return '<div class="mast"><div class="mast-in"><div class="brand"><div class="logo">SH</div><div><div class="tt">Email Tracker</div><div class="ss">Truyền thông nội bộ · CM Team</div></div></div>'
-    +'<div class="ctrls"><div class="seg"><button class="'+(_days===0?'on':'')+'" onclick="flt(0)" data-tip="Xem tất cả dữ liệu từ trước đến nay">Tất cả</button><button class="'+(_days===30?'on':'')+'" onclick="flt(30)" data-tip="Chỉ xem 30 ngày gần nhất">30N</button><button class="'+(_days===7?'on':'')+'" onclick="flt(7)" data-tip="Chỉ xem 7 ngày gần nhất">7N</button></div>'
+    +'<div class="ctrls"><div class="seg">'+presets+'</div>'
+    +'<div class="csel"><button class="dtbtn'+(custom?' on':'')+'" onclick="toggleDtPop(event)" data-tip="Chọn khoảng ngày tuỳ chọn"><span>📅 '+esc(lbl)+'</span><span class="arr">▾</span></button>'
+    +'<div class="csel-dd dtpop" id="dt-pop" style="display:none" onclick="event.stopPropagation()"><div class="dtpop-h">Khoảng ngày tuỳ chọn</div><label class="dtpop-l">Từ ngày<input type="date" id="dt-from" value="'+isoDate(_from)+'"></label><label class="dtpop-l">Đến ngày<input type="date" id="dt-to" value="'+isoDate(_to)+'"></label><button class="dtpop-apply" onclick="onRange()">Áp dụng</button>'+(custom?'<button class="dtpop-clear" onclick="flt(0)">Xoá lọc ngày</button>':'')+'</div></div>'
     +'<button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K) — tìm kiếm tính năng">⌘K</button>'
     +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Đổi giao diện sáng/tối" id="thBtn">'+(_theme==='dark'?'☼':'☾')+'</button>'
     +mBtn+'</div></div></div>';
@@ -1256,7 +1274,10 @@ function executive(d,cur,prev){
 }
 
 /* ── app ── */
-var _days=0,_mode='op',_theme='dark',_filter={},_density='comfortable',_inited=false,_tipInited=false,_cmds=[],_cmdSel=0,_cmdFiltered=[];
+var _days=0,_from=null,_to=null,_mode='op',_theme='dark',_filter={},_density='comfortable',_inited=false,_tipInited=false,_cmds=[],_cmdSel=0,_cmdFiltered=[];
+function isoDate(ms){if(!ms)return '';var d=new Date(ms);return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
+function onRange(){var f=(document.getElementById('dt-from')||{}).value,t=(document.getElementById('dt-to')||{}).value;if(!f||!t)return;_from=new Date(f+'T00:00:00').getTime();_to=new Date(t+'T23:59:59').getTime();if(_from>_to){var x=_from;_from=_to;_to=x;}_days=0;paint();}
+function toggleDtPop(e){e.stopPropagation();var p=document.getElementById('dt-pop');if(p)p.style.display=p.style.display==='block'?'none':'block';}
 try{var _st=localStorage.getItem('shb-et-theme');if(_st)_theme=_st;}catch(e){}
 try{var _sd=localStorage.getItem('shb-et-density');if(_sd)_density=_sd;}catch(e){}
 
@@ -1267,7 +1288,7 @@ var _cselOpen=false;
 function openCampSel(e){e.stopPropagation();var dd=document.getElementById('camp-dd');if(!dd)return;var open=dd.style.display==='block';dd.style.display=open?'none':'block';if(!open){var inp=dd.querySelector('.csel-inp');if(inp){inp.value='';inp.focus();filterCampSel('');}}_cselOpen=!open;}
 function filterCampSel(q){var list=document.getElementById('camp-list');if(!list)return;var qq=norm(q);list.querySelectorAll('.csel-opt').forEach(function(el){var t=norm(el.textContent);el.style.display=(qq===''||t.indexOf(qq)>-1)?'':'none';});}
 function pickCamp(v){setFilter('campaign',v);var dd=document.getElementById('camp-dd');if(dd)dd.style.display='none';}
-document.addEventListener('click',function(){var dd=document.getElementById('camp-dd');if(dd)dd.style.display='none';});
+document.addEventListener('click',function(){var dd=document.getElementById('camp-dd');if(dd)dd.style.display='none';var dp=document.getElementById('dt-pop');if(dp)dp.style.display='none';});
 function clearFilter(k){delete _filter[k];paint();}
 function clearAllFilters(){_filter={};paint();}
 function jump(sel){var el=document.querySelector(sel);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
@@ -1329,7 +1350,7 @@ function paint(){
     console.error('[SHB Dashboard]',err);
   }
 }
-function flt(days){_days=days;paint();}
+function flt(days){_from=null;_to=null;_days=days;paint();}
 function setMode(m){_mode=m;paint();window.scrollTo(0,0);}
 function toggleTheme(){_theme=_theme==='dark'?'light':'dark';try{localStorage.setItem('shb-et-theme',_theme);}catch(e){}paint();}
 function toggleDensity(){_density=_density==='compact'?'comfortable':'compact';try{localStorage.setItem('shb-et-density',_density);}catch(e){}applyDensity();}
