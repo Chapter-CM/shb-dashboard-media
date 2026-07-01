@@ -1434,7 +1434,10 @@ function clearAllFilters(){_filter={};paint();}
 function jump(sel){var el=document.querySelector(sel);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
 
 function render(){
+  var _prevSort={};
+  Object.keys(_tblState).forEach(function(id){var s=_tblState[id];if(s&&s.sortKey)_prevSort[id]={sortKey:s.sortKey,sortDir:s.sortDir};});
   _TBL={};_tblState={};
+  Object.keys(_prevSort).forEach(function(id){_tblState[id]={q:'',page:0,sortKey:_prevSort[id].sortKey,sortDir:_prevSort[id].sortDir};});
   var cl=windowLogs(_days,0),pl=windowLogs(_days,1);
   // Áp dụng filter cho hero chart để section 1 đồng bộ với các section khác
   var _F=(_filter&&typeof _filter==='object')?_filter:{};
