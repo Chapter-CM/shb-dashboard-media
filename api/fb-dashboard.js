@@ -208,18 +208,18 @@ async function loadData() {
 const CSS = `
 :root{--bg:#0b0916;--glass:rgba(255,255,255,.045);--glass-2:rgba(255,255,255,.07);--glass-3:rgba(255,255,255,.11);
 --stroke:rgba(255,255,255,.09);--stroke-2:rgba(255,255,255,.15);--hair:rgba(255,255,255,.055);
---text:#f2effc;--text-2:#bdb8db;--muted:#8e89b3;--faint:#615d83;--accent:#8b7bff;--accent-2:#5b8cff;
---grad:linear-gradient(135deg,#7c5cff 0%,#5b8cff 100%);--good:#34e0a1;--warn:#ffc861;--risk:#ff7d96;
---good-bg:rgba(52,224,161,.13);--warn-bg:rgba(255,200,97,.14);--risk-bg:rgba(255,125,150,.14);--accent-bg:rgba(139,123,255,.15);
---orb1:rgba(124,92,255,.24);--orb2:rgba(77,139,255,.18);--orb3:rgba(255,107,138,.15);--orb4:rgba(52,224,161,.11);
+--text:#f2effc;--text-2:#bdb8db;--muted:#8e89b3;--faint:#615d83;--accent:#ef4444;--accent-2:#fb923c;
+--grad:linear-gradient(135deg,#e11d2a 0%,#fb7427 100%);--good:#34e0a1;--warn:#ffc861;--risk:#ff7d96;
+--good-bg:rgba(52,224,161,.13);--warn-bg:rgba(255,200,97,.14);--risk-bg:rgba(255,125,150,.14);--accent-bg:rgba(239,68,68,.15);
+--orb1:rgba(225,29,42,.22);--orb2:rgba(251,116,39,.16);--orb3:rgba(255,107,138,.15);--orb4:rgba(52,224,161,.11);
 --r:22px;--r-sm:14px;--r-xs:9px;--r-pill:99px;--num:'Space Grotesk',ui-monospace,monospace;
 --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;
 --shadow:0 20px 54px -24px rgba(0,0,0,.72);--sh-1:0 2px 8px -2px rgba(0,0,0,.4);--sh-2:0 14px 40px -18px rgba(0,0,0,.66)}
 [data-theme="light"]{--bg:#eef0fb;--filter-bg:#fff;--glass:rgba(255,255,255,.62);--glass-2:rgba(255,255,255,.8);--glass-3:rgba(255,255,255,.92);
 --stroke:rgba(90,70,180,.12);--stroke-2:rgba(90,70,180,.22);--hair:rgba(90,70,180,.07);
---text:#241f3d;--text-2:#544e74;--muted:#7d7799;--faint:#a7a2c0;--accent:#6d5efc;--accent-2:#4d7cff;
---good:#10a371;--warn:#c2851a;--risk:#e15572;--good-bg:rgba(16,163,113,.12);--warn-bg:rgba(194,133,26,.13);--risk-bg:rgba(225,85,114,.12);--accent-bg:rgba(109,94,252,.12);
---orb1:rgba(124,92,255,.18);--orb2:rgba(77,139,255,.14);--orb3:rgba(255,120,160,.12);--orb4:rgba(52,200,150,.1);--shadow:0 20px 54px -28px rgba(80,60,160,.38);--sh-1:0 2px 8px -3px rgba(80,60,160,.22);--sh-2:0 14px 40px -20px rgba(80,60,160,.34)}
+--text:#241f3d;--text-2:#544e74;--muted:#7d7799;--faint:#a7a2c0;--accent:#dc2626;--accent-2:#ea580c;
+--good:#10a371;--warn:#c2851a;--risk:#e15572;--good-bg:rgba(16,163,113,.12);--warn-bg:rgba(194,133,26,.13);--risk-bg:rgba(225,85,114,.12);--accent-bg:rgba(220,38,38,.12);
+--orb1:rgba(220,38,38,.15);--orb2:rgba(234,88,12,.12);--orb3:rgba(255,120,160,.12);--orb4:rgba(52,200,150,.1);--shadow:0 20px 54px -28px rgba(180,40,40,.32);--sh-1:0 2px 8px -3px rgba(180,40,40,.18);--sh-2:0 14px 40px -20px rgba(180,40,40,.28)}
 *{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}
 body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:13.5px;line-height:1.5;min-height:100vh;-webkit-font-smoothing:antialiased}
 body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(58% 48% at 12% 6%,var(--orb1),transparent 62%),radial-gradient(52% 44% at 88% 12%,var(--orb2),transparent 62%),radial-gradient(56% 50% at 82% 92%,var(--orb3),transparent 62%),radial-gradient(50% 50% at 8% 96%,var(--orb4),transparent 62%)}
@@ -233,7 +233,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .ctrls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .seg{display:flex;background:var(--glass);border:1px solid var(--stroke);border-radius:12px;padding:3px}
 .seg button{background:none;border:none;color:var(--muted);padding:6px 13px;cursor:pointer;font:inherit;font-size:12px;font-weight:600;border-radius:9px;transition:.18s}
-.seg button.on{background:var(--grad);color:#fff;box-shadow:0 6px 16px -6px rgba(124,92,255,.6)}
+.seg button.on{background:var(--grad);color:#fff;box-shadow:0 6px 16px -6px rgba(225,29,42,.5)}
 .seg button:hover:not(.on){color:var(--text)}
 .dtbtn{display:flex;align-items:center;gap:7px;background:var(--glass);border:1px solid var(--stroke);color:var(--text-2);font:inherit;font-size:12px;font-weight:600;padding:7px 12px;border-radius:11px;cursor:pointer;white-space:nowrap}
 .dtbtn:hover{color:var(--text);border-color:var(--stroke-2)}
@@ -245,7 +245,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .dtpop-l input{display:block;width:100%;margin-top:4px;background:var(--filter-bg,#1c1a2e);border:1px solid var(--stroke);color:var(--text);font:inherit;font-size:12.5px;padding:8px 10px;border-radius:10px;color-scheme:dark;outline:none}
 .dtpop-l input:focus{border-color:var(--accent)}
 [data-theme="light"] .dtpop-l input{color-scheme:light}
-.dtpop-apply{width:100%;margin-top:4px;background:var(--grad);color:#fff;border:none;font:inherit;font-size:12.5px;font-weight:700;padding:9px;border-radius:10px;cursor:pointer;box-shadow:0 8px 20px -8px rgba(124,92,255,.7)}
+.dtpop-apply{width:100%;margin-top:4px;background:var(--grad);color:#fff;border:none;font:inherit;font-size:12.5px;font-weight:700;padding:9px;border-radius:10px;cursor:pointer;box-shadow:0 8px 20px -8px rgba(225,29,42,.6)}
 .dtpop-clear{width:100%;margin-top:7px;background:none;border:none;color:var(--risk);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer}
 .funnel{margin-top:16px;background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r);padding:18px 22px;box-shadow:var(--shadow)}
 .fn-row{display:flex;align-items:center;gap:12px;margin:9px 0}
@@ -256,7 +256,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .fn-cvt b{color:var(--good)}
 .icon-btn{height:36px;min-width:36px;padding:0 10px;border-radius:11px;background:var(--glass);border:1px solid var(--stroke);color:var(--text-2);cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px;transition:.18s}
 .icon-btn:hover{color:var(--text);border-color:var(--stroke-2)}
-.mode-btn{background:var(--grad);color:#fff;border:none;padding:9px 16px;border-radius:11px;cursor:pointer;font:inherit;font-size:12px;font-weight:700;box-shadow:0 8px 20px -8px rgba(124,92,255,.7)}
+.mode-btn{background:var(--grad);color:#fff;border:none;padding:9px 16px;border-radius:11px;cursor:pointer;font:inherit;font-size:12px;font-weight:700;box-shadow:0 8px 20px -8px rgba(225,29,42,.6)}
 .mode-btn.alt{background:var(--glass);color:var(--text);border:1px solid var(--stroke);box-shadow:none}
 .fresh{font-size:11px;color:var(--good);font-weight:700;display:flex;align-items:center;gap:5px}
 .subnav{position:sticky;top:65px;z-index:20;background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(20px);border-bottom:1px solid var(--hair)}
@@ -270,11 +270,11 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .f-clear-all{background:var(--risk-bg);border:1px solid transparent;color:var(--risk);font:inherit;font-size:11.5px;font-weight:700;padding:4px 12px;border-radius:99px;cursor:pointer;margin-left:4px}
 section{padding-top:28px;scroll-margin-top:122px}
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:15px;display:flex;align-items:center;gap:10px}
-.eyebrow::before{content:'';width:3px;height:15px;border-radius:2px;background:var(--grad);flex:0 0 auto;box-shadow:0 0 10px rgba(124,92,255,.5)}
+.eyebrow::before{content:'';width:3px;height:15px;border-radius:2px;background:var(--grad);flex:0 0 auto;box-shadow:0 0 10px rgba(225,29,42,.45)}
 .eyebrow .qc{margin-left:auto;background:none;border:1px solid var(--stroke);color:var(--muted);font:inherit;font-size:11px;font-weight:600;padding:3px 9px;border-radius:8px;cursor:pointer}
 .so{font-size:12.5px;color:var(--text-2);background:var(--accent-bg);border:1px solid var(--stroke);border-radius:14px;padding:12px 16px;margin-top:14px;line-height:1.6}.so b{color:var(--accent)}
 .hero-row{display:grid;grid-template-columns:340px 1fr;gap:16px}
-.gauge-card{background:var(--grad);border-radius:var(--r);padding:22px;color:#fff;position:relative;overflow:hidden;box-shadow:0 24px 54px -22px rgba(124,92,255,.68)}
+.gauge-card{background:var(--grad);border-radius:var(--r);padding:22px;color:#fff;position:relative;overflow:hidden;box-shadow:0 24px 54px -22px rgba(225,29,42,.55)}
 .gauge-card::after{content:'';position:absolute;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.16);top:-90px;right:-60px;filter:blur(8px)}
 .gauge-card .gc-h{font-size:12px;font-weight:600;opacity:.9;position:relative;z-index:1}
 .gauge-card .gc-sub{font-size:11.5px;opacity:.82;margin-top:14px;position:relative;z-index:1;line-height:1.5}
@@ -415,7 +415,26 @@ tbody tr[onclick]{cursor:pointer}td.num,th.num{text-align:right;font-family:var(
 [data-tip]{cursor:help}
 @media(max-width:920px){.hero-row{grid-template-columns:1fr}.row2{grid-template-columns:1fr}.tiers{grid-template-columns:repeat(2,1fr)}.dh-grid{grid-template-columns:1fr}.exec-k{grid-template-columns:1fr 1fr}.drill-in{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.kpi-col{grid-template-columns:1fr}}
+.kmid{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:12px}
+.kpi .kmid .kv{margin-top:0}
+.erbar2{width:62px;height:5px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden}
+.erbar2>i{display:block;height:100%;background:var(--grad);border-radius:99px}
+.erc{display:inline-flex;flex-direction:column;gap:5px;align-items:flex-end}
+.erc b{font-family:var(--num);font-weight:700;color:var(--text);font-size:12.5px}
+.ptitle{display:flex;align-items:center;gap:11px;min-width:260px}
+.pt-main{font-size:12.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
+.pt-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.pin{position:sticky;left:0;z-index:2;background:var(--bg)}
+tbody tr:hover .pin{background:rgba(255,255,255,.028)}
+.tdot{width:8px;height:8px;border-radius:99px;flex:none}
+.tdot.hot{background:var(--good);box-shadow:0 0 8px var(--good)}
+.tdot.warm{background:var(--warn)}
+.tdot.cold{background:var(--risk)}
+[data-theme="light"] .pin{background:var(--bg)}
+[data-theme="light"] tbody tr:hover .pin{background:rgba(90,70,180,.04)}
+[data-theme="light"] .erbar2{background:rgba(0,0,0,.08)}
 `;
+
 
 // ── HANDLER ───────────────────────────────────────────────────────────────
 module.exports = async (req, res) => {
@@ -484,8 +503,8 @@ function gaugeBig(pct,target,main,sub){
   var ti=gPolar(cx,cy,r,tickA),to=gPolar(cx,cy,r+11,tickA);
   var tick=(target>0&&target<100)?'<line x1="'+ti[0].toFixed(1)+'" y1="'+ti[1].toFixed(1)+'" x2="'+to[0].toFixed(1)+'" y2="'+to[1].toFixed(1)+'" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>':'';
   var fs=main.length>8?24:main.length>6?30:38;
-  return '<svg width="220" height="200" viewBox="0 0 220 200">'
-    +'<path d="'+gArc(cx,cy,r,A0,A0+SPAN)+'" fill="none" stroke="rgba(255,255,255,.20)" stroke-width="'+sw+'" stroke-linecap="round"/>'
+  return '<svg viewBox="0 0 220 184" style="width:220px;height:auto">'
+    +'<path d="'+gArc(cx,cy,r,A0,A0+SPAN)+'" fill="none" stroke="rgba(255,255,255,.32)" stroke-width="'+sw+'" stroke-linecap="round"/>'
     +(p>0?'<path d="'+gArc(cx,cy,r,A0,valEnd)+'" fill="none" stroke="#ffffff" stroke-width="'+sw+'" stroke-linecap="round"/>':'')
     +tick
     +'<text x="110" y="102" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="'+fs+'" font-weight="700">'+esc(main)+'</text>'
@@ -618,7 +637,7 @@ function toggleDrill(pid){var r=document.getElementById('dr-'+pid);if(r)r.style.
 function heroRow(d,cur,prev,ser){
   var s=d.sum;
   cur=(cur||[]).filter(function(p){return matchFilter(p,_filter||{});});   // tôn trọng lọc chéo (post/loại/chủ đề)
-  function card(label,val,sub,tip,o){o=o||{};var ic=o.icon?'<span class="ki">'+o.icon+'</span>':'';var ft=o.feat?' feat':'';return '<div class="kpi'+ft+'" data-tip="'+esc(tip)+'"><div class="kl">'+ic+'<span>'+label+'</span></div><div class="kv">'+val+'</div><div class="ksub">'+(sub||'')+'</div></div>';}
+  function card(label,val,sub,tip,o){o=o||{};var ic=o.icon?'<span class="ki">'+o.icon+'</span>':'';var ft=o.feat?' feat':'';var spk=o.spark&&o.spark.length>=2?spark(o.spark,'var(--accent)'):'';var kvRow=spk?'<div class="kmid"><div class="kv">'+val+'</div>'+spk+'</div>':'<div class="kv">'+val+'</div>';return '<div class="kpi'+ft+'" data-tip="'+esc(tip)+'"><div class="kl">'+ic+'<span>'+label+'</span></div>'+kvRow+'<div class="ksub">'+(sub||'')+'</div></div>';}
   var fv=ser.map(function(b){return b.followers;}),vv=ser.map(function(b){return b.views;});
   var reachRate=s.reachRate;
   var PS=(DATA.pageInsights&&DATA.pageInsights.series)||{};
@@ -646,17 +665,34 @@ function heroRow(d,cur,prev,ser){
   var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem theo ngày hoạt động ('+nf(viewsVal)+'). Vòng cung = Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem ('+reachRatio+'%) — đổi theo bộ lọc nội dung."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(reachArc,100,nfk(viewsVal),'Tiếp cận '+reachRatio+'%')+'</div><div class="gc-sub">'+(vDelta?vDelta+' so kỳ trước · ':'')+'Tỉ lệ tiếp cận '+reachRatio+'% · '+s.nPosts+' bài</div></div>';
   var engDelta=(!cFil)?seriesDelta(PS.interactions):'';
   var erSub='<span class="ksub-'+(erAct>=TARGET_ER?'up':'down')+'">'+(erAct>=TARGET_ER?'▲ đạt':'▼ dưới')+' mục tiêu '+TARGET_ER+'%</span>';
+  // ── sparklines ──
+  var spkEng=(PS.interactions||[]).slice(-14).map(function(b){return b.value;});
+  var spkViews=(PS.views||[]).slice(-14).map(function(b){return b.value;});
+  var _dImp=dailyByPost(function(p){return pmv(p,'impression');}),_dCmt=dailyByPost(function(p){return pmv(p,'comment')||p.comments;}),_dReach=dailyByPost(function(p){return pmv(p,'viewers');});
+  var spkImp=_dImp.slice(-14).map(function(b){return b.value;}),spkCmt=_dCmt.slice(-14).map(function(b){return b.value;}),spkReach=_dReach.slice(-14).map(function(b){return b.value;});
+  var _erDs=dailyER().slice(-14);var spkEr=_erDs.length>=2?_erDs.map(function(b){return b.value;}):null;
+  // ── prev-period deltas for post-level metrics ──
+  var _pf=(prev||[]).filter(function(p){return matchFilter(p,_filter||{});});
+  function _sumF(arr,fn){return arr.reduce(function(t,p){return t+fn(p);},0);}
+  var _pReach=_sumF(_pf,function(p){return pmv(p,'viewers');}),_pImp=_sumF(_pf,function(p){return pmv(p,'impression');}),_pCmt=_sumF(_pf,function(p){return pmv(p,'comment')||p.comments;});
+  var _cReach=_sumF(cur,function(p){return pmv(p,'viewers');});
+  var reachDelta=(!cFil)&&(_cReach||_pReach)?deltaChip(_cReach,_pReach):'';
+  var impDelta=(!cFil)&&(impV||_pImp)?deltaChip(impV,_pImp):'';
+  var cmtDelta=(!cFil)&&(cmtV||_pCmt)?deltaChip(cmtV,_pCmt):'';
+  var viewerDelta=(!cFil)&&(viewersV||_pReach)?deltaChip(viewersV,_sumF(_pf,function(p){return pmv(p,'viewers');})):'';
+  var erDelta='';
+  if(!cFil&&winRange()&&PS.views&&PS.views.length&&PS.interactions&&PS.interactions.length){var _wr=winRange(),_sp=_wr[1]-_wr[0],_pvw=sumIn(PS.views,_wr[0]-_sp,_wr[0]);erDelta=_pvw?deltaChip(erAct,pc(sumIn(PS.interactions,_wr[0]-_sp,_wr[0])/_pvw*100)):'';}
   var k=[
-    card('Lượt tương tác',tnum(engV),engDelta?'so kỳ trước '+engDelta:'tổng tương tác kỳ này',engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Số phụ = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.'),
-    card('ER (Engagement Rate)',erAct+'%',erSub,'Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.'),
-    card('Lượt tiếp cận',tnum(reachSum),'tỉ lệ tiếp cận '+reachRatio+'%','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem.'),
-    card('Người xem',tnum(viewersV),'duy nhất · cấp trang','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).'),
-    card('Lượt hiển thị',tnum(impV),'tổng từ các bài','Tổng số lần hiển thị (impressions), CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc. KHÁC Lượt xem.'),
-    card('Bình luận',tnum(cmtV),'tổng từ các bài','Tổng bình luận CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc.')
+    card('Lượt tương tác',tnum(engV),(engDelta?engDelta+' so kỳ trước':'tổng tương tác kỳ này'),engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Số phụ = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{spark:spkEng}),
+    card('ER (Engagement Rate)',erAct+'%',(erDelta?erDelta+' so kỳ trước · ':'')+erSub,'Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.',{spark:spkEr}),
+    card('Lượt tiếp cận',tnum(reachSum),(reachDelta?reachDelta+' so kỳ trước · ':'')+'tỉ lệ tiếp cận '+reachRatio+'%','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem.',{spark:spkReach}),
+    card('Người xem',tnum(viewersV),(viewerDelta?viewerDelta+' so kỳ trước · ':'')+'duy nhất · cấp trang','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{spark:spkViews}),
+    card('Lượt hiển thị',tnum(impV),(impDelta?impDelta+' so kỳ trước · ':'')+'tổng từ các bài','Tổng số lần hiển thị (impressions), CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc. KHÁC Lượt xem.',{spark:spkImp}),
+    card('Bình luận',tnum(cmtV),(cmtDelta?cmtDelta+' so kỳ trước · ':'')+'tổng từ các bài','Tổng bình luận CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc.',{spark:spkCmt})
   ].join('');
   var topType=(d.byType&&d.byType[0])?d.byType[0].name:'', topProj=(d.byProject&&d.byProject[0])?d.byProject[0].name:'';
   var summary='<div class="so" style="margin-top:16px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:15px">💡</span><div>Kỳ này: <b>'+nf(viewsVal)+'</b> lượt xem'+(vDelta?' ('+vDelta+' so kỳ trước)':'')+' · <b>'+nf(engV)+'</b> lượt tương tác · ER <b>'+erAct+'%</b>'+(erAct>=TARGET_ER?' ✓ đạt mục tiêu':' (mục tiêu '+TARGET_ER+'%)')+'.'+(topType?' Định dạng <b>'+esc(topType)+'</b>'+(topProj&&topProj!=='Khác'?' &amp; dự án <b>'+esc(topProj)+'</b>':'')+' hiệu quả nhất — ưu tiên sản xuất.':'')+'</div></div>';
-  return '<div class="hero-row">'+gauge+'<div class="kpi-col">'+k+'</div></div>'+summary;
+  return '<div class="hero-row">'+gauge+'<div class="kpi-col six">'+k+'</div></div>'+summary;
 }
 function sumKey(posts,k){var t=0;posts.forEach(function(p){if(k==='reactions')t+=reactTotal(p.react);else if(k==='eng')t+=engOf(p);else t+=p[k]||0;});return t;}
 function sumPm(posts,k){var t=0;posts.forEach(function(p){if(p.pm&&typeof p.pm[k]==='number')t+=p.pm[k];});return t;}
@@ -728,17 +764,21 @@ function contentSection(d){
   var F=_filter||{};
   var allRows=d.rows||[];
   var vidRows=allRows.filter(function(r){return isVideoPost(r.p);});
+  var _maxErAll=Math.max.apply(null,allRows.map(function(r){return r.er||0;}))||1;
   // ── tab: Tất cả bài ──
   regTable({id:'posts',rows:allRows,pageSize:12,cols:11,
     search:function(r,q){return norm(r.p.msg).indexOf(q)>-1||norm(r.p.topic).indexOf(q)>-1;},
     sortVal:function(r,k){var p=r.p,vw=pViews(p),imp=pmv(p,'impression');return k==='ts'?p.ts:k==='views'?vw:k==='vw'?pmv(p,'viewers'):k==='imp'?imp:k==='eng'?(pmv(p,'engagement')||r.eng):k==='cmt'?(pmv(p,'comment')||p.comments):k==='er'?r.er:k==='vhr'?(imp?vw/imp:0):k==='vrate'?(vw?pmv(p,'viewers')/vw:0):k==='ntf'?pmv(p,'net_follow'):pViews(p);},
-    render:function(r){var p=r.p,vw=pViews(p),eng=pmv(p,'engagement')||r.eng,er=vw?pc(eng/vw*100):0,vc=r.vsAvg>=0?'p-good':'p-risk';
-      return '<tr onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer'+(isSel("post",p.id)?';background:var(--accent-bg)':'')+'" data-tip="Bấm để lọc TOÀN dashboard theo bài này (bấm lại để bỏ)"><td>'+postLink(p,p.msg.slice(0,50))+'</td>'
+    render:function(r){var p=r.p,vw=pViews(p),eng=pmv(p,'engagement')||r.eng,er=vw?pc(eng/vw*100):0;
+      var tier=er>=(d.sum.engRate||0)*1.2?'hot':er>=(d.sum.engRate||0)*.8?'warm':'cold';
+      var erBarW=Math.min(100,_maxErAll>0?er/_maxErAll*100:0).toFixed(0);
+      return '<tr onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer'+(isSel("post",p.id)?';background:var(--accent-bg)':'')+'" data-tip="Bấm để lọc TOÀN dashboard theo bài này (bấm lại để bỏ)"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(p.msg.slice(0,50))+'</div><div class="pt-sub">'+esc(p.topic||p.type)+'</div></div></div></td>'
         +'<td class="num">'+(p.ts?fmtDay(p.ts):'—')+'</td>'
         +'<td onclick="event.stopPropagation();setFilter(\'type\',\''+jsq(p.type)+'\')" style="cursor:pointer" data-tip="Bấm để lọc chéo theo loại này"><span class="pill '+(isSel("type",p.type)?'p-good':'p-neutral')+'">'+esc(p.type)+'</span></td>'
         +'<td class="num">'+nf(vw)+'</td><td class="num">'+nf(pmv(p,'viewers'))+'</td>'
         +'<td class="num">'+nf(pmv(p,'impression'))+'</td><td class="num">'+nf(eng)+'</td>'
-        +'<td class="num">'+nf(pmv(p,'comment')||p.comments)+'</td><td class="num">'+er+'%</td>'
+        +'<td class="num">'+nf(pmv(p,'comment')||p.comments)+'</td>'
+        +'<td class="num"><span class="erc"><b>'+er+'%</b><span class="erbar2"><i style="width:'+erBarW+'%"></i></span></span></td>'
         +'<td class="num">'+(vw?pc(pmv(p,'viewers')/vw*100):0)+'%</td></tr>'
         +'<tr class="drill" id="dr-'+p.id+'" style="display:none"><td colspan="10"><div class="drill-in">'
         +'<div class="dd">Đăng lúc<b>'+fmtTime(p.ts)+'</b></div><div class="dd">Chủ đề<b>'+esc(p.topic)+'</b></div>'
@@ -772,7 +812,7 @@ function contentSection(d){
     var id='posts';
     return '<section id="s-content">'+tabs+'<div class="panel" id="tbl-'+id+'">'
       +searchBox(id,'Tìm bài viết / chủ đề…')
-      +'<div class="tw"><table><thead><tr><th>Bài viết</th>'
+      +'<div class="tw"><table><thead><tr><th class="pin">Bài viết</th>'
       +th(id,'ts','Đăng','Sắp theo ngày đăng')+'<th data-tip="Định dạng — bấm ô để lọc chéo">Loại</th>'+th(id,'views','Lượt xem','Số lần nội dung được xem')+th(id,'vw','Người xem','Người xem duy nhất')+th(id,'imp','Lượt hiển thị','Số lần hiển thị trên màn hình')+th(id,'eng','Lượt tương tác','Cảm xúc + bình luận + chia sẻ + lưu')+th(id,'cmt','Bình luận')+th(id,'er','ER','Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem')+th(id,'vrate','Tỉ lệ tiếp cận','Tỉ lệ tiếp cận = Người xem ÷ Lượt xem của bài')
       +'</tr></thead><tbody id="tb-'+id+'"></tbody></table></div><div class="pager" id="pg-'+id+'"></div></div></section>';
   } else {
