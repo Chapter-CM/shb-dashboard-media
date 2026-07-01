@@ -75,6 +75,41 @@ VBA Macro (Outlook Desktop) ──gửi beacon (sent/open/click/read)──►
 - Đã kiểm tra `loadData()` của `facebook.js`: có nhánh `!hasPage && hasGroup → mapSupabase([], …)` → **dashboard chạy đầy đủ chỉ với dữ liệu userscript** (`fb_group_posts` + `fb_page_insights`).
 - ➡️ **Bỏ hẳn `fetch.js`.** Hệ quả tích cực: **không còn phụ thuộc egress ra Internet** từ server nội bộ → migration sạch y như Email (server hoàn toàn không gọi ra ngoài). Câu hỏi egress với IT trở nên **không cần thiết**.
 
+### 3.2 Vì sao chọn build TĨNH thay vì giữ đọc ĐỘNG như hiện tại
+
+> Bản hiện tại đọc DB mỗi lần mở trang (`api/fb-dashboard.js` → `loadData()`), nên "real-time". Sau migration, `sync.js` đọc DB theo lịch (GitLab Schedule, ≤1h) → bake dữ liệu thẳng vào HTML; nginx chỉ phục vụ file tĩnh. **Đây là lựa chọn ĐƠN GIẢN HOÁ + TĂNG BẢO MẬT có chủ đích, KHÔNG phải bị hạ tầng ép** — Phương án dự phòng (§10) vẫn đọc-lúc-build chứ không quay lại đọc động.
+
+**Điểm mấu chốt:** "real-time" hiện tại không thật sự real-time ở tầng dữ liệu. Dashboard đọc DB mỗi lần mở trang, **nhưng dữ liệu vào DB lại theo đợt**: Facebook do admin **bấm tay** chạy userscript (Ctrl+Shift+Y) thỉnh thoảng; Email nhỏ giọt theo beacon Outlook. Vì nguồn vốn cập nhật cách nhau hàng giờ/ngày, **rebuild mỗi 1h bắt được gần như cùng độ tươi** → mất real-time trên giấy, gần như không mất gì trên thực tế (đúng đánh giá rủi ro: "Thấp — Delay ≤1h, chấp nhận được", §8).
+
+Các lý do kỹ thuật đứng sau, xếp theo sức nặng:
+
+| # | Lý do | Giải thích |
+|---|---|---|
+| 1 | **Tách tầng phục vụ trang khỏi DB (bảo mật/tuân thủ)** | HTML tĩnh → nginx **không chạm DB lúc người dùng mở trang**: không kết nối, không `service_role key` trong đường request. Kiểu động thì mỗi lượt mở trang là một pod cầm khóa DB mở kết nối → bề mặt tấn công lớn hơn, khó qua review bảo mật nội bộ. Khớp đúng mục đích migration (§1.1). |
+| 2 | **Bỏ được tầng PostgREST của Supabase** | Code đọc DB qua REST Supabase (`sbGet('/rest/v1/...')`). PostgREST này **không có trên Postgres nội bộ trần**. Giữ đọc động phải dựng PostgREST nội bộ hoặc viết lại toàn bộ truy vấn sang driver PG trong đường request nóng. Cho `sync.js` đọc DB **một lần lúc build** (job CI) thì chỉ viết lớp truy cập DB một chỗ, ngữ cảnh batch. |
+| 3 | **Ít thành phần động trên EKS** | Dashboard tĩnh = file + nginx: **không app server luôn chạy, không pool kết nối, không secret, không chết vì query chậm/DB sập**. Kiến trúc đích cố ý tối giản (1 Node ingest + nginx tĩnh, §4). |
+| 4 | **Luôn load được** | HTML tĩnh hiện bản build cuối kể cả khi DB down/runner lỗi — không bao giờ trả trang lỗi cho lãnh đạo. Checklist có sẵn mục "Tắt internet → dashboard vẫn load" (§11). |
+| 5 | **GitLab CI/CD Schedule = bản sao nội bộ của Vercel Cron** | Tận dụng công cụ dạng cron sẵn có, quen tay với IT SHB. |
+| 6 | **Bỏ chi phí mỗi lượt xem** | Mỗi lần mở trang bản động query 4 bảng rồi render HTML lớn. Tĩnh trả chi phí đó 1 lần/giờ bất kể số người xem. |
+
+**Kết luận:** hạ tầng *cho phép* làm động; chọn tĩnh là vì gọn + an toàn hơn, hợp môi trường ngân hàng nội bộ. Nếu sau này cần tươi hơn 1h, đòn bẩy đúng **không phải** quay lại đọc động mà là **tăng tần suất schedule** (15–20'), hoặc cho ingest server **trigger build ngay sau mỗi đợt ingest**.
+
+### 3.3 Khác biệt thao tác sử dụng (động → tĩnh)
+
+**Thao tác TRONG trang — không đổi.** Mọi tương tác chạy client-side trên dữ liệu đã bake sẵn (`DATA`), không gọi server: lọc đa lựa chọn, đổi khoảng ngày (7d/30d/90d), sort/tìm kiếm/phân trang bảng, lọc chéo theo Dự án/Định dạng, đổi theme, ⌘K, chuyển view Operational/Executive. Sau migration **không đổi gì** — mở trang còn nhanh hơn (file tĩnh, không chờ query). Với người xem thông thường (lãnh đạo, team CM): thao tác hằng ngày **y nguyên**.
+
+**Khác — ở việc dữ liệu mới xuất hiện thế nào:**
+
+| | Hiện tại (động) | Sau migration (tĩnh) |
+|---|---|---|
+| F5 / mở lại trang | Đọc DB → ra số mới nhất **ngay** | Ra lại **bản build gần nhất**; số mới chỉ có sau khi schedule chạy (≤1h) |
+| Tự reload 15' (`setInterval … location.reload`) | Mỗi reload số **nhích dần** theo DB | Reload ra **cùng một bản tĩnh** → vô nghĩa về độ tươi: **bỏ**, hoặc đổi thành reload để nhận bản build mới |
+| Badge nguồn/cập nhật | Phản ánh thời điểm **đọc DB** | Phản ánh thời điểm **build** |
+
+**Khác biệt đáng kể nhất — dành cho admin bắt dữ liệu.** Hiện tại admin có vòng lặp tức thì: mở Pro Dashboard → **Ctrl+Shift+Y** (userscript POST `/api/ingest`) → **F5 dashboard → thấy số mới ngay** để kiểm chứng. Sau migration, **động tác bắt y nguyên** (userscript chỉ đổi URL đích về nội bộ) **nhưng** POST ingest xong **không thấy ngay** — phải đợi lần build kế tiếp (≤1h). Mất vòng "bắt → F5 → kiểm chứng tức thì"; admin tin dữ liệu đã vào DB qua phản hồi userscript thay vì xác nhận bằng mắt.
+
+→ **Hai việc cần làm khi migrate** (nếu muốn giữ trải nghiệm kiểm chứng của admin): (a) **trigger build ngay sau ingest** (ingest server gọi pipeline / chạy `sync.js`) để F5 sau ~1–2' là thấy; (b) **xử lý `setInterval reload 15'`** trong `fb-dashboard.js` — trên bản tĩnh phải bỏ hoặc đổi đúng nghĩa "tải lại để nhận bản build mới", khớp chu kỳ schedule.
+
 ---
 
 ## 4. Kiến trúc hợp nhất sau migration
