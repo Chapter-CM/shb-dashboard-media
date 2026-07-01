@@ -433,6 +433,48 @@ tbody tr:hover .pin{background:rgba(255,255,255,.028)}
 [data-theme="light"] .pin{background:var(--bg)}
 [data-theme="light"] tbody tr:hover .pin{background:rgba(90,70,180,.04)}
 [data-theme="light"] .erbar2{background:rgba(0,0,0,.08)}
+/* ── 8b: hiệu quả theo định dạng (views + tỉ trọng + ER gộp 1 hàng) ── */
+.rx{display:flex;flex-direction:column;gap:4px}
+.rx-row{display:flex;align-items:center;gap:12px;padding:8px 6px;border-radius:10px;cursor:pointer;transition:background .14s}
+.rx-row:hover{background:var(--glass)}.rx-row.on{background:var(--accent-bg)}
+.rx-ic{font-size:15px;flex:none;width:20px;text-align:center}
+.rx-l{font-size:12.5px;font-weight:600;color:var(--text);flex:none}
+.rx-track{flex:1;height:9px;background:var(--hair);border-radius:99px;overflow:hidden}
+.rx-track>i{display:block;height:100%;border-radius:99px;transition:width .8s cubic-bezier(.16,1,.3,1)}
+.rx-v{width:112px;text-align:right;font-size:12px;font-family:var(--num);color:var(--text-2);flex:none}
+.rx-v small{display:block;font-size:10px;color:var(--faint);font-weight:500}
+.erpill{display:inline-block;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:700;font-family:var(--num);flex:none}
+.erpill.ok{background:var(--good-bg);color:var(--good)}.erpill.warn{background:var(--warn-bg);color:var(--warn)}.erpill.low{background:var(--risk-bg);color:var(--risk)}
+/* ── heatmap giờ×thứ (8d) ── */
+.hm-scale{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:10.5px;color:var(--faint)}
+.hm-grad{flex:0 0 90px;height:7px;border-radius:99px;background:linear-gradient(90deg,rgba(239,68,68,.1),rgba(239,68,68,.9))}
+/* ── 8e: đối tượng age/gender hai bên ── */
+.ag-head{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.ag-row{display:flex;align-items:center;gap:8px;margin:8px 0}
+.ag-half{flex:1;height:9px;background:var(--hair);border-radius:99px;overflow:hidden;display:flex}
+.ag-half.l{justify-content:flex-end}
+.ag-half i{display:block;height:100%;border-radius:99px}
+.ag-half.l i{background:var(--accent-2)}.ag-half.r i{background:var(--accent)}
+.ag-lbl{width:52px;text-align:center;font-size:11px;color:var(--text-2);font-family:var(--num);flex:none}
+/* ── 8f: sức khoẻ dữ liệu + deprecation watch + từ điển gọn ── */
+.grid2u{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.hz{display:flex;flex-direction:column;gap:2px}
+.hz-row{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--hair)}
+.hz-row:last-child{border-bottom:none}
+.hz-dot{width:9px;height:9px;border-radius:99px;flex:none;box-shadow:0 0 8px currentColor}
+.hz-ok{background:var(--good);color:var(--good)}.hz-warn{background:var(--warn);color:var(--warn)}.hz-risk{background:var(--risk);color:var(--risk)}
+.hz-tt{font-size:12.5px;font-weight:600;color:var(--text)}
+.hz-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.hz-badge{margin-left:auto;flex:none;font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:99px}
+.hz-badge.ok{background:var(--good-bg);color:var(--good)}.hz-badge.warn{background:var(--warn-bg);color:var(--warn)}.hz-badge.risk{background:var(--risk-bg);color:var(--risk)}
+.dep{display:flex;flex-direction:column;gap:2px}
+.dep-row{display:flex;align-items:flex-start;gap:10px;padding:9px 4px;border-bottom:1px solid var(--hair);font-size:12px}
+.dep-row:last-child{border-bottom:none}
+.dep-ic{flex:none;font-size:13px;line-height:1.4}
+.dep-date{flex:none;width:96px;color:var(--faint);font-family:var(--num);font-size:11px;line-height:1.5}
+.dep-tt{color:var(--text-2);line-height:1.5}
+.dep-tt b{color:var(--text)}
+@media(max-width:920px){.grid2u{grid-template-columns:1fr}}
 `;
 
 
@@ -741,20 +783,27 @@ function timingPanel(d){
   var hh='<div class="hh"></div>';for(var h=0;h<24;h++)hh+='<div class="hh">'+(h%3===0?h:'')+'</div>';
   var grid='';for(var dd=0;dd<7;dd++){grid+='<div class="hr">'+DOW[dd]+'</div>';for(var hr=0;hr<24;hr++){var v=d.heat[dd][hr],op=v?(.15+v/max*.85):.05;grid+='<div class="heatcell" style="opacity:'+op.toFixed(2)+'" title="'+DOW[dd]+' '+hr+'h: '+nf(v)+' người xem"></div>';}}
   var DOWF=['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ nhật'];
-  return '<div class="panel"><div class="panel-h" data-tip="Người xem theo Thứ × Giờ. Ô đậm = giờ vàng có nhiều người xem nhất.">Best time · cao điểm <b style="color:var(--accent)">'+DOWF[d.bestD]+' '+d.bestH+'h</b> <span style="font-weight:600;color:var(--muted);font-size:11px">· theo người xem</span></div><div class="heat">'+hh+grid+'</div></div>';
+  return '<div class="panel"><div class="panel-h" data-tip="Người xem theo Thứ × Giờ. Ô đậm = giờ vàng có nhiều người xem nhất.">Best time · cao điểm <b style="color:var(--accent)">'+DOWF[d.bestD]+' '+d.bestH+'h</b> <span style="font-weight:600;color:var(--muted);font-size:11px">· theo người xem</span></div><div class="heat">'+hh+grid+'</div>'
+    +'<div class="hm-scale">Thấp<span class="hm-grad"></span>Cao · <b style="color:var(--text-2)">Giờ vàng: '+DOWF[d.bestD]+' '+d.bestH+'h</b></div></div>';
 }
+var TYPE_ICON={'Video':'🎬','Reel':'📱','Livestream':'📡','Ảnh':'🖼','Link':'🔗','Text':'📝'};
 function mixSection(d){
   var F=_filter||{},s=d.sum;
-  function barsER(list,key){var max=Math.max.apply(null,list.map(function(x){return x.eng;}).concat([1]));
-    return list.map(function(x){var on=isSel(key,x.name);return '<div class="rrow" style="cursor:pointer;'+(on?'background:var(--accent-bg);border-radius:8px':'')+'" onclick="setFilter(\''+key+'\',\''+jsq(x.name)+'\')" data-tip="Bấm để lọc chéo (bấm lại để bỏ)"><span class="rlbl">'+esc(x.name)+' <span style="color:var(--faint)">('+x.n+')</span></span><div class="rbar"><span style="width:'+(x.eng/max*100).toFixed(1)+'%;background:var(--grad)"></span></div><span class="rval">'+x.er+'%</span></div>';}).join('');}
-  function barsShare(list,key){var tot=list.reduce(function(a,x){return a+(x.views||0);},0)||1;
-    return list.slice().sort(function(a,b){return b.views-a.views;}).map(function(x){var pct=x.views/tot*100,on=isSel(key,x.name);
-      return '<div class="rrow" style="cursor:pointer;'+(on?'background:var(--accent-bg);border-radius:8px':'')+'" onclick="setFilter(\''+key+'\',\''+jsq(x.name)+'\')" data-tip="Tỉ trọng Lượt xem — bấm để lọc chéo"><span class="rlbl">'+esc(x.name)+'</span><div class="rbar"><span style="width:'+pct.toFixed(1)+'%;background:var(--grad)"></span></div><span class="rval">'+pc(pct)+'%</span></div>';}).join('');}
+  var list=d.byType.slice().sort(function(a,b){return b.views-a.views;});
+  var tot=list.reduce(function(a,x){return a+(x.views||0);},0)||1;
+  var maxL=Math.max.apply(null,list.map(function(x){return x.name.length;}).concat([1]));
+  var rows=list.map(function(x){
+    var pct=x.views/tot*100,on=isSel('type',x.name);
+    var erCls=x.er>=TARGET_ER?'ok':x.er>=TARGET_ER*.7?'warn':'low';
+    return '<div class="rx-row'+(on?' on':'')+'" onclick="setFilter(\'type\',\''+jsq(x.name)+'\')" data-tip="Bấm để lọc chéo theo định dạng này (bấm lại để bỏ)">'
+      +'<span class="rx-ic">'+(TYPE_ICON[x.name]||'📄')+'</span>'
+      +'<span class="rx-l">'+esc(x.name)+'</span>'
+      +'<span class="rx-track"><i style="width:'+pct.toFixed(1)+'%;background:var(--grad)"></i></span>'
+      +'<span class="rx-v">'+nf(x.views)+'<small>'+pc(pct)+'% · '+x.n+' bài</small></span>'
+      +'<span class="erpill '+erCls+'">'+x.er+'%</span></div>';
+  }).join('');
   return '<section id="s-mix"><div class="eyebrow">Phân tích nội dung — bấm để lọc chéo</div>'
-    +'<div class="row2">'
-    +'<div class="panel"><div class="panel-h" data-tip="Tỉ trọng Lượt xem theo định dạng bài (Ảnh/Livestream/Video/Text). Bấm để lọc.">Theo loại nội dung <span style="font-weight:600;color:var(--muted);font-size:11px">· tỉ trọng Lượt xem</span></div>'+barsShare(d.byType,'type')+'</div>'
-    +'<div class="panel"><div class="panel-h" data-tip="Engagement Rate (Tương tác ÷ Lượt xem) theo định dạng. Bấm để lọc.">Hiệu quả theo định dạng <span style="font-weight:600;color:var(--muted);font-size:11px">· ER</span></div>'+barsER(d.byType,'type')+'</div>'
-    +'</div>'
+    +'<div class="panel"><div class="panel-h" data-tip="Mỗi hàng = 1 định dạng. Thanh = tỉ trọng Lượt xem, pill = Engagement Rate. Bấm để lọc chéo.">Hiệu quả theo định dạng <span style="font-weight:600;color:var(--muted);font-size:11px">bar = views · pill = ER</span></div>'+rows+'</div>'
     +'</section>';
 }
 function setCtab(t){_ctab=t;paint();}
@@ -826,18 +875,30 @@ function contentSection(d){
 }
 /* ── Bài Group "SHB Một Nhà" — nạp qua /api/ingest (CSV/userscript), không lấy được qua Graph API ── */
 function ageGenderPanel(ag){
-  if(!ag||!ag.length)return '';
+  if(!ag||!ag.length)return {rows:'',biggest:null,f:0,m:0};
   var ages={};ag.forEach(function(b){var a=b.bucket_names[0],g=b.bucket_names[1];if(!ages[a])ages[a]={f:0,m:0};if(g==='FEMALE')ages[a].f=b.bucket_value;else if(g==='MALE')ages[a].m=b.bucket_value;});
   var keys=Object.keys(ages).sort(function(a,b){return (ages[b].f+ages[b].m)-(ages[a].f+ages[a].m);});
-  var rows=keys.map(function(a){var x=ages[a],tot=x.f+x.m;
-    return '<div class="rrow"><span class="rlbl" style="width:54px">'+esc(a)+'</span><div class="rbar" style="display:flex;background:var(--hair)"><span style="width:'+x.f.toFixed(1)+'%;background:#5b8cff" data-tip="Nữ '+pc(x.f)+'%"></span><span style="width:'+x.m.toFixed(1)+'%;background:#2a3a78" data-tip="Nam '+pc(x.m)+'%"></span></div><span class="rval">'+pc(tot)+'%</span></div>';}).join('');
-  return '<div class="panel"><div class="panel-h">Độ tuổi &amp; giới tính <span style="font-weight:600;color:var(--muted);font-size:11px"><i style="display:inline-block;width:9px;height:9px;background:#5b8cff;border-radius:2px;vertical-align:middle"></i> Nữ &nbsp;<i style="display:inline-block;width:9px;height:9px;background:#2a3a78;border-radius:2px;vertical-align:middle"></i> Nam</span></div>'+rows+'</div>';
+  var totF=0,totM=0;keys.forEach(function(a){totF+=ages[a].f;totM+=ages[a].m;});
+  var maxHalf=Math.max.apply(null,keys.map(function(a){return Math.max(ages[a].f,ages[a].m);}).concat([.001]));
+  var rows=keys.map(function(a){var x=ages[a];
+    return '<div class="ag-row"><span class="ag-half l" data-tip="Nam '+pc(x.m)+'%"><i style="width:'+(x.m/maxHalf*100).toFixed(1)+'%"></i></span><span class="ag-lbl">'+esc(a)+'</span><span class="ag-half r" data-tip="Nữ '+pc(x.f)+'%"><i style="width:'+(x.f/maxHalf*100).toFixed(1)+'%"></i></span></div>';}).join('');
+  return {rows:rows,biggest:keys[0]||null,f:totF,m:totM};
 }
 function audienceSection(d){
   var pi=DATA.pageInsights;
-  return '<section id="s-aud"><div class="eyebrow">Đối tượng</div>'
-    +(pi&&pi.ageGender?'<div class="row2">'+ageGenderPanel(pi.ageGender)+'<div class="panel"><div class="panel-h">Ghi chú đối tượng</div><div class="so" style="margin-top:0">Độ tuổi/giới tính là của <b>người theo dõi trang</b> (Facebook không cấp nhân khẩu học của người xem bài Group). Tỉnh/thành &amp; Quốc gia: FB báo chưa đủ dữ liệu.</div></div></div>':'<div class="nd">Chưa có dữ liệu nhân khẩu học. Quét trang Đối tượng (Ctrl+Shift+Y).</div>')
-    +'</section>';
+  if(!(pi&&pi.ageGender&&pi.ageGender.length)){
+    return '<section id="s-aud"><div class="eyebrow">Đối tượng</div><div class="nd">Chưa có dữ liệu nhân khẩu học. Quét trang Đối tượng (Ctrl+Shift+Y).</div></section>';
+  }
+  var ag=ageGenderPanel(pi.ageGender);
+  var tot=(ag.f+ag.m)||1;
+  return '<section id="s-aud"><div class="eyebrow">Đối tượng<span class="pill p-good" style="margin-left:auto">● Có Page Insights</span></div><div class="grid2u">'
+    +'<div class="panel"><div class="panel-h">Độ tuổi × giới tính</div><div class="ag-head"><span>Nam</span><span>Nữ</span></div>'+ag.rows+'</div>'
+    +'<div class="panel"><div class="panel-h">Ghi chú</div><div class="dleg">'
+    +'<div class="dl"><i style="background:var(--accent-2)"></i>Nam<b>'+pc(ag.m/tot*100)+'%</b></div>'
+    +'<div class="dl"><i style="background:var(--accent)"></i>Nữ<b>'+pc(ag.f/tot*100)+'%</b></div>'
+    +(ag.biggest?'<div class="dl"><i style="background:var(--good)"></i>Nhóm lớn nhất<b style="color:var(--text-2)">'+esc(ag.biggest)+'</b></div>':'')
+    +'</div><div class="so" style="margin-top:14px">Độ tuổi/giới tính là của <b>người theo dõi trang</b> (Facebook không cấp nhân khẩu học của người xem bài Group). Tỉnh/thành &amp; Quốc gia: FB báo chưa đủ dữ liệu.</div></div>'
+    +'</div></section>';
 }
 function insightsOf(d){
   var s=d.sum,ins=[];
@@ -852,30 +913,36 @@ function insightSection(d){var ins=insightsOf(d),h='<div class="ins">';ins.forEa
   return '<section id="s-ins"><div class="eyebrow">Phân tích tự động</div>'+h+'</section>';}
 function healthSection(d){
   var pi=DATA.pageInsights, hasSeries=pi&&pi.series&&pi.series.views&&pi.series.views.length;
-  var live=DATA.live;
-  return '<section id="s-health"><div class="eyebrow">Sức khỏe dữ liệu</div><div class="panel"><div class="dh-grid">'
-    +'<div class="dh" data-tip="Bài lấy từ Content Library (userscript). Page Insights lấy từ trang Thông tin chi tiết."><div class="dh-l">Nguồn dữ liệu</div><div class="dh-v '+(live?'good':'warn')+'">'+(live?'LIVE':'DEMO')+'</div><div class="dh-s">Content Library + Page Insights</div></div>'
-    +'<div class="dh"><div class="dh-l">Số bài phân tích</div><div class="dh-v">'+d.sum.nPosts+'</div><div class="dh-s">theo ngày đăng</div></div>'
-    +'<div class="dh"><div class="dh-l">Chuỗi theo ngày hoạt động</div><div class="dh-v '+(hasSeries?'good':'warn')+'">'+(hasSeries?(pi.series.views.length+' ngày'):'thiếu')+'</div><div class="dh-s">'+(hasSeries?'Lượt xem/Tương tác/Follower':'Quét trang Insights')+'</div></div>'
-    +'</div><div class="so" style="margin-top:14px">Số <b>theo ngày hoạt động</b> (Lượt xem, Lượt tương tác, Follower) lấy từ chuỗi page-level Facebook — chính xác &amp; co theo khoảng ngày. Số <b>per-post</b> (bảng Nội dung) theo ngày đăng. <b>Lượt hiển thị</b> &amp; <b>Bình luận</b> cộng dồn từ các nội dung (per-post). <b>Người xem (duy nhất)</b> là số tổng cấp trang theo kỳ rộng nhất đã quét (Facebook không cấp chuỗi ngày cho chúng).</div></div></section>';
+  var live=DATA.live, hasLive=DATA.lives&&DATA.lives.length;
+  function hz(tone,tt,sub,badge){return '<div class="hz-row"><span class="hz-dot hz-'+tone+'"></span><div><div class="hz-tt">'+tt+'</div><div class="hz-sub">'+sub+'</div></div><span class="hz-badge '+tone+'">'+badge+'</span></div>';}
+  var srcRows=hz(live?'ok':'warn',live?'Nguồn dữ liệu bài':'Nguồn dữ liệu bài (demo)',live?'Content Library (userscript) · '+d.sum.nPosts+' bài theo ngày đăng':'Chưa nối Supabase — đang hiện số minh hoạ',live?'Live':'Demo')
+    +hz('ok','Reactions · Comments · Shares','Edge expansion ổn định','OK')
+    +hz(hasSeries?'ok':'warn','Page Insights (views/viewers)',hasSeries?'Bắt từ Professional Dashboard · '+pi.series.views.length+' ngày':'Chưa quét trang Insights — kiểm tra tên metric sau 15/06/2026',hasSeries?'OK':'Cần check')
+    +hz(hasLive?'ok':'risk','Livestream (live_videos)',hasLive?DATA.lives.length+' buổi live đã ingest':'Chưa ingest qua fetch.js — section hiện empty-state',hasLive?'OK':'Chưa nối');
+  var depRows='<div class="dep-row"><span class="dep-ic">✅</span><span class="dep-date">15/11/2025</span><span class="dep-tt"><b>impressions → views</b>, bỏ <code>page_fans</code> · đã áp dụng</span></div>'
+    +'<div class="dep-row"><span class="dep-ic">✅</span><span class="dep-date">15/06/2026</span><span class="dep-tt">Bỏ <b>reach</b> / video impressions / 3-sec views → Media Views · đã áp dụng</span></div>'
+    +'<div class="dep-row"><span class="dep-ic">🔭</span><span class="dep-date">Đang theo dõi</span><span class="dep-tt">Cảnh báo nếu một field trả <b>"invalid metric error"</b> ở lần quét tới</span></div>'
+    +'<div class="dep-row"><span class="dep-ic">⛔</span><span class="dep-date">04/2024</span><span class="dep-tt"><b>Groups API</b> khai tử — trang Group tạm gác</span></div>';
+  return '<section id="s-health"><div class="eyebrow">Sức khoẻ dữ liệu &amp; cảnh báo</div><div class="grid2u">'
+    +'<div class="panel"><div class="panel-h">Tình trạng nguồn dữ liệu</div><div class="hz">'+srcRows+'</div></div>'
+    +'<div class="panel"><div class="panel-h">Deprecation watch — Graph API</div><div class="dep">'+depRows+'</div></div>'
+    +'</div><div class="so" style="margin-top:14px">Số <b>theo ngày hoạt động</b> (Lượt xem, Lượt tương tác, Follower) lấy từ chuỗi page-level Facebook. Số <b>per-post</b> (bảng Nội dung) theo ngày đăng.</div></section>';
 }
 function dictSection(){
   var items=[
+    ['ER','Tương tác ÷ Lượt xem · mục tiêu '+TARGET_ER+'%'],
     ['Ngày hoạt động vs Ngày đăng','Thẻ &amp; chart đếm theo NGÀY HOẠT ĐỘNG (ngày tương tác/xem thật sự xảy ra). Bảng Nội dung sắp theo NGÀY ĐĂNG của bài.'],
     ['Lượt xem (Views)','Số lần nội dung được xem. Cấp trang lấy theo chuỗi ngày hoạt động; per-bài lấy từ Content Library.'],
     ['Người xem','Số người DUY NHẤT đã xem (unique viewers). Khác Lượt xem (một người xem nhiều lần).'],
     ['Lượt hiển thị (Impressions)','Số lần nội dung hiển thị trên màn hình. KHÁC Lượt xem.'],
     ['Lượt tương tác','Tổng cảm xúc + bình luận + chia sẻ + lưu (định nghĩa Facebook). Đếm theo ngày hoạt động.'],
-    ['Bình luận','Tổng lượt bình luận.'],
-    ['ER (Engagement Rate)','Lượt tương tác ÷ Lượt xem (%).'],
     ['Người theo dõi thực (net follow)','Số người theo dõi tăng thực nhờ một bài.'],
-    ['Follower / Tăng thực / Huỷ','Tổng follower hiện tại; net = tăng thực trong kỳ; huỷ = unfollow.'],
     ['Xem ≥3s / ≥1 phút','Lượt xem video tối thiểu 3 giây / 1 phút.'],
     ['vs TB chủ đề','Chênh lệch ER của bài so với ER trung bình của chủ đề.'],
     ['Livestream','FB xoá video sau 60 ngày khiến post_type về Text — dashboard nhận lại Livestream theo tiêu đề.']
   ];
-  var h=items.map(function(i){return '<div class="dh"><div class="dh-l">'+i[0]+'</div><div class="dh-s" style="margin-top:6px;font-size:11.5px;line-height:1.5">'+i[1]+'</div></div>';}).join('');
-  return '<section id="s-dict"><div class="eyebrow">Từ điển chỉ số</div><div class="panel"><div class="dh-grid">'+h+'</div></div></section>';
+  var rows=items.map(function(i){return '<div class="dep-row"><span class="dep-date" style="width:auto;min-width:150px">'+i[0]+'</span><span class="dep-tt">'+i[1]+'</span></div>';}).join('');
+  return '<section id="s-dict"><div class="eyebrow">Từ điển chỉ số</div><div class="panel"><div class="dep">'+rows+'</div></div></section>';
 }
 
 /* ── filter bar / nav / masthead ── */
