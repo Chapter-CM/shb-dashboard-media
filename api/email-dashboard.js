@@ -157,6 +157,7 @@ section,.kpi,.gauge-card,.panel,.tier{animation:fade .5s cubic-bezier(.16,1,.3,1
 .mh-grp{display:flex;align-items:center;background:var(--glass);border:1px solid var(--stroke);border-radius:11px;overflow:hidden}
 .mh-grp .icon-btn{border:none;border-radius:0;background:none}
 .mh-grp .icon-btn+.icon-btn{border-left:1px solid var(--stroke)}
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap}th.sortable:hover{color:var(--text)}th .sar{display:inline-block;margin-left:3px;color:var(--accent);font-size:10px}
 /* ── Subnav ── */
 .subnav{position:sticky;top:65px;z-index:20;background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(20px);border-bottom:1px solid var(--hair)}
 .subnav-in{max-width:1200px;margin:0 auto;padding:0 26px;display:flex;gap:2px;overflow-x:auto}
@@ -876,7 +877,10 @@ function qclearBtn(){
 var _TBL={},_tblState={};
 function regTable(cfg){_TBL[cfg.id]=cfg;return cfg;}
 function searchBox(id,ph){return '<div class="tbl-tools"><div class="tbl-search"><span class="si">⌕</span><input type="text" placeholder="'+esc(ph)+'" oninput="tblSearch(\''+id+'\',this.value)" autocomplete="off" spellcheck="false"></div></div>';}
-function tblFilter(cfg){var st=_tblState[cfg.id]||{q:'',page:0};var q=norm(st.q);if(!q)return cfg.rows;return cfg.rows.filter(function(r){return cfg.search(r,q);});}
+function tblFilter(cfg){var st=_tblState[cfg.id]||{q:'',page:0};var q=norm(st.q);var rows=q?cfg.rows.filter(function(r){return cfg.search(r,q);}):cfg.rows.slice();
+  if(st.sortKey&&cfg.sortVal){rows.sort(function(a,b){var x=cfg.sortVal(a,st.sortKey),y=cfg.sortVal(b,st.sortKey);return (x<y?-1:x>y?1:0)*st.sortDir;});}return rows;}
+function th(id,key,label,cls,tip){var st=_tblState[id]||{};var ar=st.sortKey===key?'<span class="sar">'+(st.sortDir<0?'▼':'▲')+'</span>':'';return '<th class="'+(cls||'num')+' sortable" data-tip="'+esc(tip||'Bấm để sắp xếp')+'" onclick="tblSort(\''+id+'\',\''+key+'\')">'+label+ar+'</th>';}
+function tblSort(id,key){var st=_tblState[id]||(_tblState[id]={q:'',page:0});if(st.sortKey===key)st.sortDir=(st.sortDir<0?1:-1);else{st.sortKey=key;st.sortDir=-1;}st.page=0;paint();}
 function tblRender(id){
   var cfg=_TBL[id];if(!cfg)return;
   var st=_tblState[id]||(_tblState[id]={q:'',page:0});
@@ -992,7 +996,7 @@ function recipientSection(d){
   if(!people.length)return '';
   var notOpenN=people.filter(function(p){return !p.opened;}).length;
   var rows=_recTab==='no'?people.filter(function(p){return !p.opened;}):people;
-  regTable({id:'rec',rows:rows,render:recRow,pageSize:20,cols:6,placeholder:'Tìm người nhận / email…',search:function(p,q){return normMail(p.rcpt).indexOf(q.replace(/[-.]/g,''))>-1||norm(fmtRcpt(p.rcpt)).indexOf(q)>-1;}});
+  regTable({id:'rec',rows:rows,render:recRow,pageSize:20,cols:6,placeholder:'Tìm người nhận / email…',search:function(p,q){return normMail(p.rcpt).indexOf(q.replace(/[-.]/g,''))>-1||norm(fmtRcpt(p.rcpt)).indexOf(q)>-1;},sortVal:function(p,k){return k==='name'?norm(fmtRcpt(p.rcpt)):k==='dept'?norm(fmtSeg(p.dept||p.role)||''):k==='open'?(p.opened?p.openCount:0):k==='last'?(p.lastOpen||0):k==='click'?(p.clicked?p.clickCount:0):k==='conf'?(p.confirmed?1:0):0;}});
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('rec','Tìm người nhận / email…')
     +'<div class="seg"><button class="'+(_recTab==='all'?'on':'')+'" onclick="setRecTab(\'all\')">Tất cả <span class="pill p-neutral" style="font-size:10px">'+people.length+'</span></button>'
@@ -1000,7 +1004,7 @@ function recipientSection(d){
   return '<section id="s-rec"><div class="eyebrow">Người nhận — trạng thái mở &amp; click '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h">Person-level</div>'
     +tabs
-    +'<div class="tw"><table><thead><tr><th class="pin">Người nhận</th><th>Phòng ban</th><th class="num">Lần mở</th><th class="num">Mở gần nhất</th><th class="num">Click</th><th class="num">Xác nhận</th></tr></thead><tbody id="tb-rec"></tbody></table></div>'
+    +'<div class="tw"><table><thead><tr>'+th('rec','name','Người nhận','pin','Tên/email người nhận')+th('rec','dept','Phòng ban','','Phòng ban / vai trò')+th('rec','open','Lần mở','num','Số lần người này mở email')+th('rec','last','Mở gần nhất','num','Thời điểm mở gần nhất')+th('rec','click','Click','num','Số lần click')+th('rec','conf','Xác nhận','num','Đã nhấn ✓ xác nhận đọc')+'</tr></thead><tbody id="tb-rec"></tbody></table></div>'
     +'<div class="clegend"><span><span class="tdot hot"></span>Đã mở &amp; click</span><span><span class="tdot warm"></span>Đã mở, chưa click</span><span><span class="tdot cold"></span>Chưa mở</span></div>'
     +'<div class="pager" id="pg-rec"></div></div></section>';
 }
@@ -1100,7 +1104,7 @@ function campaignSection(d){
   var F=_filter||{};
   var goalN=d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}).length;
   var rows=_campTab==='goal'?d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}):d.campaigns;
-  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:8,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;}});
+  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:8,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.opens||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):k==='confirmed'?(c.confirmed||0):0;}});
   var clearBtn=F.campaign?'<button class="csv" onclick="clearFilter(\'campaign\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc chiến dịch</button>':'';
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('camp','Tìm chiến dịch…')
@@ -1111,14 +1115,14 @@ function campaignSection(d){
     +'<div class="panel"><div class="panel-h">Tất cả chiến dịch '+clearBtn+'</div>'
     +tabs
     +'<div class="tw"><table><thead><tr>'
-    +'<th class="pin" data-tip="Tên chiến dịch. Bấm để lọc toàn dashboard theo chiến dịch này.">Chiến dịch</th>'
-    +'<th class="num" data-tip="Thời gian gửi/hoạt động gần nhất của chiến dịch">Gửi lúc</th>'
-    +'<th class="num" data-tip="Đã gửi = số người nhận duy nhất có sự kiện gửi">Đã gửi</th>'
-    +'<th class="num" data-tip="Tổng lượt mở, đã trừ mở-lại &lt;5s">Đã mở (lượt)</th>'
-    +'<th class="num" data-tip="Tỉ lệ mở = Người mở ÷ Người gửi (person-level, đã loại proxy)">Tỉ lệ mở</th>'
-    +'<th class="num" data-tip="Số người unique đã click ≥1 link">Đã click</th>'
-    +'<th class="num" data-tip="CTOR = Click-to-Open Rate = Người click ÷ Người mở">CTOR</th>'
-    +'<th class="num" data-tip="Số người nhấn ✓ Xác nhận đã đọc — tín hiệu mạnh nhất, không bị cache mobile">Xác nhận</th>'
+    +th('camp','name','Chiến dịch','pin','Tên chiến dịch. Bấm tiêu đề để sắp xếp; bấm 1 dòng để lọc toàn dashboard.')
+    +th('camp','last','Gửi lúc','num','Thời gian gửi/hoạt động gần nhất của chiến dịch')
+    +th('camp','sent','Đã gửi','num','Đã gửi = số người nhận duy nhất có sự kiện gửi')
+    +th('camp','opens','Đã mở (lượt)','num','Tổng lượt mở, đã trừ mở-lại &lt;5s')
+    +th('camp','reach','Tỉ lệ mở','num','Tỉ lệ mở = Người mở ÷ Người gửi (person-level, đã loại proxy)')
+    +th('camp','clickers','Đã click','num','Số người unique đã click ≥1 link')
+    +th('camp','ctor','CTOR','num','CTOR = Click-to-Open Rate = Người click ÷ Người mở')
+    +th('camp','confirmed','Xác nhận','num','Số người nhấn ✓ Xác nhận đã đọc — tín hiệu mạnh nhất, không bị cache mobile')
     +'</tr></thead><tbody id="tb-camp"></tbody></table></div>'
     +'<div class="clegend"><span><span class="tdot hot"></span>Đạt mục tiêu '+REACH_TARGET+'%</span><span><span class="tdot warm"></span>Trung bình</span><span><span class="tdot cold"></span>Thấp — cần cải thiện tiêu đề/thời điểm</span></div>'
     +'<div class="pager" id="pg-camp"></div></div>'
