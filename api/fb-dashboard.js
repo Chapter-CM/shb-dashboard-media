@@ -258,6 +258,19 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .icon-btn:hover{color:var(--text);border-color:var(--stroke-2)}
 .mode-btn{background:var(--grad);color:#fff;border:none;padding:9px 16px;border-radius:11px;cursor:pointer;font:inherit;font-size:12px;font-weight:700;box-shadow:0 8px 20px -8px rgba(225,29,42,.6)}
 .mode-btn.alt{background:var(--glass);color:var(--text);border:1px solid var(--stroke);box-shadow:none}
+.mh-logoimg{height:26px;width:auto;display:block}
+.mh-div{width:1px;height:20px;background:var(--stroke-2)}
+.mh-sub{font-size:12.5px;color:var(--muted);font-weight:600;white-space:nowrap}
+.pgsw{display:flex;align-items:center;gap:4px;background:var(--glass);border:1px solid var(--stroke);border-radius:12px;padding:4px}
+.pgsw a{display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:9px;font-size:12px;font-weight:700;color:var(--text-2);text-decoration:none;white-space:nowrap;transition:.18s}
+.pgsw a svg{width:14px;height:14px;flex:none}
+.pgsw a.on{background:var(--grad);color:#fff;box-shadow:0 6px 16px -8px rgba(225,29,42,.7)}
+.pgsw a:hover:not(.on){color:var(--text)}
+.embed .mast .pgsw{display:none}
+.mast .seg.mh-range button.on{background:var(--accent);box-shadow:none}
+.mh-grp{display:flex;align-items:center;background:var(--glass);border:1px solid var(--stroke);border-radius:11px;overflow:hidden}
+.mh-grp .icon-btn{border:none;border-radius:0;background:none}
+.mh-grp .icon-btn+.icon-btn{border-left:1px solid var(--stroke)}
 .fresh{font-size:11px;color:var(--good);font-weight:700;display:flex;align-items:center;gap:5px}
 .subnav{position:sticky;top:65px;z-index:20;background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(20px);border-bottom:1px solid var(--hair)}
 .subnav-in{max-width:1200px;margin:0 auto;padding:0 26px;display:flex;gap:2px;overflow-x:auto}
@@ -987,7 +1000,7 @@ function dateCtrl(){
   var presets=[[0,'Tất cả'],[7,'7N'],[30,'30N'],[90,'90N']];
   var segs=presets.map(function(p){return '<button class="'+((!custom&&_days===p[0])?'on':'')+'" onclick="flt('+p[0]+')">'+p[1]+'</button>';}).join('');
   var lbl=custom?(fmtDay(_from)+'–'+fmtDay(_to)):'Tuỳ chọn';
-  return '<div class="seg">'+segs+'</div>'
+  return '<div class="seg mh-range">'+segs+'</div>'
     +'<div class="csel"><button class="dtbtn'+(custom?' on':'')+'" onclick="toggleDtPop(event)" data-tip="Chọn khoảng ngày tuỳ chọn"><span>📅 '+esc(lbl)+'</span><span class="arr">▾</span></button>'
     +'<div class="csel-dd dtpop" id="dt-pop" style="display:none" onclick="event.stopPropagation()">'
     +'<div class="dtpop-h">Khoảng ngày tuỳ chọn</div>'
@@ -999,11 +1012,13 @@ function dateCtrl(){
 }
 function masthead(mode){
   var mBtn=mode==='ex'?'<button class="mode-btn alt" onclick="setMode(\'op\')" data-tip="Bảng điều hành đầy đủ">Bảng điều hành</button>':'<button class="mode-btn" onclick="setMode(\'ex\')" data-tip="Tóm tắt cho lãnh đạo">Tóm tắt lãnh đạo</button>';
-  return '<div class="mast"><div class="mast-in"><div class="brand"><div class="logo">SHB</div><div><div class="tt">Facebook Dashboard</div><div class="ss">Fanpage · CM Analytics</div></div></div>'
+  var pgsw='<div class="pgsw"><a class="on" href="/api/facebook" data-tip="Facebook Dashboard"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 22v-8h2.7l.4-3H13V9c0-.9.2-1.5 1.5-1.5H16V4.9C15.7 4.9 14.8 4.8 13.7 4.8 11.4 4.8 9.9 6.2 9.9 8.7V11H7.2v3H9.9v8z"/></svg>Facebook</a><a href="/api/email" data-tip="Email Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</a></div>';
+  return '<div class="mast"><div class="mast-in"><div class="brand"><img class="mh-logoimg" src="/assets/shb-logo-white.png" alt="SHB"><span class="mh-div"></span><span class="mh-sub">CM Dashboard</span></div>'
+    +pgsw
     +'<div class="ctrls">'
     +dateCtrl()
-    +'<button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K)">⌘K</button>'
-    +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Sáng/Tối">'+(_theme==='dark'?'☼':'☾')+'</button>'
+    +'<div class="mh-grp"><button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K)">⌘K</button>'
+    +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Sáng/Tối">'+(_theme==='dark'?'☼':'☾')+'</button></div>'
     +mBtn+'</div></div></div>';
 }
 
