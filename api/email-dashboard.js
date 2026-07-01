@@ -70,7 +70,7 @@ module.exports = async (req, res) => {
     + '<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">'
     + '<style>' + CSS + '.embed .mast .brand{display:none}.embed .mast .mast-in{justify-content:flex-end}</style></head>'
     + '<body><script>try{if(window.self!==window.top)document.documentElement.classList.add(\'embed\')}catch(e){document.documentElement.classList.add(\'embed\')}</script><div id="app"></div>'
-    + '<script>const LOGS=' + safe + ';const REACH_TARGET=70;const MIN_N=5;const EVENTS_LIMIT=' + EVENTS_LIMIT + ';' + JS + '</script></body></html>');
+    + '<script>const LOGS=' + safe + ';const REACH_TARGET=70;const MIN_N=5;const EVENTS_LIMIT=' + EVENTS_LIMIT + ';const LOGO_URI=' + JSON.stringify(LOGO_URI) + ';' + JS + '</script></body></html>');
 };
 
 /* ─── CSS ──────────────────────────────────────────────────────────────────── */
