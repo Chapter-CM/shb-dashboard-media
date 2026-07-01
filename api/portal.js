@@ -14,7 +14,7 @@ module.exports = (req, res) => {
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0b0916;--bar:rgba(20,17,38,.92);--stroke:rgba(255,255,255,.10);--text:#f2effc;--muted:#9a95bd;--accent:#8b7bff;--grad:linear-gradient(135deg,#7c5cff 0%,#5b8cff 100%)}
+:root{--bg:#0b0916;--bar:rgba(20,17,38,.92);--stroke:rgba(255,255,255,.10);--text:#f2effc;--muted:#9a95bd;--accent:#ef4444;--grad:linear-gradient(135deg,#e11d2a 0%,#fb7427 100%)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
@@ -29,7 +29,7 @@ body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--b
 .seg{display:flex;gap:3px;background:rgba(255,255,255,.06);border:1px solid var(--stroke);border-radius:12px;padding:3px;backdrop-filter:blur(8px)}
 .tab{display:flex;align-items:center;gap:7px;background:transparent;border:0;color:var(--muted);font:inherit;font-size:13px;font-weight:700;padding:7px 16px;border-radius:9px;cursor:pointer;transition:.16s}
 .tab:hover{color:var(--text)}
-.tab.on{color:#fff;background:var(--grad);box-shadow:0 6px 16px -8px rgba(124,92,255,.9)}
+.tab.on{color:#fff;background:var(--grad);box-shadow:0 6px 16px -8px rgba(225,29,42,.7)}
 .tab .ic{font-size:14px;line-height:1}
 .stage{position:absolute;inset:0;background:var(--bg)}
 .stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
@@ -47,8 +47,8 @@ body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--b
 </div>
 <div class="topbar"><div class="topbar-in">
   <div class="brand">
-    <svg class="logo" viewBox="0 0 32 32" width="30" height="30" role="img" aria-label="SHB"><rect width="32" height="32" rx="8" fill="#ee7325"/><text x="16" y="22.5" text-anchor="middle" font-family="'Space Grotesk',sans-serif" font-size="20" font-weight="800" fill="#fff">S</text></svg>
-    <span class="wm">SHB</span><span class="pn">CM Dashboard</span>
+    <img class="logo" src="/assets/shb-logo-white.png" alt="SHB" height="26">
+    <span class="pn">CM Dashboard</span>
   </div>
   <div class="seg">
     <button class="tab on" id="tab-fb" onclick="show('fb')"><span class="ic">📘</span>Facebook</button>
