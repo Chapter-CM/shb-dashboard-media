@@ -328,6 +328,47 @@ td .nm{color:var(--text);font-weight:600}
 /* ── responsive ── */
 @media(max-width:920px){.hero-row{grid-template-columns:1fr}.row2{grid-template-columns:1fr}.tiers{grid-template-columns:repeat(2,1fr)}.dh-grid{grid-template-columns:1fr}.exec-k{grid-template-columns:1fr;gap:16px}.exec-kp{border-left:none;padding-left:0;border-top:1px solid rgba(255,255,255,.2);padding-top:14px}.exec-kp:first-child{border-top:none;padding-top:0}.segname{width:110px}.segmeta{width:96px}}
 @media(max-width:560px){.kpi-col{grid-template-columns:1fr}}
+/* ── 9a: bảng 5a-style (ghim cột, dot phân hạng, thanh trong ô) ── */
+.erbar2{width:62px;height:5px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden}
+.erbar2>i{display:block;height:100%;background:var(--grad);border-radius:99px}
+.erc{display:inline-flex;flex-direction:column;gap:5px;align-items:flex-end}
+.erc b{font-family:var(--num);font-weight:700;color:var(--text);font-size:12.5px}
+.ptitle{display:flex;align-items:center;gap:11px;min-width:200px}
+.pt-main{font-size:12.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
+.pt-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.pin{position:sticky;left:0;z-index:2;background:var(--bg)}
+tbody tr:hover .pin{background:rgba(255,255,255,.028)}
+[data-theme="light"] .pin{background:var(--bg)}
+[data-theme="light"] tbody tr:hover .pin{background:rgba(90,70,180,.04)}
+[data-theme="light"] .erbar2{background:rgba(0,0,0,.08)}
+.tdot{width:8px;height:8px;border-radius:99px;flex:none}
+.tdot.hot{background:var(--good);box-shadow:0 0 8px var(--good)}
+.tdot.warm{background:var(--warn)}
+.tdot.cold{background:var(--risk)}
+.clegend{display:flex;gap:16px;font-size:11px;color:var(--muted);margin-top:10px;flex-wrap:wrap}
+.clegend span{display:flex;align-items:center;gap:6px}
+/* ── 9c: heatmap giờ mở (giờ × thứ) ── */
+.hm{display:grid;grid-template-columns:44px repeat(7,1fr);gap:3px;margin-top:6px}
+.hm-lbl{font-size:10px;color:var(--faint);font-family:var(--num);text-align:center;align-self:center}
+.hm-lbl.r{text-align:right;padding-right:6px;color:var(--muted);font-weight:600}
+.hm-cell{aspect-ratio:1;border-radius:4px;min-height:26px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff}
+.hm-scale{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:10.5px;color:var(--faint)}
+.hm-grad{flex:0 0 90px;height:7px;border-radius:99px;background:linear-gradient(90deg,rgba(239,68,68,.1),rgba(239,68,68,.9))}
+/* ── 9f: sức khoẻ dữ liệu dạng hz-row ── */
+.hz{display:flex;flex-direction:column;gap:2px}
+.hz-row{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--hair)}
+.hz-row:last-child{border-bottom:none}
+.hz-dot{width:9px;height:9px;border-radius:99px;flex:none;box-shadow:0 0 8px currentColor}
+.hz-ok{background:var(--good);color:var(--good)}.hz-warn{background:var(--warn);color:var(--warn)}.hz-risk{background:var(--risk);color:var(--risk)}
+.hz-tt{font-size:12.5px;font-weight:600;color:var(--text)}
+.hz-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.hz-badge{margin-left:auto;flex:none;font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:99px}
+.hz-badge.ok{background:var(--good-bg);color:var(--good)}.hz-badge.warn{background:var(--warn-bg);color:var(--warn)}.hz-badge.risk{background:var(--risk-bg);color:var(--risk)}
+/* ── 6a: kpi-grid 3×2 (6 KPI person-level) ── */
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:14px}
+.kpi-grid.six{grid-template-columns:repeat(3,1fr)}
+@media(max-width:920px){.kpi-grid.six{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.kpi-grid.six{grid-template-columns:1fr}}
 `;
 
 /* ─── JS ──────────────────────────────────────────────────────────────────── */
@@ -352,6 +393,7 @@ function fmtRcpt(r){
   return r;
 }
 
+function nf(n){return (Math.round(n)||0).toLocaleString('vi-VN');}
 function fmtCamp(c){return (c||'').replace(/-/g,' ').replace(/\b\w/g,function(x){return x.toUpperCase();});}
 function fmtSeg(s){if(!s||s==='unknown'||s==='')return '(Chưa phân loại)';return s.replace(/-/g,' ');}
 function fmtTime(iso){if(!iso)return '—';try{return new Date(iso).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return iso;}}
@@ -503,7 +545,7 @@ function process(logs){
   arr.forEach(function(s){
     var r=s.rcpt;
     if(!personMap[r])personMap[r]={rcpt:r,dept:'',role:'',loc:'',
-      sent:false,opened:false,openCount:0,clicked:false,confirmed:false,devices:{}};
+      sent:false,opened:false,openCount:0,clicked:false,confirmed:false,devices:{},lastOpen:null};
     var p=personMap[r];
     if(s.dept&&!p.dept)p.dept=s.dept;
     if(s.role&&!p.role)p.role=s.role;
@@ -514,6 +556,7 @@ function process(logs){
       var devOC=F.device?(s.openDevices||[]).filter(function(ua){return deviceOf(ua)===F.device;}).length:s.openCount;
       if(devOC>0){p.opened=true;p.openCount+=devOC;}
       else if(!F.device){p.opened=true;} // không filter: opened luôn true
+      if(s.openAt&&(!p.lastOpen||s.openAt>p.lastOpen))p.lastOpen=s.openAt;
     }
     if(s.confirmed)p.confirmed=true;
     if(s.clicked)p.clicked=true;
@@ -592,6 +635,12 @@ function process(logs){
 
   var hour=new Array(24).fill(0);
   arr.forEach(function(s){if(s.openAt){try{hour[new Date(s.openAt).getHours()]++;}catch(e){}}});
+
+  /* ══ 6b. HEATMAP GIỜ MỞ · THỨ×GIỜ (9c) — dựng từ timestamp lần mở, không field mới ══ */
+  var heatDOW=[];for(var _hd=0;_hd<7;_hd++)heatDOW.push(new Array(24).fill(0));
+  arr.forEach(function(s){(s.topEvents||[]).forEach(function(ev){
+    try{var dt=new Date(ev.ts);var jsDay=dt.getDay();var dow=jsDay===0?6:jsDay-1;heatDOW[dow][dt.getHours()]++;}catch(e){}
+  });});
 
   /* ══ 7. CLICK STATS ════════════════════════════════════════════════ */
   var clickers={};CLICKS.forEach(function(c){clickers[c.rcpt]=true;});
@@ -737,7 +786,8 @@ function process(logs){
   };
 
   return{sum:sum,campaigns:campaigns,segments:segments,tiers:tiers,
-    followUp:followUp,notOpened:notOpened,hour:hour,
+    followUp:followUp,notOpened:notOpened,hour:hour,heatDOW:heatDOW,
+    people:persons,
     deviceSplit:deviceSplit,
     hasDevice:pOpened.some(function(p){return Object.keys(p.devices).length>0;}),
     clickStats:clickStats,initiatives:initiatives,hasInitiative:initiatives.length>0,
@@ -839,20 +889,15 @@ function heroRow(d,cur,prev,ser){
   var note=s.proxyOpens>0?' · đã loại '+s.proxyOpens+' người chỉ mở qua proxy':'';
   var gSub=s.hasSent?(s.uniqOpeners+' người mở / '+s.sent+' người được gửi'+note):(s.uniqOpeners+' người đã mở');
   var gauge='<div class="gauge-card" data-tip="Reach đã kiểm chứng = số người mở thật ÷ tổng gửi. Open giả từ security gateway đã được loại bỏ. Mục tiêu '+REACH_TARGET+'%."><div class="gc-h">'+gHead+'</div><div class="gauge-wrap">'+radialGauge(gVal,REACH_TARGET)+'</div><div class="gc-sub">'+gSub+'</div></div>';
-  function card(label,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl">'+label+'</div><div class="kv">'+value+'</div><div class="krow">'+(dH||'<span class="delta flat"></span>')+(spH||'')+'</div></div>';}
-  var k1=card('Người nhận',s.hasSent?s.sent:'—',s.hasSent?deltaChip(cur.sent,prev.sent,true):'',spark(sS,'var(--accent)'),'Số người nhận duy nhất có sự kiện gửi (pos=sent). Dùng làm mẫu số cho Open Rate. 1 người nhận nhiều chiến dịch = chỉ tính 1 người.');
-  var k2=card('Tổng lượt mở',s.opens,deltaChip(cur.opens,prev.opens,true),spark(oS,'var(--accent-2)'),'Tổng số lần email được mở. Outlook tự reload trong 5s = không tính. Đóng rồi mở lại (gap >5s) = +1 lượt. Unique người mở xem bên dưới.');
-  // Impression = Lượt mở ÷ Lượt gửi (Open Rate đã thể hiện qua gauge Reach)
-  var k3=card('Impression',s.impressionRate!=null?s.impressionRate+'%':'—','','','Lượt mở ÷ Lượt gửi (sessions). >100% bình thường — email được mở lại nhiều lần. Proxy/security gateway tự scan cũng làm tăng chỉ số này. Impression cao = nội dung đáng đọc lại.');
-  var k4=card('Người click',s.nClickers||0,'','','Số người unique đã click ít nhất 1 link. Signal engagement mạnh nhất có thể đo trong Outlook.');
-  var k5=card('Avg mở/người',s.avgOpensPerReader!=null?s.avgOpensPerReader+'x':'—','','','Avg lượt mở per người = Tổng lượt mở ÷ Số người đã mở. >1.0x = email được đọc lại nhiều lần.');
-  // Click Rate thay bằng "Chưa mở" vì click tracking cần VBA mới
-  // Click Rate vẫn hiển thị trong Engagement panel và Campaign table
-  var notOpenVal=s.notOpenRate!=null?(s.notOpenCount+' người'):'-';
-  var notOpenPct=s.notOpenRate!=null?' ('+s.notOpenRate+'%)':'';
-  var k6=card('Chưa mở',notOpenVal+notOpenPct,'','',
-    'Số người được gửi nhưng chưa mở email ≥1 lần. = Đã gửi − Người mở unique. Mục tiêu: giảm con số này xuống 0 qua follow-up trực tiếp.');
-  return '<div class="hero-row">'+gauge+'<div class="kpi-col">'+k1+k2+k3+k4+k5+k6+'</div></div>';
+  function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl"><span class="ki">'+ic+'</span>'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
+  // 6 KPI chuẩn email (person-level): Đã gửi · Đã mở (lượt) · Tỉ lệ mở · Đã click · CTOR · Xác nhận đọc
+  var k1=card('Đã gửi','✉',s.hasSent?nf(s.sent):'—',s.hasSent?deltaChip(cur.sent,prev.sent,true):'',spark(sS,'var(--accent-2)'),'Số người nhận duy nhất có sự kiện gửi (pos=sent). 1 người nhận nhiều chiến dịch = chỉ tính 1 người.');
+  var k2=card('Đã mở (lượt)','👁',nf(s.opens),deltaChip(cur.opens,prev.opens,true),spark(oS,'var(--accent-2)'),'Tổng số lần email được mở, đã trừ mở-lại &lt;5s (Outlook tự reload). Đóng rồi mở lại (gap &gt;5s) = +1 lượt.');
+  var k3=card('Tỉ lệ mở','📈',s.openRate!=null?s.openRate+'%':'—',s.openRate!=null?(s.openRate>=REACH_TARGET?'<span class="delta up">▲ đạt</span>mục tiêu '+REACH_TARGET+'%':'<span class="delta down">▼ dưới</span>mục tiêu '+REACH_TARGET+'%'):'','','Người mở ÷ Người gửi (person-level) — không bao giờ vượt 100%. Mục tiêu '+REACH_TARGET+'%.');
+  var k4=card('Đã click','🖱',nf(s.nClickers||0),'','','Số người unique đã click ít nhất 1 link.');
+  var k5=card('CTOR','🎯',(d.clickStats.ctor||0)+'%','','','Click-to-Open Rate = Người click ÷ Người mở.');
+  var k6=card('Xác nhận đọc','✔',nf(s.nConfirmed||0),'','','Người đã nhấn link ✓ Xác nhận đã đọc trong email — tín hiệu đọc mạnh nhất, không bị cache mobile.');
+  return '<div class="hero-row">'+gauge+'<div class="kpi-grid six">'+k1+k2+k3+k4+k5+k6+'</div></div>';
 }
 
 function heroChart(d,ser){
@@ -881,6 +926,68 @@ function timingPanel(d){
   for(var h=0;h<24;h++){var v=d.hour[h];var p=Math.round(v/maxH*100);var off=(h<7||h>18)?' off':'';var lb=(h%3===0)?h:'';bars+='<div class="hcol" title="'+h+':00 — '+v+' lượt mở"><div class="b'+off+'" style="height:'+Math.max(p,2)+'%"></div><div class="hl">'+lb+'</div></div>';}
   return '<div class="panel"><div class="panel-h" data-tip="Phân bố giờ người dùng mở email. Giờ cao điểm = thời điểm tốt nhất để gửi email tiếp theo.">Phân bố giờ mở · cao điểm <b style=\'color:var(--accent)\'>'+(s.bestHour||0)+':00</b></div><div class="hc2">'+bars+'</div>'
     +'<div style="font-size:11px;color:var(--faint);margin-top:10px">Cột xanh = giờ làm việc (7h–18h). Lên lịch gửi email vào giờ cao điểm để tối ưu open rate.</div></div>';
+}
+
+/* ── 9c: heatmap giờ mở · giờ×thứ — dựng từ timestamp lần mở (d.heatDOW), không field mới ── */
+var HM_BUCKETS=[[6,9],[9,12],[12,15],[15,18],[18,21],[21,24]];
+var HM_DOW=['T2','T3','T4','T5','T6','T7','CN'];
+function openHeatSection(d){
+  var heat=d.heatDOW||[];
+  if(!heat.length||!heat.some(function(row){return row.some(function(v){return v>0;});})){
+    return '<section id="s-openhm"><div class="eyebrow">Khung giờ mở email '+qclearBtn()+'</div><div class="nd">Chưa đủ dữ liệu để dựng heatmap giờ mở.</div></section>';
+  }
+  var bmax=1,best={dow:0,b:0};
+  var buckets=HM_BUCKETS.map(function(rng,bi){
+    return HM_DOW.map(function(_,dow){
+      var s=0;for(var h=rng[0];h<rng[1];h++)s+=(heat[dow]&&heat[dow][h])||0;
+      if(s>bmax){bmax=s;best={dow:dow,b:bi};}
+      return s;
+    });
+  });
+  var cells='<span class="hm-lbl"></span>'+HM_DOW.map(function(x){return '<span class="hm-lbl">'+x+'</span>';}).join('');
+  buckets.forEach(function(row,bi){
+    cells+='<span class="hm-lbl r">'+HM_BUCKETS[bi][0]+'–'+HM_BUCKETS[bi][1]+'h</span>';
+    row.forEach(function(v,dow){
+      var op=v?(.1+v/bmax*.85):.05;
+      var isPeak=bi===best.b&&dow===best.dow&&v>0;
+      cells+='<span class="hm-cell" style="background:rgba(239,68,68,'+op.toFixed(2)+')" data-tip="'+HM_DOW[dow]+' '+HM_BUCKETS[bi][0]+'–'+HM_BUCKETS[bi][1]+'h: '+nf(v)+' lượt mở">'+(isPeak?'↑':'')+'</span>';
+    });
+  });
+  return '<section id="s-openhm"><div class="eyebrow">Khung giờ mở email '+qclearBtn()+'</div>'
+    +'<div class="panel"><div class="panel-h">Heatmap lượt mở · giờ × thứ<span style="font-weight:600;color:var(--muted);font-size:11px">đậm = nhiều lượt mở</span></div>'
+    +'<div class="hm">'+cells+'</div>'
+    +'<div class="hm-scale">Thấp<span class="hm-grad"></span>Cao · <b style="color:var(--text-2)">Giờ vàng: '+HM_DOW[best.dow]+' · '+HM_BUCKETS[best.b][0]+'–'+HM_BUCKETS[best.b][1]+'h</b></div></div>'
+    +'<div class="so">→ Heatmap dựng từ <b>timestamp</b> của mỗi lần mở (thứ × giờ) — không cần field mới. Gợi ý giờ gửi tối ưu = ô đậm nhất.</div></section>';
+}
+
+/* ── 9e: người nhận (recipient-level) — ai đã mở/click, dùng d.people (person-level) ── */
+var _recTab='all';
+function setRecTab(t){_recTab=t;paint();}
+function recRow(p){
+  var tier=!p.opened?'cold':p.clicked?'hot':'warm';
+  return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở':'Chưa mở email nào')+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
+    +'<td>'+esc(fmtSeg(p.dept||p.role))+'</td>'
+    +'<td class="num">'+(p.opened?p.openCount:0)+'</td>'
+    +'<td class="num" style="font-size:11px">'+(p.lastOpen?fmtTime(p.lastOpen):'—')+'</td>'
+    +'<td class="num">'+(p.clicked?'<span class="pill p-good">✔</span>':'—')+'</td>'
+    +'<td class="num">'+(p.confirmed?'<span class="pill p-good">✔</span>':'—')+'</td></tr>';
+}
+function recipientSection(d){
+  var people=d.people||[];
+  if(!people.length)return '';
+  var notOpenN=people.filter(function(p){return !p.opened;}).length;
+  var rows=_recTab==='no'?people.filter(function(p){return !p.opened;}):people;
+  regTable({id:'rec',rows:rows,render:recRow,pageSize:20,cols:6,placeholder:'Tìm người nhận / email…',search:function(p,q){return normMail(p.rcpt).indexOf(q.replace(/[-.]/g,''))>-1||norm(fmtRcpt(p.rcpt)).indexOf(q)>-1;}});
+  var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+    +searchBox('rec','Tìm người nhận / email…')
+    +'<div class="seg"><button class="'+(_recTab==='all'?'on':'')+'" onclick="setRecTab(\'all\')">Tất cả <span class="pill p-neutral" style="font-size:10px">'+people.length+'</span></button>'
+    +'<button class="'+(_recTab==='no'?'on':'')+'" onclick="setRecTab(\'no\')">Chưa mở <span class="pill p-neutral" style="font-size:10px">'+notOpenN+'</span></button></div></div>';
+  return '<section id="s-rec"><div class="eyebrow">Người nhận — trạng thái mở &amp; click '+qclearBtn()+'</div>'
+    +'<div class="panel"><div class="panel-h">Person-level</div>'
+    +tabs
+    +'<div class="tw"><table><thead><tr><th class="pin">Người nhận</th><th>Phòng ban</th><th class="num">Lần mở</th><th class="num">Mở gần nhất</th><th class="num">Click</th><th class="num">Xác nhận</th></tr></thead><tbody id="tb-rec"></tbody></table></div>'
+    +'<div class="clegend"><span><span class="tdot hot"></span>Đã mở &amp; click</span><span><span class="tdot warm"></span>Đã mở, chưa click</span><span><span class="tdot cold"></span>Chưa mở</span></div>'
+    +'<div class="pager" id="pg-rec"></div></div></section>';
 }
 
 function engagementPanel(d){
@@ -953,50 +1060,52 @@ function campRow(c){
   var r=c.verifiedReach!=null?c.verifiedReach:c.reach;
   var isActive=F.campaign===c.name;
   var vs=c.vsAvg>0?'<span class="delta up">+'+c.vsAvg+'</span>':(c.vsAvg<0?'<span class="delta down">'+c.vsAvg+'</span>':'<span class="delta flat">0</span>');
-  var man=c.msg_type==='mandatory'?' <span class="pill p-warn" style="font-size:9px;padding:1px 6px">BẮT BUỘC</span>':'';
+  var man=c.msg_type==='mandatory'?'<span class="pill p-warn" style="font-size:9px;padding:1px 6px;margin-left:6px">BẮT BUỘC</span>':'';
+  var tier=r>=REACH_TARGET?'hot':r>=REACH_TARGET-30?'warm':'cold';
+  var rw=Math.max(0,Math.min(100,r||0));
   return '<tr class="'+(isActive?'filt-on':'')+'" onclick="setFilter(\'campaign\',\''+(isActive?'':jsq(c.name))+'\')" data-tip="'+esc(c.hint||'')+(isActive?' · Đang lọc — bấm để bỏ lọc':' · Bấm để lọc toàn dashboard')+'">'
-    +'<td><span class="nm">'+esc(fmtCamp(c.name))+'</span>'+man+'</td>'
+    +'<td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtCamp(c.name))+man+'</div><div class="pt-sub">'+esc(c.subject||c.initiative||'—')+'</div></div></div></td>'
     +'<td class="num" data-tip="'+(c.target_size?'Mục tiêu: '+c.target_size+' người':'')+'">'
-      +(c.sent>0?c.sent:'—')
-      +(c.target_size&&c.target_size>c.sent?'<span style="color:var(--muted);font-size:10px"> /'+c.target_size+'</span>':'')
+      +(c.sent>0?nf(c.sent):'—')
+      +(c.target_size&&c.target_size>c.sent?'<span style="color:var(--muted);font-size:10px"> /'+nf(c.target_size)+'</span>':'')
       +'</td>'
-    +'<td class="num" data-tip="'+(c.notOpen||0)+' người được gửi nhưng chưa mở — follow-up trực tiếp."><span class="pill p-'+(c.notOpenRate>50?'risk':c.notOpenRate>20?'warn':'good')+'">'
-      +(c.notOpenRate!=null?c.notOpenRate+'%':'—')+'</span></td>'
-    +'<td class="num"><b>'+c.opens+'</b></td>'
-    +'<td class="num">'+pill(r,c.sent)+'</td>'
-    +'<td class="num">'+(c.avgOpenCount!=null?c.avgOpenCount+'x':'—')+'</td>'
-    +'<td class="num" data-tip="'+c.confirmed+' người đã nhấn ✓ Xác nhận đã đọc">'
-      +(c.confirmed>0?'<span class="pill p-good">'+c.confirmed+'</span>':'—')+'</td>'
-    +'<td class="num">'+(c.clickRate!=null?c.clickRate+'%':'—')+'</td>'
+    +'<td class="num"><b>'+nf(c.opens)+'</b></td>'
+    +'<td class="num" data-tip="'+(N(c.sent)?'Mẫu nhỏ N='+c.sent+' — % không đủ đại diện thống kê':(c.notOpen||0)+' người được gửi nhưng chưa mở')+'"><span class="erc"><b>'+(r!=null?r+'%':'—')+'</b><span class="erbar2"><i style="width:'+rw+'%"></i></span></span></td>'
+    +'<td class="num">'+nf(c.clickers||0)+'</td>'
     +'<td class="num">'+(c.ctor>0?c.ctor+'%':'—')+'</td>'
-    +'<td class="num" data-tip="Tổng lượt mở — số lần email được mở (kể cả mở lại)">'+(c.openEvents||0)+'</td>'
-    +'<td class="num"><b>'+c.score+'</b></td>'
-    +'<td class="num">'+vs+'</td></tr>';
+    +'<td class="num" data-tip="'+c.confirmed+' người đã nhấn ✓ Xác nhận đã đọc">'
+      +(c.confirmed>0?'<span class="pill p-good">'+c.confirmed+'</span>':'—')+'</td></tr>';
 }
+function N(n){return n!=null&&n<MIN_N;}
+var _campTab='all';
+function setCampTab(t){_campTab=t;paint();}
 function campaignSection(d){
   if(!d.campaigns.length)return '';
   var F=_filter||{};
-  regTable({id:'camp',rows:d.campaigns,render:campRow,pageSize:15,cols:12,placeholder:'Tìm chiến dịch theo tên…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;}});
+  var goalN=d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}).length;
+  var rows=_campTab==='goal'?d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}):d.campaigns;
+  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:7,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;}});
   var clearBtn=F.campaign?'<button class="csv" onclick="clearFilter(\'campaign\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc chiến dịch</button>':'';
-  return '<section id="s-camp"><div class="eyebrow">Chiến dịch · hiệu quả so sánh (bấm dòng để lọc) '+qclearBtn()+'</div>'
+  var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+    +searchBox('camp','Tìm chiến dịch…')
+    +'<div class="seg"><button class="'+(_campTab==='all'?'on':'')+'" onclick="setCampTab(\'all\')">Tất cả <span class="pill p-neutral" style="font-size:10px">'+d.campaigns.length+'</span></button>'
+    +'<button class="'+(_campTab==='goal'?'on':'')+'" onclick="setCampTab(\'goal\')">Đạt mục tiêu '+REACH_TARGET+'% <span class="pill p-neutral" style="font-size:10px">'+goalN+'</span></button></div>'
+    +'</div>';
+  return '<section id="s-camp"><div class="eyebrow">Hiệu quả chiến dịch — bấm dòng xem chi tiết '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h">Tất cả chiến dịch '+clearBtn+'</div>'
-    +searchBox('camp','Tìm chiến dịch theo tên…')
+    +tabs
     +'<div class="tw"><table><thead><tr>'
-    +'<th data-tip="Tên chiến dịch. Bấm để lọc toàn dashboard theo chiến dịch này.">Chiến dịch</th>'
-    +'<th class="num" data-tip="Lượt gửi = số email đã gửi (1 người × 1 chiến dịch = 1 lượt)">Lượt gửi</th>'
-    +'<th class="num" data-tip="Tỉ lệ người nhận nhưng chưa mở. Mục tiêu < 30%.">Chưa mở</th>'
-    +'<th class="num" data-tip="Người mở = số người duy nhất đã mở ≥1 lần (không tính proxy)">Người mở</th>'
-    +'<th class="num" data-tip="Open Rate = Mở ÷ Gửi · gồm cả proxy open">Open Rate</th>'
-    +'<th class="num" data-tip="Avg mở/người = trung bình số lần 1 người mở email này">Avg mở/người</th>'
-    +'<th class="num" data-tip="Số người nhấn ✓ Xác nhận đã đọc — tín hiệu mạnh nhất, hoạt động trên mọi nền tảng">Xác nhận</th>'
-    +'<th class="num" data-tip="Click Rate = Người click ÷ Số gửi">Click Rate</th>'
+    +'<th class="pin" data-tip="Tên chiến dịch. Bấm để lọc toàn dashboard theo chiến dịch này.">Chiến dịch</th>'
+    +'<th class="num" data-tip="Đã gửi = số người nhận duy nhất có sự kiện gửi">Đã gửi</th>'
+    +'<th class="num" data-tip="Tổng lượt mở, đã trừ mở-lại &lt;5s">Đã mở (lượt)</th>'
+    +'<th class="num" data-tip="Tỉ lệ mở = Người mở ÷ Người gửi (person-level, đã loại proxy)">Tỉ lệ mở</th>'
+    +'<th class="num" data-tip="Số người unique đã click ≥1 link">Đã click</th>'
     +'<th class="num" data-tip="CTOR = Click-to-Open Rate = Người click ÷ Người mở">CTOR</th>'
-    +'<th class="num" data-tip="Tổng lượt mở = tổng số lần email được mở (kể cả mở lại nhiều lần)">Lượt mở</th>'
-    +'<th class="num" data-tip="Điểm tổng hợp = Reach×0.6 + Click Rate×0.2 + CTOR×0.2. Dùng để so sánh hiệu quả giữa các đợt.">Điểm</th>'
-    +'<th class="num" data-tip="Chênh lệch reach so với trung bình tất cả chiến dịch. Dương = tốt hơn TB.">vs TB</th>'
+    +'<th class="num" data-tip="Số người nhấn ✓ Xác nhận đã đọc — tín hiệu mạnh nhất, không bị cache mobile">Xác nhận</th>'
     +'</tr></thead><tbody id="tb-camp"></tbody></table></div>'
+    +'<div class="clegend"><span><span class="tdot hot"></span>Đạt mục tiêu '+REACH_TARGET+'%</span><span><span class="tdot warm"></span>Trung bình</span><span><span class="tdot cold"></span>Thấp — cần cải thiện tiêu đề/thời điểm</span></div>'
     +'<div class="pager" id="pg-camp"></div></div>'
-    +'<div class="so">→ <b>Điểm</b> = Reach×0.6 + Click Rate×0.2 + CTOR×0.2. <b>vs TB</b> = chênh reach so với trung bình. Bấm 1 dòng để lọc / bấm lại để bỏ lọc.</div></section>';
+    +'<div class="so">→ Tỉ lệ mở tính theo <b>người</b> (person-level), đã loại open giả từ proxy/security gateway. Bấm 1 dòng để lọc / bấm lại để bỏ lọc.</div></section>';
 }
 
 
@@ -1134,7 +1243,14 @@ function dataHealthSection(d){
   var span=(q.first&&q.last)?fmtTime(q.first)+' → '+fmtTime(q.last):'—';
   function stat(label,val,sub,toneCls,tip){return '<div class="dh" data-tip="'+esc(tip||'')+'"><div class="dh-l">'+label+'</div><div class="dh-v '+(toneCls||'')+'">'+val+'</div>'+(sub?'<div class="dh-s">'+sub+'</div>':'')+'</div>';}
   var pp=q.proxyPct,mp=q.missingDeptPct;
-  return '<section id="s-health"><div class="eyebrow">Chất lượng dữ liệu · độ tin cậy đo lường '+qclearBtn()+'</div><div class="panel">'
+  function hz(tone,tt,sub,badge){return '<div class="hz-row"><span class="hz-dot hz-'+tone+'"></span><div><div class="hz-tt">'+tt+'</div><div class="hz-sub">'+sub+'</div></div><span class="hz-badge '+tone+'">'+badge+'</span></div>';}
+  var hzRows=hz('ok','Pixel tracking mở email',(q.uniqCamp||0)+' chiến dịch · '+nf(s.opens||0)+' lượt mở đã ghi','Live')
+    +hz('ok','Lọc mở-lại &lt;5s','Đã trừ reload tự động của Outlook để không thổi phồng lượt mở','Đang áp dụng')
+    +hz(pp>10?'warn':'ok','Proxy mở ảnh (Apple MPP / Gmail)',pp+'% lượt mở đến từ proxy/gateway — có thể làm tỉ lệ mở cao hơn thực tế',pp>10?'Lưu ý':'Thấp')
+    +hz(d.clickStats.has?'ok':'warn','Click-tracking per-link',d.clickStats.has?'Đã bật — '+nf(d.clickStats.total||0)+' lượt click ghi nhận':'Cần bật ENABLE_CLICK_TRACKING=True trong macro',d.clickStats.has?'OK':'Cần check');
+  return '<section id="s-health"><div class="eyebrow">Chất lượng dữ liệu · độ tin cậy đo lường '+qclearBtn()+'</div>'
+    +'<div class="panel"><div class="panel-h">Sức khoẻ dữ liệu email</div><div class="hz">'+hzRows+'</div></div>'
+    +'<div class="panel" style="margin-top:16px">'
     +'<div class="dh-grid">'
     +stat('Xác nhận đọc',s.nConfirmed||0,(s.nConfirmed||0)+' / '+(s.uniqOpeners||0)+' người mở',s.nConfirmed>0?'good':'','Người đã nhấn link ✓ Xác nhận đã đọc ở cuối email. Số liệu này KHÔNG bị ảnh hưởng bởi cache mobile.')
     +stat('Tổng sự kiện',q.events+(q.events>=EVENTS_LIMIT*0.95?' ⚠️':''),span,q.events>=EVENTS_LIMIT*0.95?'risk':'','Tổng số event đã ghi vào Supabase. Giới hạn query: '+EVENTS_LIMIT+'. '+(q.events>=EVENTS_LIMIT*0.95?'⚠️ Gần hoặc đạt giới hạn — dữ liệu cũ có thể bị cắt. Tăng EVENTS_LIMIT trên Vercel env.':'OK.'))
@@ -1196,7 +1312,7 @@ function navLinks(d){
   var L='<a href="#s-ov" class="on">Tổng quan</a><a href="#s-seg">Phân khúc</a>';
   if(d.hasInitiative)L+='<a href="#s-ini">Squad/Dự án</a>';
   if(d.hasMandatory)L+='<a href="#s-man">Bắt buộc</a>';
-  L+='<a href="#s-camp">Chiến dịch</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Phân tích</a><a href="#s-health">Chất lượng DL</a><a href="#s-dict">Từ điển</a>';
+  L+='<a href="#s-camp">Chiến dịch</a><a href="#s-openhm">Giờ mở</a><a href="#s-rec">Người nhận</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Phân tích</a><a href="#s-health">Chất lượng DL</a><a href="#s-dict">Từ điển</a>';
   return L;
 }
 function masthead(mode){
@@ -1225,6 +1341,7 @@ function operational(d,cur,prev,ser){
     (d.clickStats.has?'<div style="margin-top:16px">'+clickPanel(d)+'</div>':'')+
     '</section>'+
     segmentSection(d)+initiativeSection(d)+mandatorySection(d)+campaignSection(d)+
+    openHeatSection(d)+recipientSection(d)+
     audienceSection(d)+insightSection(d)+dataHealthSection(d)+dictionarySection()+
     '<div class="foot">Cập nhật lúc '+new Date().toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'})+' · '+d.sum.events+' sự kiện · tự làm mới 5 phút</div></div>';
 }
