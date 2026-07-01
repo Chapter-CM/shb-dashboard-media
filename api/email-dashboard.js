@@ -545,7 +545,7 @@ function process(logs){
   arr.forEach(function(s){
     var r=s.rcpt;
     if(!personMap[r])personMap[r]={rcpt:r,dept:'',role:'',loc:'',
-      sent:false,opened:false,openCount:0,clicked:false,confirmed:false,devices:{},lastOpen:null};
+      sent:false,opened:false,openCount:0,clicked:false,clickCount:0,confirmed:false,devices:{},lastOpen:null};
     var p=personMap[r];
     if(s.dept&&!p.dept)p.dept=s.dept;
     if(s.role&&!p.role)p.role=s.role;
@@ -560,6 +560,7 @@ function process(logs){
     }
     if(s.confirmed)p.confirmed=true;
     if(s.clicked)p.clicked=true;
+    if(s.clicks&&s.clicks.length)p.clickCount+=s.clicks.length;
     // Collect UNIQUE device types for this person (across all their email opens)
     s.uas.forEach(function(ua){var d=deviceOf(ua);if(d)p.devices[d]=true;});
   });
@@ -969,7 +970,7 @@ function recRow(p){
     +'<td>'+esc(fmtSeg(p.dept||p.role))+'</td>'
     +'<td class="num">'+(p.opened?p.openCount:0)+'</td>'
     +'<td class="num" style="font-size:11px">'+(p.lastOpen?fmtTime(p.lastOpen):'—')+'</td>'
-    +'<td class="num">'+(p.clicked?'<span class="pill p-good">✔</span>':'—')+'</td>'
+    +'<td class="num">'+(p.clicked?p.clickCount:0)+'</td>'
     +'<td class="num">'+(p.confirmed?'<span class="pill p-good">✔</span>':'—')+'</td></tr>';
 }
 function recipientSection(d){
@@ -1065,6 +1066,7 @@ function campRow(c){
   var rw=Math.max(0,Math.min(100,r||0));
   return '<tr class="'+(isActive?'filt-on':'')+'" onclick="setFilter(\'campaign\',\''+(isActive?'':jsq(c.name))+'\')" data-tip="'+esc(c.hint||'')+(isActive?' · Đang lọc — bấm để bỏ lọc':' · Bấm để lọc toàn dashboard')+'">'
     +'<td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtCamp(c.name))+man+'</div><div class="pt-sub">'+esc(c.subject||c.initiative||'—')+'</div></div></div></td>'
+    +'<td class="num" style="font-size:11px;color:var(--faint)">'+(c.last?fmtDay(c.last):'—')+'</td>'
     +'<td class="num" data-tip="'+(c.target_size?'Mục tiêu: '+c.target_size+' người':'')+'">'
       +(c.sent>0?nf(c.sent):'—')
       +(c.target_size&&c.target_size>c.sent?'<span style="color:var(--muted);font-size:10px"> /'+nf(c.target_size)+'</span>':'')
@@ -1084,7 +1086,7 @@ function campaignSection(d){
   var F=_filter||{};
   var goalN=d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}).length;
   var rows=_campTab==='goal'?d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}):d.campaigns;
-  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:7,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;}});
+  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:8,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;}});
   var clearBtn=F.campaign?'<button class="csv" onclick="clearFilter(\'campaign\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc chiến dịch</button>':'';
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('camp','Tìm chiến dịch…')
@@ -1096,6 +1098,7 @@ function campaignSection(d){
     +tabs
     +'<div class="tw"><table><thead><tr>'
     +'<th class="pin" data-tip="Tên chiến dịch. Bấm để lọc toàn dashboard theo chiến dịch này.">Chiến dịch</th>'
+    +'<th class="num" data-tip="Thời gian gửi/hoạt động gần nhất của chiến dịch">Gửi lúc</th>'
     +'<th class="num" data-tip="Đã gửi = số người nhận duy nhất có sự kiện gửi">Đã gửi</th>'
     +'<th class="num" data-tip="Tổng lượt mở, đã trừ mở-lại &lt;5s">Đã mở (lượt)</th>'
     +'<th class="num" data-tip="Tỉ lệ mở = Người mở ÷ Người gửi (person-level, đã loại proxy)">Tỉ lệ mở</th>'
