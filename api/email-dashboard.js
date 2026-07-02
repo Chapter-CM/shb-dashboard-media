@@ -1491,10 +1491,12 @@ function resection(id,fn){
   mountAllTables();wireNav();initTooltip();
 }
 function paint(){
+  var _sy=window.scrollY;
   try{
     applyTheme();applyDensity();
     document.getElementById('app').innerHTML=render();
     mountAllTables();wireNav();wireChart();countUp();init();initTooltip();
+    window.scrollTo(0,_sy);
   }catch(err){
     var app=document.getElementById('app');
     if(app)app.innerHTML='<div style="padding:40px 32px;font-family:monospace;max-width:860px;margin:0 auto">'
