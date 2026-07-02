@@ -337,6 +337,12 @@ td .nm{color:var(--text);font-weight:600}
 .csel-opt{padding:8px 14px;font-size:12.5px;font-weight:500;cursor:pointer;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .1s}
 .csel-opt:hover{background:var(--glass-2);color:var(--text)}
 .csel-opt.on{color:var(--accent);font-weight:700}
+.csel-btn.act{border-color:var(--accent);color:var(--accent)}
+.msel-opt{display:flex;align-items:center;gap:9px;padding:8px 14px;font-size:12.5px;cursor:pointer;color:var(--text-2);white-space:nowrap}
+.msel-opt:hover{background:var(--glass-2);color:var(--text)}
+.msel-opt.on{color:var(--text);font-weight:600}
+.msel-ck{width:16px;height:16px;flex:none;border:1.5px solid var(--stroke-2);border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#fff;line-height:1}
+.msel-opt.on .msel-ck{background:var(--accent);border-color:var(--accent)}
 .fclear{background:none;border:none;color:var(--muted);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .fclear:hover{color:var(--risk)}
 /* ── ini-row ── */
@@ -354,9 +360,9 @@ td .nm{color:var(--text);font-weight:600}
 .ptitle{display:flex;align-items:center;gap:11px;min-width:200px}
 .pt-main{font-size:12.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
 .pt-sub{font-size:11px;color:var(--muted);margin-top:2px}
-.pin{position:sticky;left:0;z-index:2;background:var(--bg)}
+.pin{position:sticky;left:0;z-index:2;background:var(--glass);backdrop-filter:blur(18px)}
 tbody tr:hover .pin{background:rgba(255,255,255,.028)}
-[data-theme="light"] .pin{background:var(--bg)}
+[data-theme="light"] .pin{background:var(--glass)}
 [data-theme="light"] tbody tr:hover .pin{background:rgba(90,70,180,.04)}
 [data-theme="light"] .erbar2{background:rgba(0,0,0,.08)}
 .tdot{width:8px;height:8px;border-radius:99px;flex:none}
@@ -542,12 +548,12 @@ function process(logs){
   /* ══ 3. CROSS-FILTER ═══════════════════════════════════════════════ */
   var F=(_filter&&typeof _filter==='object')?_filter:{};
   var arr=arrAll.filter(function(s){
-    if(F.campaign&&s.campaign!==F.campaign)return false;
-    if(F.dept&&(s.dept||'(Chưa phân loại)')!==F.dept)return false;
-    if(F.role&&(s.role||'(Chưa phân loại)')!==F.role)return false;
-    if(F.initiative&&(s.initiative||'')!==F.initiative)return false;
-    if(F.msg_type&&(s.msg_type||'')!==F.msg_type)return false;
-    if(F.device&&!s.uas.some(function(ua){return deviceOf(ua)===F.device;}))return false;
+    if(!inF(F,'campaign',s.campaign))return false;
+    if(!inF(F,'dept',s.dept||'(Chưa phân loại)'))return false;
+    if(!inF(F,'role',s.role||'(Chưa phân loại)'))return false;
+    if(!inF(F,'initiative',s.initiative||''))return false;
+    if(!inF(F,'msg_type',s.msg_type||''))return false;
+    if(F.device&&F.device.length&&!s.uas.some(function(ua){return inF(F,'device',deviceOf(ua));}))return false;
     return true;
   });
   if(!arr.length)return{empty:true,opts:opts,filterActive:Object.keys(F).some(function(k){return F[k];})};
@@ -571,9 +577,9 @@ function process(logs){
     if(s.sent)p.sent=true;
     if(s.opened){
       // Khi lọc theo thiết bị: chỉ đếm lượt mở từ thiết bị đó
-      var devOC=F.device?(s.openDevices||[]).filter(function(ua){return deviceOf(ua)===F.device;}).length:s.openCount;
+      var devOC=(F.device&&F.device.length)?(s.openDevices||[]).filter(function(ua){return inF(F,'device',deviceOf(ua));}).length:s.openCount;
       if(devOC>0){p.opened=true;p.openCount+=devOC;}
-      else if(!F.device){p.opened=true;} // không filter: opened luôn true
+      else if(!(F.device&&F.device.length)){p.opened=true;} // không filter: opened luôn true
       if(s.openAt&&(!p.lastOpen||s.openAt>p.lastOpen))p.lastOpen=s.openAt;
     }
     if(s.confirmed)p.confirmed=true;
@@ -614,11 +620,11 @@ function process(logs){
      % = tỷ lệ lượt mở từ thiết bị này / tổng lượt mở                */
   // deviceSplit: lượt mở theo thiết bị
   // Khi filter active → chỉ đếm device được chọn (tránh session đa thiết bị gây nhầm)
-  var devMap={};var devOpenTotal=0;var F_dev=(_filter&&_filter.device)||'';
+  var devMap={};var devOpenTotal=0;var F_dev=_filter||{};
   arr.forEach(function(s){
     (s.openDevices||[]).forEach(function(ua){
       var dev=deviceOf(ua||'');
-      if(!F_dev||dev===F_dev){devMap[dev]=(devMap[dev]||0)+1;devOpenTotal++;}
+      if(inF(F_dev,'device',dev)){devMap[dev]=(devMap[dev]||0)+1;devOpenTotal++;}
     });
   });
   var devTotal=devOpenTotal||1;
@@ -955,13 +961,6 @@ function funnelPanel(d){
   return '<div class="panel"><div class="panel-h" data-tip="Phễu đo hành trình từ gửi → mở → mở thật → click. Mỗi bước cho biết drop-off rate.">Phễu tương tác</div>'+f+'</div>';
 }
 
-function timingPanel(d){
-  var s=d.sum,maxH=Math.max.apply(null,d.hour.concat([1])),bars='';
-  for(var h=0;h<24;h++){var v=d.hour[h];var p=Math.round(v/maxH*100);var off=(h<7||h>18)?' off':'';var lb=(h%3===0)?h:'';bars+='<div class="hcol" title="'+h+':00 — '+v+' lượt mở"><div class="b'+off+'" style="height:'+Math.max(p,2)+'%"></div><div class="hl">'+lb+'</div></div>';}
-  return '<div class="panel"><div class="panel-h" data-tip="Phân bố giờ người dùng mở email. Giờ cao điểm = thời điểm tốt nhất để gửi email tiếp theo.">Phân bố giờ mở · cao điểm <b style=\'color:var(--accent)\'>'+(s.bestHour||0)+':00</b></div><div class="hc2">'+bars+'</div>'
-    +'<div style="font-size:11px;color:var(--faint);margin-top:10px">Cột xanh = giờ làm việc (7h–18h). Lên lịch gửi email vào giờ cao điểm để tối ưu open rate.</div></div>';
-}
-
 /* ── 9c: heatmap giờ mở · giờ×thứ — dựng từ timestamp lần mở (d.heatDOW), không field mới ── */
 var HM_BUCKETS=[[6,9],[9,12],[12,15],[15,18],[18,21],[21,24]];
 var HM_DOW=['T2','T3','T4','T5','T6','T7','CN'];
@@ -996,7 +995,7 @@ function openHeatSection(d){
 
 /* ── 9e: người nhận (recipient-level) — ai đã mở/click, dùng d.people (person-level) ── */
 var _recTab='all';
-function setRecTab(t){_recTab=t;paint();}
+function setRecTab(t){_recTab=t;resection('s-rec',recipientSection);}
 function recRow(p){
   var tier=!p.opened?'cold':p.clicked?'hot':'warm';
   return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở':'Chưa mở email nào')+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
@@ -1024,23 +1023,6 @@ function recipientSection(d){
     +'<div class="pager" id="pg-rec"></div></div></section>';
 }
 
-function engagementPanel(d){
-  var s=d.sum;
-  function stat(label,val,toneCls,tip){return '<div class="dh" data-tip="'+esc(tip)+'"><div class="dh-l">'+label+'</div><div class="dh-v '+(toneCls||'')+'">'+val+'</div></div>';}
-  return '<div class="panel"><div class="panel-h" data-tip="Tóm tắt các chỉ số engagement quan trọng nhất trong kỳ lọc hiện tại.">Engagement tổng hợp</div>'
-    +'<div class="dh-grid">'
-    +stat('Chưa mở',s.notOpenRate!=null?s.notOpenCount+' ng ('+(s.notOpenRate)+'%)':'—',s.notOpenRate!=null&&s.notOpenRate<20?'good':s.notOpenRate<50?'warn':'risk','Số người nhận nhưng chưa mở = '+( s.notOpenCount||'—')+'người. Mục tiêu < 30% để đảm bảo độ phủ.')
-      +stat('Open Rate / Reach',s.openRate!=null?s.openRate+'% (Reach: '+(s.verifiedReach||s.reach)+'%)':'—',s.openRate>=REACH_TARGET?'good':s.openRate>=REACH_TARGET-20?'warn':'risk','Số người mở ÷ số người được gửi. Mục tiêu ≥'+REACH_TARGET+'%.')
-    +stat('Impression',s.impressionRate!=null?s.impressionRate+'%':'—',s.impressionRate>150?'good':s.impressionRate>80?'warn':'neutral','Impression = Lượt mở ÷ Lượt gửi. Mỗi email được xem bao nhiêu lần. >3× = engagement cao.')
-      +stat('Avg mở/người',s.avgOpensPerReader!=null?s.avgOpensPerReader+'x':'—',s.avgOpensPerReader>1.3?'good':'','Trung bình số lần 1 người mở email. >1.3x = nội dung đủ hấp dẫn để mở lại.')
-    +stat('Click Rate',s.clickRate!=null?s.clickRate+'%':'—',s.clickRate>=10?'good':s.clickRate>0?'warn':'','Số người click ÷ số người được gửi.')
-    +stat('Người mở',s.uniqOpeners,'','Số người duy nhất đã mở ≥1 lần (unique). Khác với Lượt mở (1 người mở nhiều lần = nhiều lượt).')
-    +stat('Người click',s.nClickers||0,s.nClickers>0?'good':'','Số người duy nhất đã click ≥1 link. Chỉ số engagement mạnh nhất.')
-    +stat('Xác nhận đọc',s.nConfirmed>0?s.nConfirmed+' người ('+s.confirmRate+'%)':'—',s.nConfirmed>0?'good':'','Người chủ động nhấn link ✓ ở cuối email. Tín hiệu đọc tin cậy nhất — hoạt động cả trên mobile dù pixel bị cache.')
-      +stat('CTOR',d.clickStats.ctor+'%',d.clickStats.ctor>=20?'good':d.clickStats.ctor>0?'warn':'','Click-to-Open Rate = Người click ÷ Người mở. Đo chất lượng nội dung và CTA.')
-    +'</div></div>';
-}
-
 function devicePanel(d){
   if(!d.hasDevice)return '<div class="panel"><div class="panel-h">Thiết bị</div><div class="nd">Chưa thu được User-Agent</div></div>';
   var label={mobile:'Điện thoại',desktop:'Máy tính (Desktop + Outlook)',proxy:'Proxy / Bot',unknown:'Không rõ'};
@@ -1049,14 +1031,14 @@ function devicePanel(d){
   var F=_filter||{};
   var bars='';
   d.deviceSplit.forEach(function(x){
-    var isActive=F.device===x.key;
-    bars+='<div class="frow clickable'+(isActive?' filt-on':'')+'" onclick="setFilter(\'device\',\''+(isActive?'':x.key)+'\')" data-tip="'+esc((tips[x.key]||x.key)+' · '+x.n+' lượt ('+x.pct+'%) · Bấm để lọc/bỏ lọc')+'">'
+    var isActive=isSel('device',x.key);
+    bars+='<div class="frow clickable'+(isActive?' filt-on':'')+'" onclick="setFilter(\'device\',\''+x.key+'\')" data-tip="'+esc((tips[x.key]||x.key)+' · '+x.n+' lượt ('+x.pct+'%) · Bấm để lọc/bỏ lọc')+'">'
       +'<div class="fl" style="width:108px;text-align:left">'+label[x.key]+'</div>'
       +'<div class="fbar-w"><div class="fbar" style="width:'+Math.min(100,Math.max(x.pct,3))+'%;background:'+color[x.key]+'" aria-label="'+x.pct+'%"></div></div>'
       +'<div class="fp">'+x.pct+'%</div>'
       +'<div class="fn">'+x.n+'</div></div>';
   });
-  return '<div class="panel"><div class="panel-h" data-tip="Số lượt mở (open events) theo thiết bị. Đóng rồi mở lại = +1 lượt. Outlook tự reload trong 5s = không tính. % = tỷ lệ lượt mở từ thiết bị này trên tổng lượt mở.">Thiết bị · <span style="font-size:12px;font-weight:500;color:var(--muted)">bấm để lọc</span>'+(F.device?'<button class="csv" onclick="setFilter(\'device\',\'\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'')+'</div><div class="funnel">'+bars+'</div><div style="font-size:11px;color:var(--faint);margin-top:10px">% = tỷ lệ lượt mở từ thiết bị này / tổng lượt mở. Số = lượt (đóng+mở lại = +1). Proxy = load giả bởi security gateway.</div></div>';
+  return '<div class="panel"><div class="panel-h" data-tip="Số lượt mở (open events) theo thiết bị. Đóng rồi mở lại = +1 lượt. Outlook tự reload trong 5s = không tính. % = tỷ lệ lượt mở từ thiết bị này trên tổng lượt mở.">Thiết bị · <span style="font-size:12px;font-weight:500;color:var(--muted)">bấm để lọc</span>'+((F.device&&F.device.length)?'<button class="csv" onclick="clearFilter(\'device\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'')+'</div><div class="funnel">'+bars+'</div><div style="font-size:11px;color:var(--faint);margin-top:10px">% = tỷ lệ lượt mở từ thiết bị này / tổng lượt mở. Số = lượt (đóng+mở lại = +1). Proxy = load giả bởi security gateway.</div></div>';
 }
 
 function segBars(list,attr){
@@ -1064,9 +1046,9 @@ function segBars(list,attr){
   if(!list||!list.length||list.every(function(g){return g.name==='(Chưa phân loại)';}))return '<div class="nd">Chưa có dữ liệu phân khúc.<br>Dữ liệu được parse tự động từ tên người nhận theo định dạng:<br><b>Tên (Cấp Bậc - Phòng Ban - Khối)</b></div>';
   var F=_filter||{};var rows='';
   list.forEach(function(g){
-    var low=g.sent<MIN_N,isActive=F[attr]===g.name;
+    var low=g.sent<MIN_N,isActive=isSel(attr,g.name);
     var tip='Reach: '+g.reach+'% · '+g.open+' người mở / '+g.sent+' người được gửi'+(low?' · Mẫu nhỏ, không đủ tin cậy':g.reach>=REACH_TARGET?' · Đạt mục tiêu':' · Dưới mục tiêu '+REACH_TARGET+'%')+(g.name!=='(Chưa phân loại)'?' · Bấm để lọc toàn dashboard theo đơn vị này':'');
-    var clk=g.name!=='(Chưa phân loại)'?' onclick="setFilter(\''+attr+'\',\''+(isActive?'':jsq(g.name))+'\')" '+'data-tip="'+esc(tip)+'"':'';
+    var clk=g.name!=='(Chưa phân loại)'?' onclick="setFilter(\''+attr+'\',\''+jsq(g.name)+'\')" '+'data-tip="'+esc(tip)+'"':'';
     var lbl=low?(g.reach+'%·N'+g.sent):(g.reach+'%');
     rows+='<div class="segrow'+(isActive?' filt-on':'')+(low?' lown':'')+'"'+clk+'>'
       +'<div class="segname" title="'+esc(fmtSeg(g.name))+'">'+esc(fmtSeg(g.name))+'</div>'
@@ -1080,7 +1062,7 @@ function segmentSection(d){
   if(!d.sum.hasSeg)return '<section id="s-seg"><div class="eyebrow">Phân khúc '+qclearBtn()+'</div><div class="notice"><b>Chưa có dữ liệu phân loại.</b> Cần tên người nhận theo định dạng: <b>Tên (Cấp Bậc - Phòng Ban - Khối)</b> trong trường rcpt của macro.</div></section>';
   window.__seg=d.segments;
   var worst=d.segments.dept.filter(function(g){return g.sent>=3&&g.name!=='(Chưa phân loại)';})[0];
-  var F=_filter||{};var activeSegFilter=F.dept||F.role||F.loc;
+  var F=_filter||{};var activeSegFilter=(F.dept&&F.dept.length)||(F.role&&F.role.length)||(F.loc&&F.loc.length);
   var clearBtn=activeSegFilter?'<button class="csv" onclick="(function(){delete _filter.dept;delete _filter.role;delete _filter.loc;paint();})()" style="font-size:11px;padding:4px 9px">× Bỏ lọc phân khúc</button>':'';
   return '<section id="s-seg"><div class="eyebrow">Phân khúc · reach theo đơn vị (bấm bar để lọc) '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h"><div class="seg-tg"><button class="on" onclick="segView(\'dept\',this)" data-tip="Reach theo phòng ban / trung tâm">Phòng ban</button><button onclick="segView(\'role\',this)" data-tip="Reach theo cấp bậc chức danh">Cấp bậc</button><button onclick="segView(\'loc\',this)" data-tip="Reach theo khối nghiệp vụ">Chi nhánh/Khối</button></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--faint)" data-tip="Vạch trắng đứng = mục tiêu reach '+REACH_TARGET+'%">Vạch = mục tiêu '+REACH_TARGET+'%</span>'+clearBtn+'</div></div>'
@@ -1092,12 +1074,12 @@ function segmentSection(d){
 function campRow(c){
   var F=_filter||{};
   var r=c.verifiedReach!=null?c.verifiedReach:c.reach;
-  var isActive=F.campaign===c.name;
+  var isActive=isSel('campaign',c.name);
   var vs=c.vsAvg>0?'<span class="delta up">+'+c.vsAvg+'</span>':(c.vsAvg<0?'<span class="delta down">'+c.vsAvg+'</span>':'<span class="delta flat">0</span>');
   var man=c.msg_type==='mandatory'?'<span class="pill p-warn" style="font-size:9px;padding:1px 6px;margin-left:6px">BẮT BUỘC</span>':'';
   var tier=r>=REACH_TARGET?'hot':r>=REACH_TARGET-30?'warm':'cold';
   var rw=Math.max(0,Math.min(100,r||0));
-  return '<tr class="'+(isActive?'filt-on':'')+'" onclick="setFilter(\'campaign\',\''+(isActive?'':jsq(c.name))+'\')" data-tip="'+esc(c.hint||'')+(isActive?' · Đang lọc — bấm để bỏ lọc':' · Bấm để lọc toàn dashboard')+'">'
+  return '<tr class="'+(isActive?'filt-on':'')+'" onclick="setFilter(\'campaign\',\''+jsq(c.name)+'\')" data-tip="'+esc(c.hint||'')+(isActive?' · Đang lọc — bấm để bỏ lọc':' · Bấm để lọc toàn dashboard')+'">'
     +'<td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtCamp(c.name))+man+'</div><div class="pt-sub">'+esc(c.subject||c.initiative||'—')+'</div></div></div></td>'
     +'<td class="num" style="font-size:11px;color:var(--faint)">'+(c.last?fmtDay(c.last):'—')+'</td>'
     +'<td class="num" data-tip="'+(c.target_size?'Mục tiêu: '+c.target_size+' người':'')+'">'
@@ -1113,14 +1095,14 @@ function campRow(c){
 }
 function N(n){return n!=null&&n<MIN_N;}
 var _campTab='all';
-function setCampTab(t){_campTab=t;paint();}
+function setCampTab(t){_campTab=t;resection('s-camp',campaignSection);}
 function campaignSection(d){
   if(!d.campaigns.length)return '';
   var F=_filter||{};
   var goalN=d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}).length;
   var rows=_campTab==='goal'?d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}):d.campaigns;
   regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:8,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.opens||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):k==='confirmed'?(c.confirmed||0):0;}});
-  var clearBtn=F.campaign?'<button class="csv" onclick="clearFilter(\'campaign\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc chiến dịch</button>':'';
+  var clearBtn=(F.campaign&&F.campaign.length)?'<button class="csv" onclick="clearFilter(\'campaign\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc chiến dịch</button>':'';
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('camp','Tìm chiến dịch…')
     +'<div class="seg"><button class="'+(_campTab==='all'?'on':'')+'" onclick="setCampTab(\'all\')">Tất cả <span class="pill p-neutral" style="font-size:10px">'+d.campaigns.length+'</span></button>'
@@ -1218,8 +1200,8 @@ function insightSection(d){
 }
 
 function iniRow(I){
-  var F=_filter||{};var isActive=F.initiative===I.name;
-  return '<tr class="ini-row'+(isActive?' filt-on':'')+'" onclick="setFilter(\'initiative\',\''+(isActive?'':jsq(I.name))+'\')" data-tip="'+esc(fmtCamp(I.name)+' · '+I.camps+' đợt · '+I.sentSessions+' lượt gửi · Reach '+I.reach+'%')+'"><td><span class="nm">'+esc(fmtCamp(I.name))+'</span></td>'
+  var F=_filter||{};var isActive=isSel('initiative',I.name);
+  return '<tr class="ini-row'+(isActive?' filt-on':'')+'" onclick="setFilter(\'initiative\',\''+jsq(I.name)+'\')" data-tip="'+esc(fmtCamp(I.name)+' · '+I.camps+' đợt · '+I.sentSessions+' lượt gửi · Reach '+I.reach+'%')+'"><td><span class="nm">'+esc(fmtCamp(I.name))+'</span></td>'
     +'<td class="num" data-tip="Số đợt gửi">'+I.camps+'</td>'
     +'<td class="num" data-tip="Lượt gửi = tổng email gửi (đợt × người, đếm mỗi session)">'+I.sentSessions+'</td>'
     +'<td class="num" data-tip="Người nhận unique = '+I.sent+' người">'+(I.sent>0?I.sent:'—')+'</td>'
@@ -1232,7 +1214,7 @@ function initiativeSection(d){
   if(!d.hasInitiative)return '';
   var F=_filter||{};
   regTable({id:'ini',rows:d.initiatives,render:iniRow,pageSize:15,cols:8,placeholder:'Tìm Squad/Dự án…',search:function(I,q){return norm(fmtCamp(I.name)).indexOf(q)>-1||norm(I.name).indexOf(q)>-1;}});
-  var clearBtn=F.initiative?'<button class="csv" onclick="clearFilter(\'initiative\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'';
+  var clearBtn=(F.initiative&&F.initiative.length)?'<button class="csv" onclick="clearFilter(\'initiative\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'';
   return '<section id="s-ini"><div class="eyebrow">Squad/Dự án · awareness tích luỹ '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h">Theo dõi theo sáng kiến '+clearBtn+'</div>'
     +searchBox('ini','Tìm Squad/Dự án…')
@@ -1327,21 +1309,31 @@ function dictionarySection(){
 
 /* ── navigation ── */
 function filterStatusBar(){
-  var F=_filter||{};var active=Object.keys(F).filter(function(k){return F[k];});
+  var F=_filter||{};var active=Object.keys(F).filter(function(k){return F[k]&&F[k].length;});
   if(!active.length)return '';
-  var labels={campaign:'Chiến dịch',dept:'Phòng ban',role:'Cấp bậc',initiative:'Squad/Dự án',msg_type:'Loại',device:'Thiết bị'};
-  var chips=active.map(function(k){return '<span class="f-chip">'+labels[k]+': <b>'+esc(String(F[k]).slice(0,26))+'</b> <span class="cx" onclick="clearFilter(\''+k+'\')" title="Bỏ lọc">×</span></span>';}).join('');
-  return '<div class="filter-status"><span class="lbl">Đang lọc</span>'+chips+'<button class="f-clear-all" onclick="clearAllFilters()">× Xóa tất cả</button></div>';
+  var L={campaign:'Chiến dịch',dept:'Phòng ban',role:'Cấp bậc',initiative:'Squad/Dự án',msg_type:'Loại',device:'Thiết bị'};
+  var fmt={campaign:fmtCamp,initiative:fmtCamp,dept:fmtSeg,role:fmtSeg,msg_type:function(v){return v==='mandatory'?'Bắt buộc':'Thông tin';},device:function(v){return({mobile:'Điện thoại',desktop:'Máy tính',outlook:'Outlook',proxy:'Proxy/Bot',unknown:'Khác'})[v]||v;}};
+  var chips=[];active.forEach(function(k){(F[k]||[]).forEach(function(v){var disp=(fmt[k]?fmt[k](v):v);chips.push('<span class="f-chip">'+(L[k]||k)+': <b>'+esc(String(disp).slice(0,30))+'</b> <span class="cx" onclick="setFilter(\''+k+'\',\''+jsq(v)+'\')" title="Bỏ lọc">×</span></span>');});});
+  return '<div class="filter-status"><span class="lbl">Đang lọc</span>'+chips.join('')+'<button class="f-clear-all" onclick="clearAllFilters()">× Xóa tất cả</button></div>';
 }
 function filterBar(d){
   var F=_filter||{};var o=d.opts||{};
-  function sel(key,allLabel,fmt){var list=o[key]||[];if(!list.length)return '';var cur=F[key]||'';var opt='<option value="">'+allLabel+'</option>'+list.map(function(v){return '<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(fmt?fmt(v):v)+'</option>';}).join('');return '<select onchange="setFilter(\''+key+'\',this.value)">'+opt+'</select>';}
-  function campSel(){var list=o.campaign||[];if(!list.length)return '';var cur=F.campaign||'';var label=cur?fmtCamp(cur):'Tất cả chiến dịch';var opts='<div class="csel-opt'+(cur?'':' on')+'" onclick="pickCamp(\'\')">Tất cả chiến dịch</div>'+list.map(function(v){return '<div class="csel-opt'+(v===cur?' on':'')+'" onclick="pickCamp(\''+jsq(v)+'\')">'+esc(fmtCamp(v))+'</div>';}).join('');return '<div class="csel"><div class="csel-btn" onclick="openCampSel(event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div><div class="csel-dd" id="camp-dd" style="display:none"><input class="csel-inp" type="text" placeholder="🔍 Tìm chiến dịch…" oninput="filterCampSel(this.value)" onclick="event.stopPropagation()" autocomplete="off"><div class="csel-list" id="camp-list">'+opts+'</div></div></div>';}
+  // Multi-select: bấm chọn nhiều giá trị; dropdown giữ mở tới khi bấm ra ngoài; có ô tìm kiếm khi nhiều lựa chọn.
+  function msel(key,allLabel,pairs){if(!pairs||!pairs.length)return '';var sel=F[key]||[];
+    function lbl(v){for(var i=0;i<pairs.length;i++)if(pairs[i][0]===v)return pairs[i][1];return v;}
+    var label=!sel.length?allLabel:(sel.length===1?lbl(sel[0]):allLabel+' · '+sel.length);
+    var open=_openMsel===key;
+    var search=pairs.length>6?'<input class="csel-inp" placeholder="🔍 Tìm…" oninput="mselSearch(this.value)" onclick="event.stopPropagation()">':'';
+    var opts=pairs.map(function(pr){var v=pr[0],on=sel.indexOf(v)>-1;return '<div class="msel-opt'+(on?' on':'')+'" data-tx="'+esc(pr[1])+'" onclick="event.stopPropagation();setFilter(\''+key+'\',\''+jsq(v)+'\')"><span class="msel-ck">'+(on?'✓':'')+'</span><span class="msel-tx">'+esc(pr[1])+'</span></div>';}).join('');
+    return '<div class="csel"><div class="csel-btn'+(sel.length?' act':'')+'" onclick="toggleMsel(\''+key+'\',event)"><span class="csel-val">'+esc(label)+'</span><span class="arr">▾</span></div>'+(open?'<div class="csel-dd msel-dd" onclick="event.stopPropagation()">'+search+'<div class="csel-list">'+opts+'</div></div>':'')+'</div>';}
+  function pr(list,fmt){return (list||[]).map(function(v){return [v,fmt?fmt(v):v];});}
   return '<div class="fbar"><span class="flbl">Lọc</span>'
-    +campSel()+sel('dept','Tất cả phòng ban',fmtSeg)+sel('role','Tất cả cấp bậc',fmtSeg)
-    +sel('initiative','Tất cả Squad/Dự án',fmtCamp)+sel('msg_type','Mọi loại',function(v){return v==='mandatory'?'Bắt buộc':'Thông tin';})
-    +sel('device','Mọi thiết bị',function(v){return({mobile:'Điện thoại',desktop:'Máy tính',outlook:'Outlook',proxy:'Proxy/Bot',unknown:'Khác'})[v]||v;})
-    +(Object.keys(F).some(function(k){return F[k];})?'<button class="fclear" onclick="clearAllFilters()">Xóa lọc</button>':'')
+    +msel('campaign','Tất cả chiến dịch',pr(o.campaign,fmtCamp))
+    +msel('dept','Tất cả phòng ban',pr(o.dept,fmtSeg))+msel('role','Tất cả cấp bậc',pr(o.role,fmtSeg))
+    +msel('initiative','Tất cả Squad/Dự án',pr(o.initiative,fmtCamp))
+    +msel('msg_type','Mọi loại',pr(o.msg_type,function(v){return v==='mandatory'?'Bắt buộc':'Thông tin';}))
+    +msel('device','Mọi thiết bị',pr(o.device,function(v){return({mobile:'Điện thoại',desktop:'Máy tính',outlook:'Outlook',proxy:'Proxy/Bot',unknown:'Khác'})[v]||v;}))
+    +(Object.keys(F).some(function(k){return F[k]&&F[k].length;})?'<button class="fclear" onclick="clearAllFilters()">Xóa lọc</button>':'')
     +'</div>';
 }
 function navLinks(d){
@@ -1374,8 +1366,7 @@ function operational(d,cur,prev,ser){
     '<div class="wrap">'+filterBar(d)+
     '<section id="s-ov" style="padding-top:14px"><div class="eyebrow">Tổng quan</div>'+
     heroRow(d,cur,prev,ser)+heroChart(d,ser)+
-    '<div class="row2">'+funnelPanel(d)+timingPanel(d)+'</div>'+
-    '<div class="row2" style="margin-top:16px">'+engagementPanel(d)+devicePanel(d)+'</div>'+
+    '<div class="row2">'+funnelPanel(d)+devicePanel(d)+'</div>'+
     (d.clickStats.has?'<div style="margin-top:16px">'+clickPanel(d)+'</div>':'')+
     '</section>'+
     segmentSection(d)+initiativeSection(d)+mandatorySection(d)+campaignSection(d)+
@@ -1438,12 +1429,14 @@ try{var _sd=localStorage.getItem('shb-et-density');if(_sd)_density=_sd;}catch(e)
 
 function applyTheme(){document.documentElement.setAttribute('data-theme',_theme);}
 function applyDensity(){document.documentElement.setAttribute('data-density',_density);}
-function setFilter(k,v){if(v===''||v==null)delete _filter[k];else _filter[k]=v;paint();}
-var _cselOpen=false;
-function openCampSel(e){e.stopPropagation();var dd=document.getElementById('camp-dd');if(!dd)return;var open=dd.style.display==='block';dd.style.display=open?'none':'block';if(!open){var inp=dd.querySelector('.csel-inp');if(inp){inp.value='';inp.focus();filterCampSel('');}}_cselOpen=!open;}
-function filterCampSel(q){var list=document.getElementById('camp-list');if(!list)return;var qq=norm(q);list.querySelectorAll('.csel-opt').forEach(function(el){var t=norm(el.textContent);el.style.display=(qq===''||t.indexOf(qq)>-1)?'':'none';});}
-function pickCamp(v){setFilter('campaign',v);var dd=document.getElementById('camp-dd');if(dd)dd.style.display='none';}
-document.addEventListener('click',function(){var dd=document.getElementById('camp-dd');if(dd)dd.style.display='none';var dp=document.getElementById('dt-pop');if(dp)dp.style.display='none';});
+function inF(F,key,val){var a=F&&F[key];return !a||!a.length||a.indexOf(val)>-1;}
+function isSel(key,val){var a=_filter&&_filter[key];return !!(a&&a.indexOf(val)>-1);}
+function setFilter(k,v){if(v===''||v==null){delete _filter[k];paint();return;}var a=_filter[k]||[];var i=a.indexOf(v);if(i>-1)a.splice(i,1);else a.push(v);if(a.length)_filter[k]=a;else delete _filter[k];paint();}
+var _openMsel=null;
+function toggleMsel(k,e){if(e)e.stopPropagation();_openMsel=(_openMsel===k)?null:k;paint();}
+function closeMsel(){if(_openMsel!==null){_openMsel=null;paint();}}
+function mselSearch(q){var dd=document.querySelector('.msel-dd');if(!dd)return;var qq=norm(q);dd.querySelectorAll('.msel-opt').forEach(function(el){var t=el.getAttribute('data-tx')||el.textContent;el.style.display=(qq===''||norm(t).indexOf(qq)>-1)?'':'none';});}
+document.addEventListener('click',function(){var dp=document.getElementById('dt-pop');if(dp)dp.style.display='none';closeMsel();});
 function clearFilter(k){delete _filter[k];paint();}
 function clearAllFilters(){_filter={};paint();}
 function jump(sel){var el=document.querySelector(sel);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
@@ -1468,12 +1461,12 @@ function render(){
 
     _cl=cl.filter(function(l){
       var k=l.id+'||'+l.rcpt,s=_sk[k]||{};
-      if(_F.campaign&&(s.campaign||'unknown')!==_F.campaign)return false;
-      if(_F.initiative&&(s.initiative||'')!==_F.initiative)return false;
-      if(_F.msg_type&&(s.msg_type||'')!==_F.msg_type)return false;
-      if(_F.dept&&(s.dept||'(Chưa phân loại)')!==_F.dept)return false;
-      if(_F.role&&(s.role||'(Chưa phân loại)')!==_F.role)return false;
-      if(_F.device&&!((_sk[k]&&_sk[k].uas)||[]).some(function(ua){return deviceOf(ua)===_F.device;}))return false;
+      if(!inF(_F,'campaign',s.campaign||'unknown'))return false;
+      if(!inF(_F,'initiative',s.initiative||''))return false;
+      if(!inF(_F,'msg_type',s.msg_type||''))return false;
+      if(!inF(_F,'dept',s.dept||'(Chưa phân loại)'))return false;
+      if(!inF(_F,'role',s.role||'(Chưa phân loại)'))return false;
+      if(_F.device&&_F.device.length&&!((_sk[k]&&_sk[k].uas)||[]).some(function(ua){return inF(_F,'device',deviceOf(ua));}))return false;
       return true;
     });
   }
@@ -1487,9 +1480,16 @@ function render(){
   if(d.empty){
     return masthead(_mode)+'<div class="wrap">'+filterStatusBar()+filterBar(d)+'<div class="notice" style="margin-top:14px"><b>Không có dữ liệu khớp bộ lọc.</b> Hãy bỏ bớt điều kiện lọc hoặc <button class="fclear" onclick="clearAllFilters()" style="margin-left:4px">Xóa tất cả lọc</button></div></div>';
   }
+  window.__d=d;
   return _mode==='ex'?executive(d,cur,prev):operational(d,cur,prev,ser);
 }
 
+function resection(id,fn){
+  var d=window.__d;var el=document.getElementById(id);
+  if(!d||!el){paint();return;}
+  el.outerHTML=fn(d);
+  mountAllTables();wireNav();initTooltip();
+}
 function paint(){
   try{
     applyTheme();applyDensity();
@@ -1502,7 +1502,7 @@ function paint(){
       +'<pre style="font-size:12px;background:rgba(255,255,255,.06);padding:18px;border-radius:12px;overflow-x:auto;white-space:pre-wrap;color:#bdb8db;border:1px solid rgba(255,255,255,.1)">'
       +String(err.stack||err.message||err)+'</pre>'
       +'<div style="margin-top:20px;display:flex;gap:10px">'
-      +'<button onclick="_filter={};paint()" style="padding:9px 18px;background:#8b7bff;color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:700">Xóa lọc & Thử lại</button>'
+      +'<button onclick="_filter={};paint()" style="padding:9px 18px;background:var(--grad);color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:700">Xóa lọc & Thử lại</button>'
       +'<button onclick="location.reload()" style="padding:9px 18px;background:rgba(255,255,255,.08);color:#bdb8db;border:1px solid rgba(255,255,255,.12);border-radius:10px;cursor:pointer">Reload trang</button>'
       +'</div></div>';
     console.error('[SHB Dashboard]',err);
