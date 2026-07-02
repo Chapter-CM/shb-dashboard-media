@@ -2,8 +2,8 @@
 -- ⚠️ Chạy trong SQL editor của Supabase EMAIL (EMAIL_SUPABASE_URL),
 --    KHÔNG phải Supabase Facebook (SUPABASE_URL).
 --
--- api/email-track.js v3.6 stream pixel bottom nhỏ giọt: client giữ kết nối
--- chừng nào email còn mở → đo được thời gian đọc, ghi event pos='dwell'
+-- api/email-track.js v3.6 stream pixel top/bottom nhỏ giọt: client giữ kết
+-- nối chừng nào email còn mở → đo được thời gian đọc, ghi event pos='dwell'
 -- kèm số giây vào cột dwell_s (cap tại EMAIL_DWELL_CAP_S, mặc định 25s).
 
 alter table events add column if not exists dwell_s integer;

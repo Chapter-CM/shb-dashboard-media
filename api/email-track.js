@@ -11,9 +11,9 @@ const GIF = Buffer.from(
 );
 
 // ── Dwell (thời gian đọc) ──────────────────────────────────────────────
-// Pixel bottom được stream NHỎ GIỌT: client giữ kết nối chừng nào email còn
-// mở, đóng email → client hủy tải ảnh → đo được thời gian đọc (kiểu Litmus).
-// Ghi thêm event pos='dwell' với dwell_s (cần cột dwell_s — db/migrate_05).
+// Pixel top/bottom được stream NHỎ GIỌT: client giữ kết nối chừng nào email
+// còn mở, đóng email → client hủy tải ảnh → đo được thời gian đọc (kiểu
+// Litmus). Ghi thêm event pos='dwell' với dwell_s (cột từ db/migrate_05).
 const DWELL_CAP_S   = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '25', 10) || 25);
 const DWELL_TICK_MS = 2000;
 const GIF_BODY    = GIF.slice(0, GIF.length - 1);              // GIF trừ byte trailer 0x3B
@@ -161,8 +161,11 @@ module.exports = async (req, res) => {
 
   const isBlocked = row.campaign && BLOCKED_CAMPAIGNS.includes(row.campaign);
 
-  // BOTTOM → pixel streaming đo thời gian đọc (ghi cả event bottom lẫn dwell)
-  if (pos === 'bottom' && row.event_id && !isBlocked && !isImageProxy(row.ua)) {
+  // TOP/BOTTOM → pixel streaming đo thời gian đọc: ghi event top/bottom NGAY
+  // khi request đến (lượt mở không bị chậm), rồi giữ kết nối để đo dwell.
+  // VBA hiện chỉ nhúng pixel top nên top là nguồn đo chính; bottom giữ để
+  // tương thích email cũ còn 2 pixel.
+  if ((pos === 'top' || pos === 'bottom') && row.event_id && !isBlocked && !isImageProxy(row.ua)) {
     return streamDwellPixel(req, res, row);
   }
 
