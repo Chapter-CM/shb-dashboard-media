@@ -111,8 +111,6 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .wrap{max-width:1200px;margin:0 auto;padding:0 26px}
 @keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
-@keyframes barIn{from{width:0!important}to{}}
-section,.kpi,.gauge-card,.panel,.tier{animation:fade .5s cubic-bezier(.16,1,.3,1) both}
 /* ── Floating tooltip ── */
 #tip{position:fixed;z-index:9999;display:none;background:color-mix(in srgb,var(--bg) 90%,transparent);border:1px solid var(--stroke-2);color:var(--text-2);font-size:12px;font-weight:500;line-height:1.5;padding:9px 13px;border-radius:12px;max-width:260px;word-break:break-word;box-shadow:0 14px 36px rgba(0,0,0,.52);backdrop-filter:blur(18px);pointer-events:none;font-family:inherit}
 [data-tip]{cursor:help}
