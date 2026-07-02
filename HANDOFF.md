@@ -23,7 +23,7 @@ Tên file = **route**; đặt theo sản phẩm để mở ra hiểu ngay. URL c
 
 ## ⏱️ Thời gian đọc email (dwell) — v3.6
 Outlook tải mọi ảnh cùng lúc khi mở mail → delta pixel top/bottom vô nghĩa. Giải pháp = **pixel streaming kiểu Litmus**:
-- `api/email-track.js` với `pos=bottom` KHÔNG trả pixel ngay mà **stream nhỏ giọt** (GIF thiếu trailer + comment-block mỗi 2s). Email còn mở → client còn giữ kết nối; đóng email → client hủy tải → server đo được số giây, ghi event `pos='dwell'` + cột `dwell_s`. Cap `EMAIL_DWELL_CAP_S` (mặc định 25s; `vercel.json` maxDuration 30s). Vẫn ghi event `bottom` như cũ.
+- `api/email-track.js` với `pos=top` (và `bottom` nếu email cũ còn) KHÔNG trả pixel ngay mà **stream nhỏ giọt** (GIF thiếu trailer + comment-block mỗi 2s). Event top vẫn ghi NGAY khi request đến (lượt mở không chậm). Email còn mở → client còn giữ kết nối; đóng email → client hủy tải → server đo được số giây, ghi event `pos='dwell'` + cột `dwell_s`. Cap `EMAIL_DWELL_CAP_S` (mặc định 25s; `vercel.json` maxDuration 30s). Lưu ý: VBA hiện chỉ nhúng 1 pixel top — vì vậy dwell đo trên top.
 - Proxy (GoogleImageProxy/gateway) tải hộ → nhận pixel thường, không đo (regex `isImageProxy`).
 - **Go-live cần**: chạy `db/migrate_05_email_dwell.sql` trong Supabase **EMAIL** (thêm cột `dwell_s`). Chưa chạy migration → insert dwell fail (log lỗi, không ảnh hưởng tracking cũ); dashboard fetch dwell bằng query RIÊNG nên không vỡ.
 - Dashboard: panel "Thời gian đọc email" (median + Đọc kỹ ≥8s / Đọc lướt 2–8s / Liếc qua <2s — chuẩn Litmus), cột "Đọc TB" trong bảng chiến dịch, mục từ điển. `readSec` mỗi session = max(dwell). VBA **không cần đổi**.
