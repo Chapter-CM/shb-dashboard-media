@@ -1,16 +1,24 @@
-// SHB Email Tracker — track endpoint v4.0 (Web Handler + dwell/thời gian đọc)
-// Viết theo Web Handler (Request→Response + ReadableStream) vì kiểu (req,res)
-// cũ KHÔNG nhận được tín hiệu client ngắt kết nối qua proxy của Vercel →
-// dwell luôn chạm trần. Web handler nhận abort qua request.signal/stream cancel.
-// ENV: EMAIL_SUPABASE_URL, EMAIL_SUPABASE_SERVICE_KEY (Supabase Email — tách
-// khỏi SUPABASE_* của Facebook), EMAIL_DWELL_CAP_S (trần đo, mặc định 25s).
+// SHB Email Tracker — track endpoint v4.1 (Edge runtime + dwell/thời gian đọc)
+// Chạy trên EDGE runtime: mô hình fetch-event đảm bảo stream.cancel() bắn khi
+// client ngắt kết nối — Node runtime (kể cả Fluid + web handler) đã kiểm chứng
+// thực tế KHÔNG nhận được tín hiệu này qua proxy Vercel → dwell luôn chạm trần.
+// Kiểm tra phiên bản đang chạy: GET /api/track?ping=1 → JSON {v:...}.
+// ENV: EMAIL_SUPABASE_URL, EMAIL_SUPABASE_SERVICE_KEY, EMAIL_DWELL_CAP_S.
+
+export const config = { runtime: 'edge' };
+
+const VERSION = '4.1-edge';
 
 const SUPABASE_URL = process.env.EMAIL_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
 
-const GIF = Buffer.from(
-  'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'
-);
+function b64ToBytes(s) {
+  const bin = atob(s);
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+const GIF = b64ToBytes('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
 
 // ── Dwell (thời gian đọc) ──────────────────────────────────────────────
 // Pixel top/bottom được stream NHỎ GIỌT: email còn mở = kết nối còn giữ,
@@ -18,14 +26,9 @@ const GIF = Buffer.from(
 // Ghi event pos='dwell' + cột dwell_s (db/migrate_05).
 const DWELL_CAP_S   = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '25', 10) || 25);
 const DWELL_TICK_MS = 2000;
-const GIF_BODY    = GIF.slice(0, GIF.length - 1);               // GIF trừ byte trailer 0x3B
+const GIF_BODY    = GIF.slice(0, GIF.length - 1);                    // GIF trừ byte trailer 0x3B
 const GIF_TRAILER = GIF.slice(GIF.length - 1);
-const GIF_PAD     = Buffer.from([0x21, 0xFE, 0x01, 0x20, 0x00]); // comment block — hợp lệ trước trailer
-
-// waitUntil (Fluid compute): giữ function sống để hoàn tất ghi Supabase sau khi
-// response kết thúc. Không có package thì fallback await trong cancel().
-let waitUntil = null;
-try { ({ waitUntil } = await import('@vercel/functions')); } catch (e) { /* optional */ }
+const GIF_PAD     = new Uint8Array([0x21, 0xFE, 0x01, 0x20, 0x00]);  // comment block — hợp lệ trước trailer
 
 // Proxy/gateway tải ảnh hộ (không phải người đọc) → dwell vô nghĩa, bỏ đo
 function isImageProxy(ua) {
@@ -67,7 +70,8 @@ const PIXEL_HEADERS = {
   'Cache-Control': 'no-cache, no-store, must-revalidate',
   'Pragma':        'no-cache',
   'Expires':       '0',
-  'Access-Control-Allow-Origin': '*'
+  'Access-Control-Allow-Origin': '*',
+  'X-SHB-Tracker': VERSION
 };
 
 // Campaigns to block — events from these are silently ignored
@@ -84,7 +88,7 @@ function logErr(prefix) {
 
 // Pixel streaming đo dwell: ghi event top/bottom NGAY, giữ kết nối tới khi
 // client ngắt (đóng email) hoặc chạm trần → ghi event dwell với số giây.
-function dwellResponse(request, row) {
+function dwellResponse(request, row, ctx) {
   const t0 = Date.now();
   const pending = [insertEvent(row).catch(logErr('Insert failed'))];
   let hb = null, cap = null, done = false, ctrl = null;
@@ -99,8 +103,8 @@ function dwellResponse(request, row) {
         pos: 'dwell', dwell_s: dwell, ts: new Date().toISOString()
       })).catch(logErr('Dwell insert failed')));
       const all = Promise.all(pending).then(() => {});
-      if (waitUntil) try { waitUntil(all); } catch (e) { /* ignore */ }
-      await all; // giữ function sống tới khi ghi xong (kể cả không có waitUntil)
+      if (ctx && ctx.waitUntil) try { ctx.waitUntil(all); } catch (e) { /* ignore */ }
+      await all; // giữ function sống tới khi ghi xong
       try { ctrl.enqueue(GIF_TRAILER); ctrl.close(); } catch (e) { /* client đã ngắt */ }
     })();
     return done;
@@ -119,8 +123,19 @@ function dwellResponse(request, row) {
   return new Response(stream, { status: 200, headers: PIXEL_HEADERS });
 }
 
-export async function GET(request) {
+export default async function handler(request, ctx) {
+  if (request.method !== 'GET') {
+    return new Response(null, { status: 405, headers: { 'Allow': 'GET' } });
+  }
   const sp = new URL(request.url).searchParams;
+
+  // Kiểm tra phiên bản/độ sống của endpoint (không ghi event)
+  if (sp.has('ping')) {
+    return new Response(JSON.stringify({ v: VERSION, cap_s: DWELL_CAP_S, ts: new Date().toISOString() }), {
+      status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+    });
+  }
+
   const getParam = (newName, oldName) =>
     (sp.get(newName) != null && sp.get(newName) !== '') ? sp.get(newName)
     : (oldName && sp.get(oldName) != null && sp.get(oldName) !== '') ? sp.get(oldName)
@@ -154,7 +169,7 @@ export async function GET(request) {
   // TOP/BOTTOM → pixel streaming đo thời gian đọc. VBA hiện chỉ nhúng pixel
   // top nên top là nguồn đo chính; bottom giữ cho email cũ còn 2 pixel.
   if ((pos === 'top' || pos === 'bottom') && row.event_id && !isBlocked && !isImageProxy(row.ua)) {
-    return dwellResponse(request, row);
+    return dwellResponse(request, row, ctx);
   }
 
   if (row.event_id && !isBlocked) {
