@@ -184,6 +184,8 @@ section{padding-top:28px;scroll-margin-top:122px}
 .gauge-card::after{content:'';position:absolute;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.16);top:-90px;right:-60px;filter:blur(8px);pointer-events:none}
 .gauge-card .gc-h{font-size:12px;font-weight:600;opacity:.9;position:relative;z-index:1}
 .gauge-card .gc-sub{font-size:11.5px;opacity:.82;margin-top:14px;position:relative;z-index:1;line-height:1.5}
+.gauge-card .gc-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.18);font-size:11px;font-weight:600;opacity:.92;position:relative;z-index:1}
+.gauge-card .gc-foot .delta{background:rgba(255,255,255,.18);color:#fff}
 .gauge-wrap{display:flex;justify-content:center;margin:4px 0;position:relative;z-index:1}
 .kpi-col{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .kpi{background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r-sm);padding:17px 18px;backdrop-filter:blur(18px);box-shadow:var(--shadow);position:relative;overflow:visible;transition:transform .17s,box-shadow .17s,border-color .17s}
@@ -421,9 +423,9 @@ function pill(p,n){
   return '<span class="pill p-'+tone(p)+'">'+p+'%</span>';
 }
 function quickMetrics(logs){
-  var s={};logs.forEach(function(l){var k=l.id+'||'+l.rcpt;if(!s[k])s[k]={sent:false,op:false};if(l.pos==='sent')s[k].sent=true;if(l.pos==='top')s[k].op=true;});
-  var a=Object.values(s),sent=a.filter(function(x){return x.sent;}).length,op=a.filter(function(x){return x.op;}).length;
-  return{sent:sent,opens:op,reach:sent>0?Math.round(op/sent*100):null};
+  var s={};logs.forEach(function(l){var k=l.id+'||'+l.rcpt;if(!s[k])s[k]={sent:false,op:false,cl:false,cf:false};if(l.pos==='sent')s[k].sent=true;if(l.pos==='top')s[k].op=true;if(l.pos==='click')s[k].cl=true;if(l.pos==='read')s[k].cf=true;});
+  var a=Object.values(s),sent=a.filter(function(x){return x.sent;}).length,op=a.filter(function(x){return x.op;}).length,cl=a.filter(function(x){return x.cl;}).length,cf=a.filter(function(x){return x.cf;}).length;
+  return{sent:sent,opens:op,clickers:cl,confirmed:cf,reach:sent>0?Math.round(op/sent*100):null,ctor:op>0?Math.round(cl/op*100):0};
 }
 function windowLogs(days,offset){
   if(_from&&_to){var span=_to-_from;var hi=offset?_from:_to,lo=offset?_from-span:_from;return LOGS.filter(function(l){var t=+new Date(l.timestamp);return t>lo&&t<=hi;});}
@@ -880,7 +882,18 @@ function searchBox(id,ph){return '<div class="tbl-tools"><div class="tbl-search"
 function tblFilter(cfg){var st=_tblState[cfg.id]||{q:'',page:0};var q=norm(st.q);var rows=q?cfg.rows.filter(function(r){return cfg.search(r,q);}):cfg.rows.slice();
   if(st.sortKey&&cfg.sortVal){rows.sort(function(a,b){var x=cfg.sortVal(a,st.sortKey),y=cfg.sortVal(b,st.sortKey);return (x<y?-1:x>y?1:0)*st.sortDir;});}return rows;}
 function th(id,key,label,cls,tip){var st=_tblState[id]||{};var ar=st.sortKey===key?'<span class="sar">'+(st.sortDir<0?'▼':'▲')+'</span>':'';return '<th class="'+(cls||'num')+' sortable" data-tip="'+esc(tip||'Bấm để sắp xếp')+'" onclick="tblSort(\''+id+'\',\''+key+'\')">'+label+ar+'</th>';}
-function tblSort(id,key){var st=_tblState[id]||(_tblState[id]={q:'',page:0});if(st.sortKey===key)st.sortDir=(st.sortDir<0?1:-1);else{st.sortKey=key;st.sortDir=-1;}st.page=0;paint();}
+function tblSort(id,key){var st=_tblState[id]||(_tblState[id]={q:'',page:0});if(st.sortKey===key)st.sortDir=(st.sortDir<0?1:-1);else{st.sortKey=key;st.sortDir=-1;}st.page=0;tblRender(id);tblSortHeader(id);}
+function tblSortHeader(id){
+  var st=_tblState[id]||{};
+  var tb=document.getElementById('tb-'+id);if(!tb)return;
+  var table=tb.closest('table');if(!table)return;
+  var ths=table.querySelectorAll('thead th.sortable');
+  for(var i=0;i<ths.length;i++){
+    var th=ths[i];var m=/tblSort\('[^']*','([^']*)'\)/.exec(th.getAttribute('onclick')||'');var key2=m?m[1]:null;
+    var old=th.querySelector('.sar');if(old)old.remove();
+    if(key2===st.sortKey){var sp=document.createElement('span');sp.className='sar';sp.textContent=st.sortDir<0?'▼':'▲';th.appendChild(sp);}
+  }
+}
 function tblRender(id){
   var cfg=_TBL[id];if(!cfg)return;
   var st=_tblState[id]||(_tblState[id]={q:'',page:0});
@@ -902,20 +915,20 @@ function mountAllTables(){Object.keys(_TBL).forEach(tblRender);}
 
 
 function heroRow(d,cur,prev,ser){
-  var s=d.sum,oS=ser.map(function(b){return b.o;}),sS=ser.map(function(b){return b.s;});
+  var s=d.sum,oS=ser.map(function(b){return b.o;}),sS=ser.map(function(b){return b.s;}),cS=ser.map(function(b){return b.r;});
   var gVal=s.verifiedReach!=null?Math.min(100,s.verifiedReach):s.reach!=null?Math.min(100,s.reach):0;
-  var gHead=s.hasSent?'Open Rate · Reach kiểm chứng':'Open Rate (chưa có dữ liệu gửi)';
+  var gHead='Tỉ lệ mở · mục tiêu '+REACH_TARGET+'%';var remain=(s.openRate!=null&&s.openRate<REACH_TARGET)?(REACH_TARGET-s.openRate):0;var nCamp=(d.campaigns&&d.campaigns.length)||0;
   var note=s.proxyOpens>0?' · đã loại '+s.proxyOpens+' người chỉ mở qua proxy':'';
   var gSub=s.hasSent?(s.uniqOpeners+' người mở / '+s.sent+' người được gửi'+note):(s.uniqOpeners+' người đã mở');
-  var gauge='<div class="gauge-card" data-tip="Reach đã kiểm chứng = số người mở thật ÷ tổng gửi. Open giả từ security gateway đã được loại bỏ. Mục tiêu '+REACH_TARGET+'%."><div class="gc-h">'+gHead+'</div><div class="gauge-wrap">'+radialGauge(gVal,REACH_TARGET)+'</div><div class="gc-sub">'+gSub+'</div></div>';
+  var gauge='<div class="gauge-card" data-tip="Reach đã kiểm chứng = số người mở thật ÷ tổng gửi. Open giả từ security gateway đã được loại bỏ. Mục tiêu '+REACH_TARGET+'%."><div class="gc-h">'+gHead+'</div><div class="gauge-wrap">'+radialGauge(gVal,REACH_TARGET)+'</div><div class="gc-sub">'+gSub+' · '+(remain>0?'<b>còn '+remain+'%</b> tới mục tiêu':'<b>đạt mục tiêu</b>')+'</div><div class="gc-foot"><span>'+nCamp+' chiến dịch · kỳ này</span><span>'+(deltaChip(cur.reach,prev.reach,true)||'<span class="delta flat">±0</span>')+' so kỳ trước</span></div></div>';
   function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl"><span class="ki">'+ic+'</span>'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
   // 6 KPI chuẩn email (person-level): Đã gửi · Đã mở (lượt) · Tỉ lệ mở · Đã click · CTOR · Xác nhận đọc
-  var k1=card('Đã gửi','✉',s.hasSent?nf(s.sent):'—',s.hasSent?deltaChip(cur.sent,prev.sent,true):'',spark(sS,'var(--accent-2)'),'Số người nhận duy nhất có sự kiện gửi (pos=sent). 1 người nhận nhiều chiến dịch = chỉ tính 1 người.');
-  var k2=card('Đã mở (lượt)','👁',nf(s.opens),deltaChip(cur.opens,prev.opens,true),spark(oS,'var(--accent-2)'),'Tổng số lần email được mở, đã trừ mở-lại &lt;5s (Outlook tự reload). Đóng rồi mở lại (gap &gt;5s) = +1 lượt.');
-  var k3=card('Tỉ lệ mở','📈',s.openRate!=null?s.openRate+'%':'—',s.openRate!=null?(s.openRate>=REACH_TARGET?'<span class="delta up">▲ đạt</span>mục tiêu '+REACH_TARGET+'%':'<span class="delta down">▼ dưới</span>mục tiêu '+REACH_TARGET+'%'):'','','Người mở ÷ Người gửi (person-level) — không bao giờ vượt 100%. Mục tiêu '+REACH_TARGET+'%.');
-  var k4=card('Đã click','🖱',nf(s.nClickers||0),'','','Số người unique đã click ít nhất 1 link.');
-  var k5=card('CTOR','🎯',(d.clickStats.ctor||0)+'%','','','Click-to-Open Rate = Người click ÷ Người mở.');
-  var k6=card('Xác nhận đọc','✔',nf(s.nConfirmed||0),'','','Người đã nhấn link ✓ Xác nhận đã đọc trong email — tín hiệu đọc mạnh nhất, không bị cache mobile.');
+  var k1=card('Đã gửi','✉',s.hasSent?nf(s.sent):'—',(s.hasSent?deltaChip(cur.sent,prev.sent,true):'')+' người · duy nhất',spark(sS,'var(--accent-2)'),'Số người nhận duy nhất có sự kiện gửi (pos=sent). 1 người nhận nhiều chiến dịch = chỉ tính 1 người.');
+  var k2=card('Đã mở (lượt)','👁',nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' đã trừ mở lại &lt;5s',spark(oS,'var(--accent-2)'),'Tổng số lần email được mở, đã trừ mở-lại &lt;5s (Outlook tự reload). Đóng rồi mở lại (gap &gt;5s) = +1 lượt.');
+  var k3=card('Tỉ lệ mở','📈',s.openRate!=null?s.openRate+'%':'—',s.openRate!=null?(s.openRate>=REACH_TARGET?'<span class="delta up">▲ đạt</span>mục tiêu '+REACH_TARGET+'%':'<span class="delta down">▼ dưới</span>mục tiêu '+REACH_TARGET+'%'):'',spark(oS,'var(--accent)'),'Người mở ÷ Người gửi (person-level) — không bao giờ vượt 100%. Mục tiêu '+REACH_TARGET+'%.');
+  var k4=card('Đã click','🖱',nf(s.nClickers||0),deltaChip(cur.clickers,prev.clickers,true)+' người click',spark(cS,'var(--accent)'),'Số người unique đã click ít nhất 1 link.');
+  var k5=card('CTOR','🎯',(d.clickStats.ctor||0)+'%',deltaChip(cur.ctor,prev.ctor,true)+' click ÷ mở',spark(cS,'var(--accent-2)'),'Click-to-Open Rate = Người click ÷ Người mở.');
+  var k6=card('Xác nhận đọc','✔',nf(s.nConfirmed||0),deltaChip(cur.confirmed,prev.confirmed,true)+' đọc trên mobile',spark(oS,'var(--accent-2)'),'Người đã nhấn link ✓ Xác nhận đã đọc trong email — tín hiệu đọc mạnh nhất, không bị cache mobile.');
   return '<div class="hero-row">'+gauge+'<div class="kpi-grid six">'+k1+k2+k3+k4+k5+k6+'</div></div>';
 }
 
