@@ -5,13 +5,15 @@
   "functions": {
     "api/portal.js": { "maxDuration": 5 },
     "api/fb-dashboard.js": { "maxDuration": 15 },
-    "api/email-dashboard.js": { "maxDuration": 15 }
+    "api/email-dashboard.js": { "maxDuration": 15 },
+    "api/leader-dashboard.js": { "maxDuration": 15 }
   },
   "rewrites": [
     { "source": "/", "destination": "/api/portal" },
     { "source": "/api/track", "destination": "/api/email-track" },
     { "source": "/api/ingest", "destination": "/api/fb-ingest" },
     { "source": "/api/facebook", "destination": "/api/fb-dashboard" },
-    { "source": "/api/email", "destination": "/api/email-dashboard" }
+    { "source": "/api/email", "destination": "/api/email-dashboard" },
+    { "source": "/api/leader", "destination": "/api/leader-dashboard" }
   ]
 }
