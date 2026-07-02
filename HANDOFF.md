@@ -14,21 +14,18 @@ Tên file = **route**; đặt theo sản phẩm để mở ra hiểu ngay. URL c
 | `api/email-dashboard.js` | Dashboard Email (copy từ email-tracker-data/dashboard.js) | `EMAIL_SUPABASE_URL`, `EMAIL_SUPABASE_SERVICE_KEY` | `/api/email` |
 | `api/fb-ingest.js` | Nạp bài Group từ userscript (FB) | `SUPABASE_*` + `INGEST_SECRET` | `/api/ingest` |
 | `api/fb-fetch.js` | Cron Graph API FB (phụ; migration nội bộ sẽ bỏ) | `SUPABASE_*` + `FB_*` | (cron) |
-| `api/email-track.mjs` | **Beacon Email** (pixel/click/read + **dwell**) — Edge runtime v4.1, check `?ping=1` | `EMAIL_SUPABASE_*` | `/api/track` |
+| `api/email-track.js` | **Beacon Email** (pixel/click/read) — v3.5 | `EMAIL_SUPABASE_*` | `/api/track` |
 | `vercel.json` | rewrites giữ URL cũ; cron `/api/fb-fetch`; maxDuration | — | — |
 - **1 Vercel project** `shb-fb-dashboard` chạy tất cả. URL công khai (qua rewrite) giữ nguyên: `/` · `/api/facebook` · `/api/email` · `/api/ingest` · `/api/track`. Userscript (`/api/ingest`) & VBA (`/api/track`) KHÔNG cần đổi.
 - ⚠️ **Đồng bộ**: `api/email-dashboard.js` + `api/email-track.js` là **bản copy** từ repo `email-tracker-data`. Sửa gốc thì đồng bộ lại (hoặc ngược lại). Sau migration nội bộ repo email gốc nghỉ hẳn.
 - ✅ **VBA đã cập nhật**: `CampaignTracker.bas` v4.9 (repo email-tracker-data) đã đổi `TRACK_URL` → `shb-fb-dashboard.vercel.app/api/track`. User cần cài bản này vào Outlook + test trước khi tắt Vercel email cũ.
 - 🧹 Nhánh `claude/cm-portal` + `claude/friendly-cannon-m06mlh` — xoá thủ công trên GitHub (đã merge/cũ).
 
-## ⏱️ Thời gian đọc email (dwell) — v3.6
-Outlook tải mọi ảnh cùng lúc khi mở mail → delta pixel top/bottom vô nghĩa. Giải pháp = **pixel streaming kiểu Litmus**:
-- `api/email-track.mjs` (v4.1, **Edge runtime** `Request→Response`) với `pos=top` (và `bottom` nếu email cũ còn) KHÔNG trả pixel ngay mà **stream nhỏ giọt** qua `ReadableStream` (GIF thiếu trailer + comment-block mỗi 2s). Event top vẫn ghi NGAY khi request đến (lượt mở không chậm). Email còn mở → client còn giữ kết nối; đóng email → client hủy tải → `stream.cancel()`/`request.signal` bắn → server đo được số giây, ghi event `pos='dwell'` + cột `dwell_s`. Cap `EMAIL_DWELL_CAP_S` (mặc định 25s). VBA hiện chỉ nhúng 1 pixel top — dwell đo trên top.
-- ⚠️ **Phải là Edge runtime**: kiểu `(req,res)` Node LẪN web handler Node+Fluid đều KHÔNG nhận được tín hiệu client ngắt qua proxy Vercel → dwell luôn chạm trần 25s (đã kiểm chứng thực tế cả hai). Edge (fetch-event model) là nơi `cancel()` được đảm bảo. Kiểm tra bản đang chạy: `GET /api/track?ping=1` → `{"v":"4.1-edge",...}`; response pixel có header `X-SHB-Tracker`.
-- Dashboard tách nhóm **"Chạm trần ≥25s"** khỏi median (Outlook mobile tải ảnh ngầm không ngắt kết nối → luôn 25s, không phân biệt được với đọc lâu).
-- Proxy (GoogleImageProxy/gateway) tải hộ → nhận pixel thường, không đo (regex `isImageProxy`).
-- **Go-live cần**: chạy `db/migrate_05_email_dwell.sql` trong Supabase **EMAIL** (thêm cột `dwell_s`). Chưa chạy migration → insert dwell fail (log lỗi, không ảnh hưởng tracking cũ); dashboard fetch dwell bằng query RIÊNG nên không vỡ.
-- Dashboard: panel "Thời gian đọc email" (median + Đọc kỹ ≥8s / Đọc lướt 2–8s / Liếc qua <2s — chuẩn Litmus), cột "Đọc TB" trong bảng chiến dịch, mục từ điển. `readSec` mỗi session = max(dwell). VBA **không cần đổi**.
+## ⏱️ Thời gian đọc email (dwell) — ĐÃ GỠ, chờ hạ tầng nội bộ
+Đã build + test đầy đủ (pixel streaming kiểu Litmus) nhưng **proxy Vercel không truyền tín hiệu client ngắt kết nối** vào function — kiểm chứng thực tế đủ 3 runtime: `(req,res)` Node, Web Handler Node + Fluid ON, Edge. Cả 3 đều làm dwell luôn chạm trần 25s → số liệu vô nghĩa → gỡ khỏi bản Vercel (02/07/2026).
+- Chi tiết cơ chế, code tham chiếu (commit `3fe516c`, `56a82c5`, `f724bca`) và 5 bài học triển khai: xem **`KE_HOACH_MIGRATION.md` mục 7b** — sẽ bổ sung khi migrate vào hạ tầng nội bộ SHB (server nội bộ nhận kết nối trực tiếp nên đo được).
+- Cột `dwell_s` vẫn tồn tại trong bảng `events` (migrate_05 đã chạy) — dashboard fetch với `pos=not.in.(sent,dwell)` để bỏ qua event dwell còn sót.
+- Fix đi kèm ĐƯỢC GIỮ LẠI: cột "Đã mở (lượt)" bảng chiến dịch hiển thị đúng số LƯỢT (`openEvents`) thay vì số người.
 
 ## Kiến trúc dữ liệu
 ```

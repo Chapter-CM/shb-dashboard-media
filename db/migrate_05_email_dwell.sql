@@ -1,14 +1,11 @@
--- Migration 05 — Thời gian đọc email (dwell)
--- ⚠️ Chạy trong SQL editor của Supabase EMAIL (EMAIL_SUPABASE_URL),
---    KHÔNG phải Supabase Facebook (SUPABASE_URL).
---
--- api/email-track.js v3.6 stream pixel top/bottom nhỏ giọt: client giữ kết
--- nối chừng nào email còn mở → đo được thời gian đọc, ghi event pos='dwell'
--- kèm số giây vào cột dwell_s (cap tại EMAIL_DWELL_CAP_S, mặc định 25s).
+-- Migration 05 — Thời gian đọc email (dwell) [ĐÃ CHẠY trên Supabase EMAIL 02/07/2026]
+-- ⚠️ Tính năng đo dwell đã GỠ khỏi bản Vercel: proxy Vercel không truyền tín
+--    hiệu client ngắt kết nối (kiểm chứng đủ 3 runtime) → dwell luôn chạm trần.
+--    Cột dwell_s GIỮ LẠI để bổ sung khi migrate vào hạ tầng nội bộ SHB —
+--    chi tiết cơ chế + code tham chiếu: KE_HOACH_MIGRATION.md mục 7b.
 
 alter table events add column if not exists dwell_s integer;
 
--- Nếu bảng events có CHECK constraint trên cột pos, cần cho phép giá trị mới:
--- alter table events drop constraint if exists events_pos_check;
--- alter table events add constraint events_pos_check
---   check (pos in ('sent','top','bottom','click','read','dwell'));
+-- Dọn event dwell thử nghiệm (tuỳ chọn):
+-- delete from events where pos = 'dwell';
+-- delete from events where campaign = 'test-dwell';
