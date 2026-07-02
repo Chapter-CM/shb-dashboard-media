@@ -1335,10 +1335,10 @@ function filterBar(d){
     +'</div>';
 }
 function navLinks(d){
-  var L='<a href="#s-ov" class="on">Tổng quan</a><a href="#s-seg">Phân khúc</a>';
+  var L='<a href="#s-ov" class="on">Tổng quan</a><a href="#s-seg">Phân khúc</a><a href="#s-rec">Người nhận</a>';
   if(d.hasInitiative)L+='<a href="#s-ini">Squad/Dự án</a>';
   if(d.hasMandatory)L+='<a href="#s-man">Bắt buộc</a>';
-  L+='<a href="#s-camp">Chiến dịch</a><a href="#s-openhm">Giờ mở</a><a href="#s-rec">Người nhận</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Phân tích</a><a href="#s-health">Chất lượng DL</a><a href="#s-dict">Từ điển</a>';
+  L+='<a href="#s-camp">Chiến dịch</a><a href="#s-openhm">Giờ mở</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Phân tích</a><a href="#s-health">Chất lượng DL</a><a href="#s-dict">Từ điển</a>';
   return L;
 }
 function masthead(mode){
@@ -1367,8 +1367,8 @@ function operational(d,cur,prev,ser){
     '<div class="row2">'+funnelPanel(d)+devicePanel(d)+'</div>'+
     (d.clickStats.has?'<div style="margin-top:16px">'+clickPanel(d)+'</div>':'')+
     '</section>'+
-    segmentSection(d)+initiativeSection(d)+mandatorySection(d)+campaignSection(d)+
-    openHeatSection(d)+recipientSection(d)+
+    segmentSection(d)+recipientSection(d)+initiativeSection(d)+mandatorySection(d)+campaignSection(d)+
+    openHeatSection(d)+
     audienceSection(d)+insightSection(d)+dataHealthSection(d)+dictionarySection()+
     '<div class="foot">Cập nhật lúc '+new Date().toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'})+' · '+d.sum.events+' sự kiện · tự làm mới 5 phút</div></div>';
 }
