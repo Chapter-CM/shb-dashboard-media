@@ -1,0 +1,7 @@
+{
+  "name": "shb-dashboard-media",
+  "private": true,
+  "dependencies": {
+    "@vercel/functions": "^2.0.0"
+  }
+}

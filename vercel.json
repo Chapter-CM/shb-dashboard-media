@@ -4,7 +4,7 @@
   ],
   "functions": {
     "api/portal.js": { "maxDuration": 5 },
-    "api/email-track.js": { "maxDuration": 30 },
+    "api/email-track.mjs": { "maxDuration": 30 },
     "api/fb-dashboard.js": { "maxDuration": 15 },
     "api/email-dashboard.js": { "maxDuration": 15 },
     "api/leader-dashboard.js": { "maxDuration": 15 }
