@@ -358,9 +358,9 @@ td .nm{color:var(--text);font-weight:600}
 .ptitle{display:flex;align-items:center;gap:11px;min-width:200px}
 .pt-main{font-size:12.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
 .pt-sub{font-size:11px;color:var(--muted);margin-top:2px}
-.pin{position:sticky;left:0;z-index:2;background:var(--glass);backdrop-filter:blur(18px)}
+.pin{position:sticky;left:0;z-index:2;background:color-mix(in srgb,var(--bg),white 4.5%)}
 tbody tr:hover .pin{background:rgba(255,255,255,.028)}
-[data-theme="light"] .pin{background:var(--glass)}
+[data-theme="light"] .pin{background:color-mix(in srgb,var(--bg),white 62%)}
 [data-theme="light"] tbody tr:hover .pin{background:rgba(90,70,180,.04)}
 [data-theme="light"] .erbar2{background:rgba(0,0,0,.08)}
 .tdot{width:8px;height:8px;border-radius:99px;flex:none}
