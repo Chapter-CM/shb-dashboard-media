@@ -348,7 +348,13 @@ td .nm{color:var(--text);font-weight:600}
 /* ── density ── */
 [data-density="compact"] td{padding:9px 10px}[data-density="compact"] .kpi{padding:13px 15px}[data-density="compact"] .kpi .kv{font-size:25px}[data-density="compact"] section{padding-top:20px}[data-density="compact"] .panel{padding:15px 17px}
 /* ── responsive ── */
-@media(max-width:920px){.hero-row{grid-template-columns:1fr}.row2{grid-template-columns:1fr}.tiers{grid-template-columns:repeat(2,1fr)}.dh-grid{grid-template-columns:1fr}.exec-k{grid-template-columns:1fr;gap:16px}.exec-kp{border-left:none;padding-left:0;border-top:1px solid rgba(255,255,255,.2);padding-top:14px}.exec-kp:first-child{border-top:none;padding-top:0}.segname{width:110px}.segmeta{width:96px}}
+.ac-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.ac-card{background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r-sm);padding:16px;backdrop-filter:blur(18px);display:flex;flex-direction:column;gap:10px}
+.ac-n{font-size:26px;font-weight:700;line-height:1;font-family:var(--num)}
+.ac-t{font-size:12px;font-weight:700}
+.ac-d{font-size:11.5px;color:var(--muted);line-height:1.5;flex:1}
+.ac-strip{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+@media(max-width:920px){.hero-row{grid-template-columns:1fr}.row2{grid-template-columns:1fr}.tiers{grid-template-columns:repeat(2,1fr)}.dh-grid{grid-template-columns:1fr}.exec-k{grid-template-columns:1fr;gap:16px}.exec-kp{border-left:none;padding-left:0;border-top:1px solid rgba(255,255,255,.2);padding-top:14px}.exec-kp:first-child{border-top:none;padding-top:0}.segname{width:110px}.segmeta{width:96px}.ac-grid{grid-template-columns:1fr}}
 @media(max-width:560px){.kpi-col{grid-template-columns:1fr}}
 /* ── 9a: bảng 5a-style (ghim cột, dot phân hạng, thanh trong ô) ── */
 .erbar2{width:62px;height:5px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden}
@@ -1192,9 +1198,39 @@ function audienceSection(d){
 
 
 function insightSection(d){
-  var ins=insightsOf(d),h='<div class="ins">';
-  ins.forEach(function(i){h+='<div class="in '+(i.t==='warn'?'warn':i.t==='good'?'good':'')+'"><div class="mk"></div><div class="x">'+i.x+'</div></div>';});
-  return '<section id="s-ins"><div class="eyebrow">Phân tích tự động '+qclearBtn()+'</div>'+h+'</div></section>';
+  window.__mandatory=d.mandatory;window.__fu=d.followUp;
+  var cards=[];
+  if(d.hasMandatory&&d.mandatory&&d.mandatory.length){
+    var worst=d.mandatory.filter(function(M){return M.notOpened.length>0;}).sort(function(a,b){return b.notOpened.length-a.notOpened.length;})[0];
+    if(worst){
+      var byUnit={};worst.notOpened.forEach(function(p){var k=fmtSeg(p.dept||p.role||'(Chưa phân loại)');byUnit[k]=(byUnit[k]||0)+1;});
+      var top=Object.keys(byUnit).map(function(k){return[k,byUnit[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,2);
+      var topTxt=top.length?('Tập trung ở '+top.map(function(t){return esc(t[0])+' ('+t[1]+')';}).join(' và ')+'.'):'';
+      cards.push({tone:'risk',tag:'Khẩn',n:worst.notOpened.length,t:'Chưa xác nhận email bắt buộc',
+        desc:'"'+esc(fmtCamp(worst.name))+'" còn '+worst.notOpened.length+' người chưa xác nhận. '+topTxt,
+        actions:'<button class="gbtn" onclick="exportMandatory(\''+jsq(worst.name)+'\')">Xuất DS nhắc (CSV)</button><button class="csv" onclick="copyMandatoryEmails(\''+jsq(worst.name)+'\')">Copy '+worst.notOpened.length+' email</button>'});
+    }
+  }
+  if(d.sum.hasSeg&&d.segments&&d.segments.dept){
+    var low=d.segments.dept.filter(function(g){return g.sent>=MIN_N&&g.name!=='(Chưa phân loại)'&&g.reach<REACH_TARGET;}).sort(function(a,b){return a.reach-b.reach;});
+    if(low.length){
+      var lowTxt=low.slice(0,3).map(function(g){return esc(fmtSeg(g.name))+' '+g.reach+'%';}).join(' · ');
+      cards.push({tone:'warn',tag:'Theo dõi',meta:low.length+' đơn vị',n:low.length,t:'Đơn vị dưới mục tiêu '+REACH_TARGET+'%',
+        desc:lowTxt+'. Có thể là vấn đề kênh tại đơn vị, không phải nội dung.',
+        actions:'<button class="csv" onclick="filterLowUnits(\''+low.map(function(g){return jsq(g.name);}).join('§')+'\')">Lọc '+low.length+' đơn vị</button>'});
+    }
+  }
+  if(d.followUp&&d.followUp.length){
+    cards.push({tone:'good',tag:'Cơ hội',n:d.followUp.length,t:'Đã mở, chưa click CTA',
+      desc:'Nhóm "ấm" — follow-up với CTA rõ hơn thường tăng hành động trong 48h.',
+      actions:'<button class="csv" onclick="exportFU()">Xuất DS follow-up</button>'});
+  }
+  var eyebrow='<div class="eyebrow" style="color:var(--accent-2)">Việc cần làm tuần này<span class="pill p-neutral" style="margin-left:auto">Tự cập nhật từ dữ liệu</span></div>';
+  if(!cards.length)return '<section id="s-ins">'+eyebrow+'<div class="nd">Không có việc cần xử lý gấp trong kỳ này 🎉</div></section>';
+  var body=cards.map(function(c){
+    return '<div class="ac-card" style="border-color:color-mix(in srgb,var(--'+c.tone+') 35%,var(--stroke))"><div class="ac-strip"><span class="pill p-'+c.tone+'">'+c.tag+'</span>'+(c.meta?'<span class="faint" style="font-size:10.5px;margin-left:auto">'+c.meta+'</span>':'')+'</div><div class="ac-n num" style="color:var(--'+c.tone+')">'+c.n+'</div><div class="ac-t">'+c.t+'</div><div class="ac-d">'+c.desc+'</div><div class="ac-strip">'+c.actions+'</div></div>';
+  }).join('');
+  return '<section id="s-ins">'+eyebrow+'<div class="ac-grid">'+body+'</div></section>';
 }
 
 function iniRow(I){
@@ -1338,7 +1374,7 @@ function navLinks(d){
   var L='<a href="#s-ov" class="on">Tổng quan</a><a href="#s-seg">Phân khúc</a><a href="#s-rec">Người nhận</a>';
   if(d.hasInitiative)L+='<a href="#s-ini">Squad/Dự án</a>';
   if(d.hasMandatory)L+='<a href="#s-man">Bắt buộc</a>';
-  L+='<a href="#s-camp">Chiến dịch</a><a href="#s-openhm">Giờ mở</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Phân tích</a><a href="#s-health">Chất lượng DL</a><a href="#s-dict">Từ điển</a>';
+  L+='<a href="#s-camp">Chiến dịch</a><a href="#s-openhm">Giờ mở</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Việc cần làm ★</a><a href="#s-health">Chất lượng DL</a><a href="#s-dict">Từ điển</a>';
   return L;
 }
 function masthead(mode){
@@ -1514,6 +1550,10 @@ function toggleTheme(){_theme=_theme==='dark'?'light':'dark';try{localStorage.se
 function toggleDensity(){_density=_density==='compact'?'comfortable':'compact';try{localStorage.setItem('shb-et-density',_density);}catch(e){}applyDensity();}
 function segView(attr,el){document.querySelectorAll('.seg-tg button').forEach(function(b){b.classList.remove('on');});el.classList.add('on');document.getElementById('segbox').innerHTML=segBars(window.__seg[attr],attr);}
 function exportFU(){var rows=window.__fu||[];if(!rows.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac,Chien Dich,Thoi Gian Mo\n';rows.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+fmtCamp(r.campaign)+'","'+fmtTime(r.first)+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mo-chua-click-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
+function findMandatory(name){return(window.__mandatory||[]).filter(function(M){return M.name===name;})[0];}
+function exportMandatory(name){var M=findMandatory(name);if(!M||!M.notOpened.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac\n';M.notOpened.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='chua-xac-nhan-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
+function copyMandatoryEmails(name){var M=findMandatory(name);if(!M||!M.notOpened.length)return;var text=M.notOpened.map(function(r){return r.rcpt;}).join('; ');(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(text):Promise.reject()).catch(function(){var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(ta);});}
+function filterLowUnits(names){_filter.dept=names?names.split('\u00A7'):[];paint();}
 
 /* ── UI functions ── */
 function initTooltip(){
