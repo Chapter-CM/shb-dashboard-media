@@ -1,4 +1,4 @@
-// SHB Email Tracker — track endpoint v3.5 (beacon Email)
+// SHB Email Tracker — track endpoint v3.6 (beacon Email + dwell/thời gian đọc)
 // ENV: EMAIL_SUPABASE_URL, EMAIL_SUPABASE_SERVICE_KEY (ghi vào Supabase Email — tách khỏi SUPABASE_* của Facebook)
 'use strict';
 const https = require('https');
@@ -9,6 +9,21 @@ const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPAB
 const GIF = Buffer.from(
   'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'
 );
+
+// ── Dwell (thời gian đọc) ──────────────────────────────────────────────
+// Pixel bottom được stream NHỎ GIỌT: client giữ kết nối chừng nào email còn
+// mở, đóng email → client hủy tải ảnh → đo được thời gian đọc (kiểu Litmus).
+// Ghi thêm event pos='dwell' với dwell_s (cần cột dwell_s — db/migrate_05).
+const DWELL_CAP_S   = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '25', 10) || 25);
+const DWELL_TICK_MS = 2000;
+const GIF_BODY    = GIF.slice(0, GIF.length - 1);              // GIF trừ byte trailer 0x3B
+const GIF_TRAILER = GIF.slice(GIF.length - 1);
+const GIF_PAD     = Buffer.from([0x21, 0xFE, 0x01, 0x20, 0x00]); // comment block — hợp lệ trước trailer
+
+// Proxy/gateway tải ảnh hộ (không phải người đọc) → dwell vô nghĩa, bỏ đo
+function isImageProxy(ua) {
+  return /GoogleImageProxy|ggpht|YahooMailProxy|proofpoint|barracuda|mimecast/i.test(ua || '');
+}
 
 // Sanitize: remove null bytes (causes Supabase 22P05 error), clip length
 function clip(v, n) {
@@ -24,6 +39,46 @@ function fixRcpt(v) {
   if (!v) return v;
   var m = v.match(/^([\w.+\-]+?)40([\w.\-]+\.[a-z]{2,})@\2$/i);
   return m ? (m[1] + '@' + m[2]) : v;
+}
+
+function streamDwellPixel(req, res, row) {
+  const t0 = Date.now();
+  const pending = [
+    insertEvent(row).catch(e => console.error('[SHB Tracker] Insert failed:', e.message))
+  ];
+  res.writeHead(200, {
+    'Content-Type':  'image/gif',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma':        'no-cache',
+    'Expires':       '0',
+    'Access-Control-Allow-Origin': '*'
+  });
+  res.write(GIF_BODY);
+  return new Promise((resolve) => {
+    let done = false, hb = null, cap = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearInterval(hb);
+      clearTimeout(cap);
+      // Ghi dwell TRƯỚC khi kết thúc response: Vercel có thể freeze function
+      // ngay sau khi response end → insert đứng sau res.end() sẽ bị rơi
+      const dwell = Math.min(DWELL_CAP_S, Math.round((Date.now() - t0) / 1000));
+      pending.push(insertEvent(Object.assign({}, row, {
+        pos: 'dwell', dwell_s: dwell, ts: new Date().toISOString()
+      })).catch(e => console.error('[SHB Tracker] Dwell insert failed:', e.message)));
+      const end = () => {
+        try { res.write(GIF_TRAILER); res.end(); } catch (e) { /* client đã ngắt */ }
+        resolve();
+      };
+      Promise.all(pending).then(end, end);
+    };
+    hb  = setInterval(() => { try { res.write(GIF_PAD); } catch (e) { finish(); } }, DWELL_TICK_MS);
+    cap = setTimeout(finish, DWELL_CAP_S * 1000);
+    res.on('close', finish);
+    res.on('error', finish);
+    req.on('close', finish);
+  });
 }
 
 function insertEvent(row) {
@@ -106,6 +161,11 @@ module.exports = async (req, res) => {
 
   const isBlocked = row.campaign && BLOCKED_CAMPAIGNS.includes(row.campaign);
 
+  // BOTTOM → pixel streaming đo thời gian đọc (ghi cả event bottom lẫn dwell)
+  if (pos === 'bottom' && row.event_id && !isBlocked && !isImageProxy(row.ua)) {
+    return streamDwellPixel(req, res, row);
+  }
+
   if (row.event_id && !isBlocked) {
     try {
       await insertEvent(row);
@@ -170,3 +230,6 @@ module.exports = async (req, res) => {
   });
   res.end(GIF);
 };
+
+// Vercel: bật streaming response cho pixel dwell (Fluid compute mặc định đã hỗ trợ)
+module.exports.config = { supportsResponseStreaming: true };

@@ -14,12 +14,19 @@ Tên file = **route**; đặt theo sản phẩm để mở ra hiểu ngay. URL c
 | `api/email-dashboard.js` | Dashboard Email (copy từ email-tracker-data/dashboard.js) | `EMAIL_SUPABASE_URL`, `EMAIL_SUPABASE_SERVICE_KEY` | `/api/email` |
 | `api/fb-ingest.js` | Nạp bài Group từ userscript (FB) | `SUPABASE_*` + `INGEST_SECRET` | `/api/ingest` |
 | `api/fb-fetch.js` | Cron Graph API FB (phụ; migration nội bộ sẽ bỏ) | `SUPABASE_*` + `FB_*` | (cron) |
-| `api/email-track.js` | **Beacon Email** (pixel/click/read) | `EMAIL_SUPABASE_*` | `/api/track` |
+| `api/email-track.js` | **Beacon Email** (pixel/click/read + **dwell**) | `EMAIL_SUPABASE_*` | `/api/track` |
 | `vercel.json` | rewrites giữ URL cũ; cron `/api/fb-fetch`; maxDuration | — | — |
 - **1 Vercel project** `shb-fb-dashboard` chạy tất cả. URL công khai (qua rewrite) giữ nguyên: `/` · `/api/facebook` · `/api/email` · `/api/ingest` · `/api/track`. Userscript (`/api/ingest`) & VBA (`/api/track`) KHÔNG cần đổi.
 - ⚠️ **Đồng bộ**: `api/email-dashboard.js` + `api/email-track.js` là **bản copy** từ repo `email-tracker-data`. Sửa gốc thì đồng bộ lại (hoặc ngược lại). Sau migration nội bộ repo email gốc nghỉ hẳn.
 - ✅ **VBA đã cập nhật**: `CampaignTracker.bas` v4.9 (repo email-tracker-data) đã đổi `TRACK_URL` → `shb-fb-dashboard.vercel.app/api/track`. User cần cài bản này vào Outlook + test trước khi tắt Vercel email cũ.
 - 🧹 Nhánh `claude/cm-portal` + `claude/friendly-cannon-m06mlh` — xoá thủ công trên GitHub (đã merge/cũ).
+
+## ⏱️ Thời gian đọc email (dwell) — v3.6
+Outlook tải mọi ảnh cùng lúc khi mở mail → delta pixel top/bottom vô nghĩa. Giải pháp = **pixel streaming kiểu Litmus**:
+- `api/email-track.js` với `pos=bottom` KHÔNG trả pixel ngay mà **stream nhỏ giọt** (GIF thiếu trailer + comment-block mỗi 2s). Email còn mở → client còn giữ kết nối; đóng email → client hủy tải → server đo được số giây, ghi event `pos='dwell'` + cột `dwell_s`. Cap `EMAIL_DWELL_CAP_S` (mặc định 25s; `vercel.json` maxDuration 30s). Vẫn ghi event `bottom` như cũ.
+- Proxy (GoogleImageProxy/gateway) tải hộ → nhận pixel thường, không đo (regex `isImageProxy`).
+- **Go-live cần**: chạy `db/migrate_05_email_dwell.sql` trong Supabase **EMAIL** (thêm cột `dwell_s`). Chưa chạy migration → insert dwell fail (log lỗi, không ảnh hưởng tracking cũ); dashboard fetch dwell bằng query RIÊNG nên không vỡ.
+- Dashboard: panel "Thời gian đọc email" (median + Đọc kỹ ≥8s / Đọc lướt 2–8s / Liếc qua <2s — chuẩn Litmus), cột "Đọc TB" trong bảng chiến dịch, mục từ điển. `readSec` mỗi session = max(dwell). VBA **không cần đổi**.
 
 ## Kiến trúc dữ liệu
 ```

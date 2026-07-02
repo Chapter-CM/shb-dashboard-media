@@ -17,6 +17,9 @@ function fetchLogs() {
   var hdrs = { apikey: SERVICE_KEY, Authorization: 'Bearer ' + SERVICE_KEY, Accept: 'application/json' };
   var PAGE = 1000;
   var base = '/rest/v1/events?select=' + encodeURIComponent(sel);
+  // dwell fetch RIÊNG (kèm cột dwell_s): nếu chưa chạy migrate_05 → query này
+  // lỗi và trả [] nhưng dashboard chính vẫn nguyên vẹn
+  var baseD = '/rest/v1/events?select=' + encodeURIComponent(sel + ',dwell_s');
 
   function fetchOne(path) {
     return new Promise(function(resolve) {
@@ -51,10 +54,11 @@ function fetchLogs() {
   }
 
   return Promise.all([
-    fetchParallel(base + '&pos=eq.sent&order=ts.asc',   5),
-    fetchParallel(base + '&pos=neq.sent&order=ts.desc', 2)
+    fetchParallel(base  + '&pos=eq.sent&order=ts.asc',           5),
+    fetchParallel(base  + '&pos=not.in.(sent,dwell)&order=ts.desc', 2),
+    fetchParallel(baseD + '&pos=eq.dwell&order=ts.desc',         2)
   ])
-  .then(function(r) { return r[0].concat(r[1]); })
+  .then(function(r) { return r[0].concat(r[1], r[2]); })
   .catch(function()  { return []; });
 }
 
@@ -426,6 +430,8 @@ function fmtCamp(c){return (c||'').replace(/-/g,' ').replace(/\b\w/g,function(x)
 function fmtSeg(s){if(!s||s==='unknown'||s==='')return '(Chưa phân loại)';return s.replace(/-/g,' ');}
 function fmtTime(iso){if(!iso)return '—';try{return new Date(iso).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return iso;}}
 function fmtDay(ms){try{return new Date(ms).toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit'});}catch(e){return '';}}
+function med(a){if(!a||!a.length)return null;var b=a.slice().sort(function(x,y){return x-y;});var m=b.length>>1;return b.length%2?b[m]:Math.round((b[m-1]+b[m])/2);}
+function fmtSec(s){if(s==null)return '—';if(s<60)return s+'s';return Math.floor(s/60)+'m '+('0'+s%60).slice(-2)+'s';}
 function tone(p){if(p==null)return 'neutral';if(p>=REACH_TARGET)return 'good';if(p>=REACH_TARGET-20)return 'warn';return 'risk';}
 function toneColor(p){return p>=REACH_TARGET?'var(--good)':p>=REACH_TARGET-20?'var(--warn)':'var(--risk)';}
 function pill(p,n){
@@ -490,7 +496,7 @@ function process(logs){
     var k=l.id+'||'+l.rcpt,cm=l.campaign||'unknown';
     if(!sess[k])sess[k]={id:l.id,rcpt:l.rcpt,campaign:cm,
       dept:'',role:'',loc:'',msg_type:'',initiative:'',subject:'',
-      ua:'',uas:[],topEvents:[],openDevices:[],
+      ua:'',uas:[],topEvents:[],openDevices:[],dwells:[],
       sent:false,opened:false,clicked:false,confirmed:false,
       sentAt:null,openAt:null,first:l.timestamp,openCount:0,clicks:[],target_size:null};
     var s=sess[k];
@@ -513,6 +519,8 @@ function process(logs){
     }
     if(l.pos==='click'){s.clicked=true;s.clicks.push({link:l.link||'',dest:l.dest||'',ts:l.timestamp});}
     if(l.pos==='read'){s.confirmed=true;if(!s.opened)s.opened=true;} // read confirm = xác nhận đọc trên mobile
+    // dwell = số giây pixel bottom giữ kết nối ≈ thời gian đọc; proxy tải hộ → bỏ
+    if(l.pos==='dwell'&&l.dwell_s!=null&&deviceOf(l.ua||'')!=='proxy'){s.dwells.push(+l.dwell_s||0);}
     if(l.timestamp<s.first)s.first=l.timestamp;
   }
 
@@ -521,6 +529,8 @@ function process(logs){
      >5s = người dùng đóng và mở lại               → +1 lượt     */
   Object.keys(sess).forEach(function(k){
     var s=sess[k];
+    // Thời gian đọc của session = lần xem DÀI NHẤT (mở nhiều lần → lấy max)
+    s.readSec=s.dwells.length?Math.max.apply(null,s.dwells):null;
     if(s.topEvents.length===0){s.openAt=null;s.ua='';s.openCount=0;return;}
     s.topEvents.sort(function(a,b){return a.ts<b.ts?-1:a.ts>b.ts?1:0;});
     s.openAt=s.topEvents[0].ts;
@@ -646,7 +656,7 @@ function process(logs){
     var cm=s.campaign;
     if(!camp[cm])camp[cm]={name:cm,subject:s.subject,initiative:s.initiative,msg_type:s.msg_type,target_size:s.target_size||null,
       rcptSent:new Set(),rcptOpen:new Set(),rcptClicked:new Set(),rcptConfirmed:new Set(),
-      openEvents:0,clicks:0,delays:[],proxy:0,human:0,last:s.first};
+      openEvents:0,clicks:0,delays:[],dwells:[],proxy:0,human:0,last:s.first};
     var c=camp[cm];
     if(s.sent||(!hasSent&&s.opened))c.rcptSent.add(s.rcpt);
     if(s.opened){
@@ -658,6 +668,7 @@ function process(logs){
     if(s.confirmed)c.rcptConfirmed.add(s.rcpt);
     if(s.clicks.length)c.clicks+=s.clicks.length;
     if(s.sentAt&&s.openAt){var dl=new Date(s.openAt)-new Date(s.sentAt);if(dl>=0&&dl<2.6e8)c.delays.push(dl);}
+    if(s.readSec!=null)c.dwells.push(s.readSec);
     if(s.first>c.last)c.last=s.first;
     if(s.target_size&&!c.target_size)c.target_size=s.target_size;
   });
@@ -698,6 +709,7 @@ function process(logs){
       ctor:nO>0?Math.round(nC/nO*100):0,
       clickRate:nS>0?Math.round(nC/nS*100):null,
       avgOpenCount:nO>0?Math.round(c.openEvents/nO*10)/10:null,
+      medRead:med(c.dwells),readN:c.dwells.length,
       avgOpenMin:avgDl,proxy:c.proxy,last:c.last};
   }).sort(function(a,b){return b.last.localeCompare(a.last);});
   (function(){
@@ -779,6 +791,14 @@ function process(logs){
     missingDept:missingDept,missingDeptPct:nOpened?Math.round(missingDept/nOpened*100):0,
     uniqRcpt:persons.length,uniqCamp:Object.keys(camp).length};
 
+  /* ══ 14b. THỜI GIAN ĐỌC (dwell — pixel bottom streaming, đã loại proxy) ══
+     readSec mỗi session = lần xem dài nhất. Phân nhóm kiểu Litmus:
+     đọc kỹ ≥8s · đọc lướt 2–8s · liếc qua <2s. Bị cap tại ~25s/lượt.   */
+  var dwellAll=[];arr.forEach(function(s){if(s.readSec!=null)dwellAll.push(s.readSec);});
+  var readDeep  =dwellAll.filter(function(v){return v>=8;}).length;
+  var readSkim  =dwellAll.filter(function(v){return v>=2&&v<8;}).length;
+  var readGlance=dwellAll.filter(function(v){return v<2;}).length;
+
   /* ══ 15. SUMMARY METRICS (person-level, không bao giờ > 100%) ═══════
      sent        = số người được gửi email (unique rcpt có sent event)
      opens       = TỔNG lượt mở deduplicated (đóng+mở = +1 lượt)
@@ -806,6 +826,11 @@ function process(logs){
     nClickers:   nClicked,
     nConfirmed:  nConfirmed,
     confirmRate: nSent>0?Math.round(nConfirmed/nSent*100):null,
+    readN:       dwellAll.length,
+    readMedian:  med(dwellAll),
+    readDeep:    readDeep,
+    readSkim:    readSkim,
+    readGlance:  readGlance,
     hasSent:     hasSent,
     hasSeg:      hasSeg,
     events:      logs.length,
@@ -1090,10 +1115,11 @@ function campRow(c){
       +(c.sent>0?nf(c.sent):'—')
       +(c.target_size&&c.target_size>c.sent?'<span style="color:var(--muted);font-size:10px"> /'+nf(c.target_size)+'</span>':'')
       +'</td>'
-    +'<td class="num"><b>'+nf(c.opens)+'</b></td>'
+    +'<td class="num" data-tip="'+nf(c.openEvents)+' lượt mở từ '+nf(c.opens)+' người"><b>'+nf(c.openEvents)+'</b></td>'
     +'<td class="num" data-tip="'+(N(c.sent)?'Mẫu nhỏ N='+c.sent+' — % không đủ đại diện thống kê':(c.notOpen||0)+' người được gửi nhưng chưa mở')+'"><span class="erc"><b>'+(r!=null?r+'%':'—')+'</b><span class="erbar2"><i style="width:'+rw+'%"></i></span></span></td>'
     +'<td class="num">'+nf(c.clickers||0)+'</td>'
     +'<td class="num">'+(c.ctor>0?c.ctor+'%':'—')+'</td>'
+    +'<td class="num" data-tip="'+(c.medRead!=null?'Median thời gian đọc từ '+c.readN+' lượt đo (dwell)':'Chưa có lượt đo dwell nào — cần dữ liệu sau khi bật pixel streaming')+'">'+(c.medRead!=null?fmtSec(c.medRead):'—')+'</td>'
     +'<td class="num" data-tip="'+c.confirmed+' người đã nhấn ✓ Xác nhận đã đọc">'
       +(c.confirmed>0?'<span class="pill p-good">'+c.confirmed+'</span>':'—')+'</td></tr>';
 }
@@ -1105,7 +1131,7 @@ function campaignSection(d){
   var F=_filter||{};
   var goalN=d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}).length;
   var rows=_campTab==='goal'?d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}):d.campaigns;
-  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:8,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.opens||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):k==='confirmed'?(c.confirmed||0):0;}});
+  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:9,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.openEvents||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):k==='medRead'?(c.medRead||0):k==='confirmed'?(c.confirmed||0):0;}});
   var clearBtn=(F.campaign&&F.campaign.length)?'<button class="csv" onclick="clearFilter(\'campaign\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc chiến dịch</button>':'';
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('camp','Tìm chiến dịch…')
@@ -1123,6 +1149,7 @@ function campaignSection(d){
     +th('camp','reach','Tỉ lệ mở','num','Tỉ lệ mở = Người mở ÷ Người gửi (person-level, đã loại proxy)')
     +th('camp','clickers','Đã click','num','Số người unique đã click ≥1 link')
     +th('camp','ctor','CTOR','num','CTOR = Click-to-Open Rate = Người click ÷ Người mở')
+    +th('camp','medRead','Đọc TB','num','Median thời gian đọc (dwell) — đo từ pixel streaming, đã loại proxy, cap ~25s/lượt')
     +th('camp','confirmed','Xác nhận','num','Số người nhấn ✓ Xác nhận đã đọc — tín hiệu mạnh nhất, không bị cache mobile')
     +'</tr></thead><tbody id="tb-camp"></tbody></table></div>'
     +'<div class="clegend"><span><span class="tdot hot"></span>Đạt mục tiêu '+REACH_TARGET+'%</span><span><span class="tdot warm"></span>Trung bình</span><span><span class="tdot cold"></span>Thấp — cần cải thiện tiêu đề/thời điểm</span></div>'
@@ -1131,6 +1158,25 @@ function campaignSection(d){
 }
 
 
+
+/* ── Read time panel ── thời gian đọc từ dwell (pixel bottom streaming) ── */
+function readTimePanel(d){
+  var s=d.sum;
+  if(!s.readN)return '';
+  var total=s.readN||1;
+  function fr(label,n,color,tip){
+    var w=Math.round(n/total*100);
+    return '<div class="frow" data-tip="'+esc(tip)+'"><div class="fl">'+label+'</div><div class="fbar-w"><div class="fbar" style="width:'+Math.min(100,Math.max(w,3))+'%;background:'+color+'"></div></div><div class="fn">'+nf(n)+'</div><div class="fp">'+w+'%</div></div>';
+  }
+  return '<div class="panel"><div class="panel-h" data-tip="Đo bằng pixel streaming: email còn mở = kết nối còn giữ. Chỉ tính lượt mở tải ảnh trực tiếp (đã loại proxy), tối đa ~25s/lượt.">Thời gian đọc email'
+    +' · <span style="font-size:12.5px;font-weight:500;color:var(--muted)">median <b style="color:var(--text)">'+fmtSec(s.readMedian)+'</b> · '+nf(s.readN)+' lượt đo</span></div>'
+    +'<div class="funnel">'
+    +fr('Đọc kỹ · ≥8s',s.readDeep,'var(--good)','Giữ email mở từ 8 giây trở lên — đọc thật sự (chuẩn Litmus).')
+    +fr('Đọc lướt · 2–8s',s.readSkim,'var(--warn)','Mở 2–8 giây — đọc lướt/quét tiêu đề chính.')
+    +fr('Liếc qua · <2s',s.readGlance,'var(--risk)','Đóng dưới 2 giây — gần như không đọc.')
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--faint);margin-top:10px">Đo từ thời gian client giữ kết nối tải pixel cuối email (dwell). Không đo được lượt mở qua proxy/Gmail; mỗi lượt cap ở ~25s nên median là ước lượng thấp.</div></div>';
+}
 
 /* ── Click panel ── chính (link click + CTOR) ── */
 function clickPanel(d){
@@ -1329,6 +1375,7 @@ function dictionarySection(){
     ['CTOR per link','Số người click 1 link cụ thể ÷ tổng số người mở email. Đo mức độ hấp dẫn của từng CTA/button.'],
     ['Người click','Số người unique đã click ít nhất 1 link. Khác với "lượt click" (1 người có thể click nhiều lần).'],
     ['Open giả (Proxy)','Lượt tải pixel do security gateway/Google proxy tự động scan email — KHÔNG phải người thật mở. Đã loại khỏi Reach kiểm chứng.'],
+    ['Thời gian đọc (dwell)','Số giây email được giữ mở, đo bằng pixel streaming: email còn mở = kết nối tải ảnh còn giữ, đóng email = kết nối ngắt. Phân nhóm: Đọc kỹ ≥8s · Đọc lướt 2–8s · Liếc qua <2s (chuẩn Litmus). Cap ~25s/lượt, không đo được qua proxy → median là ước lượng thấp.'],
     ['Mở chưa click','Người đã mở email nhưng không thực hiện click nào. Cần thêm CTA rõ ràng hơn hoặc nội dung thuyết phục hơn.'],
     ['Tier Hot/Warm/Cold/Never','Phân loại người nhận theo reach tích lũy: Hot ≥70%, Warm 30-70%, Cold <30%, Never = 0 lượt mở.'],
     ['N nhỏ','Khi mẫu < '+MIN_N+' người, % được đánh dấu độ tin cậy thấp. 1/1=100% không có giá trị thống kê.'],
@@ -1401,6 +1448,7 @@ function operational(d,cur,prev,ser){
     '<section id="s-ov" style="padding-top:14px"><div class="eyebrow">Tổng quan</div>'+
     heroRow(d,cur,prev,ser)+heroChart(d,ser)+
     '<div class="row2">'+funnelPanel(d)+devicePanel(d)+'</div>'+
+    (d.sum.readN>0?'<div style="margin-top:16px">'+readTimePanel(d)+'</div>':'')+
     (d.clickStats.has?'<div style="margin-top:16px">'+clickPanel(d)+'</div>':'')+
     '</section>'+
     segmentSection(d)+recipientSection(d)+initiativeSection(d)+mandatorySection(d)+campaignSection(d)+
