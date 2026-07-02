@@ -184,16 +184,17 @@ section{padding-top:28px;scroll-margin-top:122px}
 .gauge-card::after{content:'';position:absolute;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.16);top:-90px;right:-60px;filter:blur(8px);pointer-events:none}
 .gauge-card .gc-h{font-size:12px;font-weight:600;opacity:.9;position:relative;z-index:1}
 .gauge-card .gc-sub{font-size:11.5px;opacity:.82;margin-top:14px;position:relative;z-index:1;line-height:1.5}
-.gauge-card .gc-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.18);font-size:11px;font-weight:600;opacity:.92;position:relative;z-index:1}
-.gauge-card .gc-foot .delta{background:rgba(255,255,255,.18);color:#fff}
 .gauge-wrap{display:flex;justify-content:center;margin:4px 0;position:relative;z-index:1}
 .kpi-col{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .kpi{background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r-sm);padding:17px 18px;backdrop-filter:blur(18px);box-shadow:var(--shadow);position:relative;overflow:visible;transition:transform .17s,box-shadow .17s,border-color .17s}
 .kpi::before{content:'';position:absolute;top:0;left:14px;right:14px;height:1px;background:linear-gradient(90deg,transparent,var(--stroke-2),transparent)}
 .kpi:hover{transform:translateY(-3px);border-color:var(--stroke-2);box-shadow:0 28px 60px -22px rgba(0,0,0,.88)}
-.kpi .kl{font-size:11px;color:var(--muted);font-weight:600;cursor:default}
-.kpi .kv{font-size:29px;font-weight:700;letter-spacing:-.03em;margin-top:9px;line-height:1;font-family:var(--num)}
-.kpi .krow{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:11px}
+.kpi .kl{font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:default}
+.kpi .kv{font-size:27px;font-weight:700;letter-spacing:-.03em;margin-top:12px;line-height:1;font-family:var(--num)}
+.kpi .kmid{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:12px}
+.kpi .kmid .kv{margin-top:0}
+.kpi .ksub{font-size:11px;color:var(--muted);font-weight:500;margin-top:10px;min-height:14px;line-height:1.2}
+.kpi .ksub .delta{background:none;padding:0;font-size:11px}
 /* kpi tooltip via kpi-tip div */
 .kpi-tip{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);background:color-mix(in srgb,var(--bg) 90%,transparent);border:1px solid var(--stroke-2);color:var(--text-2);font-size:11.5px;font-weight:500;line-height:1.5;padding:9px 13px;border-radius:12px;white-space:normal;width:220px;z-index:50;pointer-events:none;box-shadow:0 12px 32px rgba(0,0,0,.5);backdrop-filter:blur(18px);display:none;text-align:center}
 .kpi:hover .kpi-tip{display:block}
@@ -920,15 +921,16 @@ function heroRow(d,cur,prev,ser){
   var gHead='Tỉ lệ mở · mục tiêu '+REACH_TARGET+'%';var remain=(s.openRate!=null&&s.openRate<REACH_TARGET)?(REACH_TARGET-s.openRate):0;var nCamp=(d.campaigns&&d.campaigns.length)||0;
   var note=s.proxyOpens>0?' · đã loại '+s.proxyOpens+' người chỉ mở qua proxy':'';
   var gSub=s.hasSent?(s.uniqOpeners+' người mở / '+s.sent+' người được gửi'+note):(s.uniqOpeners+' người đã mở');
-  var gauge='<div class="gauge-card" data-tip="Reach đã kiểm chứng = số người mở thật ÷ tổng gửi. Open giả từ security gateway đã được loại bỏ. Mục tiêu '+REACH_TARGET+'%."><div class="gc-h">'+gHead+'</div><div class="gauge-wrap">'+radialGauge(gVal,REACH_TARGET)+'</div><div class="gc-sub">'+gSub+' · '+(remain>0?'<b>còn '+remain+'%</b> tới mục tiêu':'<b>đạt mục tiêu</b>')+'</div><div class="gc-foot"><span>'+nCamp+' chiến dịch · kỳ này</span><span>'+(deltaChip(cur.reach,prev.reach,true)||'<span class="delta flat">±0</span>')+' so kỳ trước</span></div></div>';
-  function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl"><span class="ki">'+ic+'</span>'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
+  var rDelta=deltaChip(cur.reach,prev.reach,true);
+  var gauge='<div class="gauge-card" data-tip="Reach đã kiểm chứng = số người mở thật ÷ tổng gửi. Open giả từ security gateway đã được loại bỏ. Mục tiêu '+REACH_TARGET+'%."><div class="gc-h">'+gHead+'</div><div class="gauge-wrap">'+radialGauge(gVal,REACH_TARGET)+'</div><div class="gc-sub">'+(rDelta?rDelta+' so kỳ trước · ':'')+gSub+' · '+(remain>0?'còn '+remain+'% tới mục tiêu':'đạt mục tiêu')+' · '+nCamp+' chiến dịch</div></div>';
+  function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl">'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
   // 6 KPI chuẩn email (person-level): Đã gửi · Đã mở (lượt) · Tỉ lệ mở · Đã click · CTOR · Xác nhận đọc
-  var k1=card('Đã gửi','✉',s.hasSent?nf(s.sent):'—',(s.hasSent?deltaChip(cur.sent,prev.sent,true):'')+' người · duy nhất',spark(sS,'var(--accent-2)'),'Số người nhận duy nhất có sự kiện gửi (pos=sent). 1 người nhận nhiều chiến dịch = chỉ tính 1 người.');
-  var k2=card('Đã mở (lượt)','👁',nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' đã trừ mở lại &lt;5s',spark(oS,'var(--accent-2)'),'Tổng số lần email được mở, đã trừ mở-lại &lt;5s (Outlook tự reload). Đóng rồi mở lại (gap &gt;5s) = +1 lượt.');
-  var k3=card('Tỉ lệ mở','📈',s.openRate!=null?s.openRate+'%':'—',s.openRate!=null?(s.openRate>=REACH_TARGET?'<span class="delta up">▲ đạt</span>mục tiêu '+REACH_TARGET+'%':'<span class="delta down">▼ dưới</span>mục tiêu '+REACH_TARGET+'%'):'',spark(oS,'var(--accent)'),'Người mở ÷ Người gửi (person-level) — không bao giờ vượt 100%. Mục tiêu '+REACH_TARGET+'%.');
-  var k4=card('Đã click','🖱',nf(s.nClickers||0),deltaChip(cur.clickers,prev.clickers,true)+' người click',spark(cS,'var(--accent)'),'Số người unique đã click ít nhất 1 link.');
-  var k5=card('CTOR','🎯',(d.clickStats.ctor||0)+'%',deltaChip(cur.ctor,prev.ctor,true)+' click ÷ mở',spark(cS,'var(--accent-2)'),'Click-to-Open Rate = Người click ÷ Người mở.');
-  var k6=card('Xác nhận đọc','✔',nf(s.nConfirmed||0),deltaChip(cur.confirmed,prev.confirmed,true)+' đọc trên mobile',spark(oS,'var(--accent-2)'),'Người đã nhấn link ✓ Xác nhận đã đọc trong email — tín hiệu đọc mạnh nhất, không bị cache mobile.');
+  var k1=card('Đã gửi',null,s.hasSent?nf(s.sent):'—',(s.hasSent?deltaChip(cur.sent,prev.sent,true):'')+' người · duy nhất',spark(sS,'var(--accent-2)'),'Số người nhận duy nhất có sự kiện gửi (pos=sent). 1 người nhận nhiều chiến dịch = chỉ tính 1 người.');
+  var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' đã trừ mở lại &lt;5s',spark(oS,'var(--accent-2)'),'Tổng số lần email được mở, đã trừ mở-lại &lt;5s (Outlook tự reload). Đóng rồi mở lại (gap &gt;5s) = +1 lượt.');
+  var k3=card('Tỉ lệ mở',null,s.openRate!=null?s.openRate+'%':'—',s.openRate!=null?(s.openRate>=REACH_TARGET?'<span class="delta up">▲ đạt</span>mục tiêu '+REACH_TARGET+'%':'<span class="delta down">▼ dưới</span>mục tiêu '+REACH_TARGET+'%'):'',spark(oS,'var(--accent)'),'Người mở ÷ Người gửi (person-level) — không bao giờ vượt 100%. Mục tiêu '+REACH_TARGET+'%.');
+  var k4=card('Đã click',null,nf(s.nClickers||0),deltaChip(cur.clickers,prev.clickers,true)+' người click',spark(cS,'var(--accent)'),'Số người unique đã click ít nhất 1 link.');
+  var k5=card('CTOR',null,(d.clickStats.ctor||0)+'%',deltaChip(cur.ctor,prev.ctor,true)+' click ÷ mở',spark(cS,'var(--accent-2)'),'Click-to-Open Rate = Người click ÷ Người mở.');
+  var k6=card('Xác nhận đọc',null,nf(s.nConfirmed||0),deltaChip(cur.confirmed,prev.confirmed,true)+' đọc trên mobile',spark(oS,'var(--accent-2)'),'Người đã nhấn link ✓ Xác nhận đã đọc trong email — tín hiệu đọc mạnh nhất, không bị cache mobile.');
   return '<div class="hero-row">'+gauge+'<div class="kpi-grid six">'+k1+k2+k3+k4+k5+k6+'</div></div>';
 }
 
