@@ -257,7 +257,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .fn-cvt b{color:var(--good)}
 .icon-btn{height:36px;min-width:36px;padding:0 10px;border-radius:11px;background:var(--glass);border:1px solid var(--stroke);color:var(--text-2);cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px;transition:.18s}
 .icon-btn:hover{color:var(--text);border-color:var(--stroke-2)}
-.mode-btn{background:var(--grad);color:#fff;border:none;padding:9px 16px;border-radius:11px;cursor:pointer;font:inherit;font-size:12px;font-weight:700;box-shadow:0 8px 20px -8px rgba(225,29,42,.6)}
+.mode-btn{background:var(--grad);color:#fff;border:none;padding:9px 16px;border-radius:11px;cursor:pointer;font:inherit;font-size:12px;font-weight:700;box-shadow:0 8px 20px -8px rgba(225,29,42,.6);text-decoration:none;display:inline-block}
 .mode-btn.alt{background:var(--glass);color:var(--text);border:1px solid var(--stroke);box-shadow:none}
 .mh-logoimg{height:26px;width:auto;display:block}
 .mh-div{width:1px;height:20px;background:var(--stroke-2)}
@@ -1026,7 +1026,7 @@ function dateCtrl(){
     +'</div></div>';
 }
 function masthead(mode){
-  var mBtn=mode==='ex'?'<button class="mode-btn alt" onclick="setMode(\'op\')" data-tip="Bảng điều hành đầy đủ">Bảng điều hành</button>':'<button class="mode-btn" onclick="setMode(\'ex\')" data-tip="Tóm tắt cho lãnh đạo">Tóm tắt lãnh đạo</button>';
+  var mBtn='<a class="mode-btn" href="/api/leader" target="_top" data-tip="Tóm tắt lãnh đạo — tổng hợp cả Facebook &amp; Email">Tóm tắt lãnh đạo</a>';
   var pgsw='<div class="pgsw"><a class="on" href="/api/facebook" data-tip="Facebook Dashboard"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 22v-8h2.7l.4-3H13V9c0-.9.2-1.5 1.5-1.5H16V4.9C15.7 4.9 14.8 4.8 13.7 4.8 11.4 4.8 9.9 6.2 9.9 8.7V11H7.2v3H9.9v8z"/></svg>Facebook</a><a href="/api/email" data-tip="Email Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</a></div>';
   return '<div class="mast"><div class="mast-in"><div class="brand"><img class="mh-logoimg" src="'+LOGO_URI+'" alt="SHB"><span class="mh-div"></span><span class="mh-sub">CM Dashboard</span></div>'
     +pgsw

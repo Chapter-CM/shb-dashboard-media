@@ -139,7 +139,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .seg button:hover:not(.on){color:var(--text)}
 .icon-btn{height:36px;min-width:36px;padding:0 10px;border-radius:11px;background:var(--glass);border:1px solid var(--stroke);color:var(--text-2);cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px;transition:.18s;backdrop-filter:blur(10px)}
 .icon-btn:hover{color:var(--text);border-color:var(--stroke-2);background:var(--glass-2)}
-.mode-btn{background:var(--grad);color:#fff;border:none;padding:9px 16px;border-radius:11px;cursor:pointer;font:inherit;font-size:12px;font-weight:700;box-shadow:0 8px 20px -8px rgba(225,29,42,.6);transition:.18s}
+.mode-btn{background:var(--grad);color:#fff;border:none;padding:9px 16px;border-radius:11px;cursor:pointer;font:inherit;font-size:12px;font-weight:700;box-shadow:0 8px 20px -8px rgba(225,29,42,.6);transition:.18s;text-decoration:none;display:inline-block}
 .mode-btn.alt{background:var(--glass);color:var(--text);border:1px solid var(--stroke);box-shadow:none;backdrop-filter:blur(10px)}
 .mode-btn:hover{filter:brightness(1.07)}
 .mh-logoimg{height:26px;width:auto;display:block}
@@ -1378,7 +1378,7 @@ function navLinks(d){
   return L;
 }
 function masthead(mode){
-  var mBtn=mode==='ex'?'<button class="mode-btn alt" onclick="setMode(\'op\')" data-tip="Chuyển sang Bảng điều hành đầy đủ dành cho CM team">Bảng điều hành</button>':'<button class="mode-btn" onclick="setMode(\'ex\')" data-tip="Tóm tắt cấp cao dành cho Ban lãnh đạo — chỉ các chỉ số quan trọng nhất">Tóm tắt lãnh đạo</button>';
+  var mBtn='<a class="mode-btn" href="/api/leader" target="_top" data-tip="Tóm tắt lãnh đạo — tổng hợp cả Facebook &amp; Email">Tóm tắt lãnh đạo</a>';
   var custom=!!(_from&&_to);
   var presets=[[0,'Tất cả'],[7,'7N'],[30,'30N'],[90,'90N']].map(function(p){return '<button class="'+((!custom&&_days===p[0])?'on':'')+'" onclick="flt('+p[0]+')">'+p[1]+'</button>';}).join('');
   var lbl=custom?(fmtDay(_from)+'–'+fmtDay(_to)):'Tuỳ chọn';
