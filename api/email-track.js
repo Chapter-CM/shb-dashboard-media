@@ -61,12 +61,17 @@ function streamDwellPixel(req, res, row) {
       done = true;
       clearInterval(hb);
       clearTimeout(cap);
-      try { res.write(GIF_TRAILER); res.end(); } catch (e) { /* client đã ngắt */ }
+      // Ghi dwell TRƯỚC khi kết thúc response: Vercel có thể freeze function
+      // ngay sau khi response end → insert đứng sau res.end() sẽ bị rơi
       const dwell = Math.min(DWELL_CAP_S, Math.round((Date.now() - t0) / 1000));
       pending.push(insertEvent(Object.assign({}, row, {
         pos: 'dwell', dwell_s: dwell, ts: new Date().toISOString()
       })).catch(e => console.error('[SHB Tracker] Dwell insert failed:', e.message)));
-      Promise.all(pending).then(() => resolve(), () => resolve());
+      const end = () => {
+        try { res.write(GIF_TRAILER); res.end(); } catch (e) { /* client đã ngắt */ }
+        resolve();
+      };
+      Promise.all(pending).then(end, end);
     };
     hb  = setInterval(() => { try { res.write(GIF_PAD); } catch (e) { finish(); } }, DWELL_TICK_MS);
     cap = setTimeout(finish, DWELL_CAP_S * 1000);
