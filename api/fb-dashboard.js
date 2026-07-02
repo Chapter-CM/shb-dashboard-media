@@ -441,13 +441,13 @@ tbody tr[onclick]{cursor:pointer}td.num,th.num{text-align:right;font-family:var(
 .ptitle{display:flex;align-items:center;gap:11px;min-width:260px}
 .pt-main{font-size:12.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
 .pt-sub{font-size:11px;color:var(--muted);margin-top:2px}
-.pin{position:sticky;left:0;z-index:2;background:var(--glass);backdrop-filter:blur(18px)}
+.pin{position:sticky;left:0;z-index:2;background:color-mix(in srgb,var(--bg),white 4.5%)}
 tbody tr:hover .pin{background:rgba(255,255,255,.028)}
 .tdot{width:8px;height:8px;border-radius:99px;flex:none}
 .tdot.hot{background:var(--good);box-shadow:0 0 8px var(--good)}
 .tdot.warm{background:var(--warn)}
 .tdot.cold{background:var(--risk)}
-[data-theme="light"] .pin{background:var(--glass)}
+[data-theme="light"] .pin{background:color-mix(in srgb,var(--bg),white 62%)}
 [data-theme="light"] tbody tr:hover .pin{background:rgba(90,70,180,.04)}
 [data-theme="light"] .erbar2{background:rgba(0,0,0,.08)}
 /* ── 8b: hiệu quả theo định dạng (views + tỉ trọng + ER gộp 1 hàng) ── */
