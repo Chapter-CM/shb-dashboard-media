@@ -1,8 +1,9 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 25/06/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 02/07/2026)
 
 > Repo này giờ là **bản hợp nhất 1 repo + 1 Vercel** cho cả 2 dashboard CM.
 > Live (portal): https://shb-fb-dashboard.vercel.app/ → tab **Facebook | Email**.
-> Branch dev: `claude/laughing-ride-5tk6cn` → PR vào `claude/loving-planck-y6lw57` (production, Vercel auto-deploy).
+> Quy trình: branch dev → PR vào `claude/loving-planck-y6lw57` (production, Vercel auto-deploy).
+> Branch dev gần nhất: `claude/email-reading-time-measurement-nrytc2` (PR #56–61, đã merge hết).
 
 ## 🧩 Cấu trúc HỢP NHẤT (1 repo + 1 Vercel) — PR #33
 Tên file = **route**; đặt theo sản phẩm để mở ra hiểu ngay. URL cũ giữ nguyên qua `rewrites` (không cần sửa VBA/userscript).
@@ -87,6 +88,7 @@ Sinh lời Tự động · CCS/CDS · SHB Future Lead · SHB Transformation Talk
 - #29: bỏ phễu + viết tắt K · layout 2 hàng · nhiều bộ lọc · thêm dự án EGP/SAHA Next Gen.
 - #31: multi-select bộ lọc (`_filter`=mảng) · fix gauge bỏ tick lơ lửng · bỏ lọc Media.
 - #32: gauge cung trắng đặc (bỏ glow) · ô tìm kiếm trong dropdown (fix `.msel-dd`) · thêm lọc "Mọi bài viết".
+- #56–#61 (02/07, saga "đo thời gian đọc email"): build pixel streaming dwell → fix ghi-trước-khi-end → chuyển đo sang pixel top (VBA chỉ nhúng 1 pixel) → tách nhóm chạm trần → thử Web Handler + Edge runtime → **kết luận: proxy Vercel không truyền tín hiệu client ngắt ở CẢ 3 runtime → gỡ toàn bộ (#61), ghi vào KE_HOACH_MIGRATION.md mục 7b để bổ sung khi vào nội bộ**. Giữ lại: fix cột "Đã mở (lượt)" bảng chiến dịch = số LƯỢT (`openEvents`, trước hiển thị nhầm số người) + fetch `pos=not.in.(sent,dwell)`.
 
 ## 🔭 Migration vào nội bộ SHB (định hướng lớn)
 `KE_HOACH_MIGRATION.md` (có ở CẢ 2 repo `shb-dashboard-Facebook` + `email-tracker-data`, branch `claude/laughing-ride-5tk6cn`) = **kế hoạch HỢP NHẤT** chuyển 2 dashboard (Email + Facebook) vào hạ tầng nội bộ SHB (GitLab/EKS/DB nội bộ) và gộp thành 1 trang 2 tab.
