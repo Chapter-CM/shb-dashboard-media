@@ -257,7 +257,7 @@ module.exports = async (req,res) => {
     +'<body><script>try{if(window.self!==window.top)document.documentElement.classList.add(\'embed\')}catch(e){document.documentElement.classList.add(\'embed\')}</script>'
     +'<div class="mast"><div class="mast-in">'
     +'<div class="brand"><img class="mh-logo" src="'+LOGO_URI+'" alt="SHB"><span class="mh-div"></span><span class="mh-sub">CM Dashboard · Tóm tắt lãnh đạo</span></div>'
-    +'<div class="pgsw"><a href="/api/facebook">📘 Facebook</a><a href="/api/email">✉ Email</a><a class="on" href="/api/leader">◈ Tổng hợp</a></div>'
+    +'<div class="pgsw"><a href="/api/facebook">📘 Facebook</a><a href="/api/email">✉ Email</a><a class="on" href="/api/leader">◈ Tóm tắt lãnh đạo</a></div>'
     +'<div class="ctrls">'+range+'<button class="gbtn" onclick="window.print()">Tải PDF 1 trang</button><a class="obtn" href="/">Bảng điều hành</a></div>'
     +'</div></div>'
     +'<div class="wrap">'

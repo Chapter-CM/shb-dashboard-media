@@ -45,7 +45,6 @@ body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--b
   <div class="ld" id="ld"><span class="sp"></span><span>Đang tải…</span></div>
   <iframe id="if-fb" title="Facebook Dashboard"></iframe>
   <iframe id="if-email" title="Email Dashboard" hidden></iframe>
-  <iframe id="if-leader" title="Tóm tắt lãnh đạo" hidden></iframe>
 </div>
 <div class="topbar"><div class="topbar-in">
   <div class="brand">
@@ -55,16 +54,15 @@ body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--b
   <div class="seg">
     <button class="tab on" id="tab-fb" onclick="show('fb')"><span class="ic">📘</span>Facebook</button>
     <button class="tab" id="tab-email" onclick="show('email')"><span class="ic">✉️</span>Email</button>
-    <button class="tab" id="tab-leader" onclick="show('leader')"><span class="ic">◈</span>Tổng hợp</button>
   </div>
 </div></div>
 <script>
-var SRC={fb:'/api/fb-dashboard',email:'/api/email-dashboard',leader:'/api/leader'},loaded={},cur='fb';
+var SRC={fb:'/api/fb-dashboard',email:'/api/email-dashboard'},loaded={},cur='fb';
 function setLoad(on){var l=document.getElementById('ld');if(l)l.style.display=on?'flex':'none';}
 function ensure(k){var f=document.getElementById('if-'+k);if(!loaded[k]){setLoad(true);f.onload=function(){loaded[k]=1;if(cur===k)setLoad(false);};f.src=SRC[k];}else if(cur===k){setLoad(false);}}
 function show(k){
   cur=k;
-  ['fb','email','leader'].forEach(function(x){
+  ['fb','email'].forEach(function(x){
     document.getElementById('if-'+x).hidden=(x!==k);
     document.getElementById('tab-'+x).classList.toggle('on',x===k);
   });
@@ -72,7 +70,7 @@ function show(k){
   ensure(k);
   try{location.hash=k;}catch(e){}
 }
-// mở theo hash (#email/#fb/#leader) nếu có
+// mở theo hash (#email/#fb) nếu có
 var h=(location.hash||'').replace('#','');
 show(SRC[h]?h:'fb');
 </script>
