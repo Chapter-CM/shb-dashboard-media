@@ -206,6 +206,30 @@ Các lý do kỹ thuật đứng sau, xếp theo sức nặng:
 
 ---
 
+## 7b. Tính năng BỔ SUNG khi vào nội bộ: Đo thời gian đọc email (dwell)
+
+> **Trạng thái (02/07/2026): đã build + test xong, nhưng GỠ khỏi bản Vercel — chờ hạ tầng nội bộ.**
+
+**Cơ chế (kiểu Litmus):** pixel `top` không trả ảnh ngay mà stream nhỏ giọt (GIF thiếu trailer + comment-block mỗi 2s). Email còn mở → client còn giữ kết nối; đóng email → client hủy tải → server đo được số giây đọc, ghi event `pos='dwell'` + cột `dwell_s`. Event `top` vẫn ghi ngay khi request đến nên lượt mở không chậm đi.
+
+**Vì sao gỡ trên Vercel:** proxy của Vercel **không truyền tín hiệu client ngắt kết nối** vào function — đã kiểm chứng thực tế trên production đủ 3 kiểu: `(req,res)` Node, Web Handler Node + Fluid compute ON, và Edge runtime. Cả 3 đều không nhận abort → dwell luôn "chạm trần" (bằng đúng cap 25s) bất kể người dùng đóng lúc nào → số liệu vô nghĩa. Logic đo đã được test đúng ở môi trường Node thuần (ngắt 2s→ghi 2s, 3s→3s, cap→cap).
+
+**Khi migrate vào nội bộ sẽ đo được:** server nội bộ (EKS/nginx/Node) nhận kết nối TCP trực tiếp từ Outlook desktop — sự kiện `close` bắn ngay khi người đọc đóng email. Đây chính là lý do tính năng này nằm trong kế hoạch nội bộ.
+
+**Cách bổ sung lại (đã có sẵn hết, không phải thiết kế lại):**
+- Code endpoint hoàn chỉnh: git history nhánh `claude/email-reading-time-measurement-nrytc2` — bản Node/CJS tại commit `3fe516c` (`api/email-track.js` v3.6, chạy tốt trên server thường) hoặc bản web-standard tại `56a82c5` (`api/email-track.mjs` v4.1).
+- Code dashboard (panel "Thời gian đọc email" + cột "Đọc TB" + nhóm chạm trần): commit `f724bca` (`api/email-dashboard.js`).
+- DB: cột `dwell_s` **đã tồn tại** trong bảng `events` (migrate_05 đã chạy trên Supabase Email) — nhớ mang theo khi export/import.
+
+**Bài học đã trả giá (giữ lại khi bật):**
+1. Loại proxy (`GoogleImageProxy`, security gateway) khỏi phép đo — chúng tải hộ, không phải người đọc.
+2. Outlook mobile (iOS) tải ảnh ngầm, không ngắt kết nối khi đóng email → luôn chạm trần. Dashboard phải tách nhóm "chạm trần ≥cap" khỏi median (đã làm sẵn trong commit `f724bca`).
+3. Ghi event dwell **trước khi** đóng response — ghi sau có thể bị runtime freeze nuốt mất.
+4. Email đã mở từ trước sẽ bị client cache pixel → chỉ email gửi MỚI (sau khi bật) mới đo được từ lần mở đầu.
+5. Dòng `dwell` xuất hiện muộn tối đa ~cap giây sau khi mở — kiểm thử phải đợi rồi mới query.
+
+---
+
 ## 8. Rủi ro & xử lý (hợp nhất)
 
 | Rủi ro | Mức độ | Xử lý |
