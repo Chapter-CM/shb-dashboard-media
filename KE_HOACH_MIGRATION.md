@@ -2,8 +2,8 @@
 ## Email Tracker + Facebook Dashboard → 1 hệ thống trên GitLab Nội bộ SHB
 
 **Người soạn:** Change Management Team
-**Ngày:** 25/06/2026
-**Trạng thái:** Chờ phê duyệt
+**Ngày:** 25/06/2026 (cập nhật 03/07/2026)
+**Trạng thái:** DevOps đã đồng ý phương án hạ tầng — chờ QA (anh Quốc Anh) duyệt
 **Ghi chú:** Hợp nhất 2 kế hoạch riêng (Email Tracker — bản 21/06; Facebook Dashboard — bản 25/06). Xin **hạ tầng dùng chung** một lần để khỏi migrate 2 lần rồi gộp lại.
 
 ---
