@@ -31,7 +31,7 @@ body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--b
 .tab{display:flex;align-items:center;gap:7px;background:transparent;border:0;color:var(--muted);font:inherit;font-size:13px;font-weight:700;padding:7px 16px;border-radius:9px;cursor:pointer;transition:.16s}
 .tab:hover{color:var(--text)}
 .tab.on{color:#fff;background:var(--grad);box-shadow:0 6px 16px -8px rgba(225,29,42,.7)}
-.tab .ic{font-size:14px;line-height:1}
+.tab .ic{width:14px;height:14px;flex:none}
 .stage{position:absolute;inset:0;background:var(--bg)}
 .stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
 .stage iframe[hidden]{display:none}
@@ -52,8 +52,8 @@ body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--b
     <span class="pn">CM Dashboard</span>
   </div>
   <div class="seg">
-    <button class="tab on" id="tab-fb" onclick="show('fb')"><span class="ic">📘</span>Facebook</button>
-    <button class="tab" id="tab-email" onclick="show('email')"><span class="ic">✉️</span>Email</button>
+    <button class="tab on" id="tab-fb" onclick="show('fb')"><svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M13 22v-8h2.7l.4-3H13V9c0-.9.2-1.5 1.5-1.5H16V4.9C15.7 4.9 14.8 4.8 13.7 4.8 11.4 4.8 9.9 6.2 9.9 8.7V11H7.2v3H9.9v8z"/></svg>Facebook</button>
+    <button class="tab" id="tab-email" onclick="show('email')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</button>
   </div>
 </div></div>
 <script>
