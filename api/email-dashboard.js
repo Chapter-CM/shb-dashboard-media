@@ -438,7 +438,7 @@ function pill(p,n){
 function quickMetrics(logs){
   var s={};logs.forEach(function(l){var k=l.id+'||'+l.rcpt;if(!s[k])s[k]={sent:false,op:false,cl:false,cf:false};if(l.pos==='sent')s[k].sent=true;if(l.pos==='top')s[k].op=true;if(l.pos==='click')s[k].cl=true;if(l.pos==='read')s[k].cf=true;});
   var a=Object.values(s),sent=a.filter(function(x){return x.sent;}).length,op=a.filter(function(x){return x.op;}).length,cl=a.filter(function(x){return x.cl;}).length,cf=a.filter(function(x){return x.cf;}).length;
-  return{sent:sent,opens:op,clickers:cl,confirmed:cf,reach:sent>0?Math.round(op/sent*100):null,ctor:op>0?Math.round(cl/op*100):0};
+  return{sent:sent,opens:op,clickers:cl,confirmed:cf,notOpen:sent-op,reach:sent>0?Math.round(op/sent*100):null,ctor:op>0?Math.round(cl/op*100):0};
 }
 function windowLogs(days,offset){
   if(_from&&_to){var span=_to-_from;var hi=offset?_from:_to,lo=offset?_from-span:_from;return LOGS.filter(function(l){var t=+new Date(l.timestamp);return t>lo&&t<=hi;});}
@@ -937,10 +937,10 @@ function heroRow(d,cur,prev,ser){
   var rDelta=deltaChip(cur.reach,prev.reach,true);
   var gauge='<div class="gauge-card" data-tip="Tỉ lệ mở = Người mở ÷ Người gửi (person-level), cùng công thức với thẻ Tỉ lệ mở bên cạnh. Mục tiêu '+REACH_TARGET+'%."><div class="gc-h">'+gHead+'</div><div class="gauge-wrap">'+radialGauge(gVal,REACH_TARGET)+'</div><div class="gc-sub">'+(rDelta?rDelta+' so kỳ trước · ':'')+gSub+' · '+(remain>0?'còn '+remain+'% tới mục tiêu':'đạt mục tiêu')+' · '+nCamp+' chiến dịch</div></div>';
   function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl">'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
-  // 6 KPI chuẩn email (person-level): Đã gửi · Đã mở (lượt) · Tỉ lệ mở · Đã click · CTOR · Mở TB/người
+  // 6 KPI chuẩn email (person-level): Đã gửi · Đã mở (lượt) · Chưa mở · Đã click · CTOR · Mở TB/người
   var k1=card('Đã gửi',null,s.hasSent?nf(s.sent):'—',(s.hasSent?deltaChip(cur.sent,prev.sent,true):'')+' người · duy nhất',spark(sS,'var(--accent-2)'),'Số người nhận duy nhất có sự kiện gửi (pos=sent). 1 người nhận nhiều chiến dịch = chỉ tính 1 người.');
   var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' đã trừ mở lại &lt;5s',spark(oS,'var(--accent-2)'),'Tổng số lần email được mở, đã trừ mở-lại &lt;5s (Outlook tự reload). Đóng rồi mở lại (gap &gt;5s) = +1 lượt.');
-  var k3=card('Tỉ lệ mở',null,s.openRate!=null?s.openRate+'%':'—',s.openRate!=null?(s.openRate>=REACH_TARGET?'<span class="delta up">▲ đạt</span>mục tiêu '+REACH_TARGET+'%':'<span class="delta down">▼ dưới</span>mục tiêu '+REACH_TARGET+'%'):'',spark(oS,'var(--accent)'),'Người mở ÷ Người gửi (person-level) — không bao giờ vượt 100%. Mục tiêu '+REACH_TARGET+'%.');
+  var k3=card('Chưa mở',null,s.hasSent?nf(s.notOpenCount||0):'—',(s.hasSent?deltaChip(cur.notOpen,prev.notOpen,false):'')+(s.notOpenRate!=null?' · '+s.notOpenRate+'% người gửi':''),spark(sS,'var(--risk)'),'Số người được gửi email nhưng chưa mở lần nào. Cần follow-up trực tiếp.');
   var k4=card('Đã click',null,nf(s.nClickers||0),deltaChip(cur.clickers,prev.clickers,true)+' người click',spark(cS,'var(--accent)'),'Số người unique đã click ít nhất 1 link.');
   var k5=card('CTOR',null,(d.clickStats.ctor||0)+'%',deltaChip(cur.ctor,prev.ctor,true)+' click ÷ mở',spark(cS,'var(--accent-2)'),'Click-to-Open Rate = Người click ÷ Người mở.');
   var k6=card('Mở TB/người',null,s.avgOpensPerReader!=null?s.avgOpensPerReader:'—',s.uniqOpeners+' người đã mở',spark(oS,'var(--accent-2)'),'Số lượt mở trung bình trên mỗi người đã mở ít nhất 1 lần = Tổng lượt mở ÷ Người mở.');
