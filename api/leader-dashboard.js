@@ -140,13 +140,14 @@ function fbAgg(posts,days){
 function emailAgg(logs,days){
   var now=Date.now(),cutNow=days>0?now-days*864e5:0,cutPrev=days>0?cutNow-days*864e5:0;
   function win(lo,hi){
-    var sent={},opened={},manSent={},manOpened={};
+    var sent={},opened={},clicked={},manSent={},manOpened={};
     logs.forEach(function(l){var t=+new Date(l.timestamp);if(!(t>lo&&t<=hi))return;
       if(l.pos==='sent'){sent[l.rcpt]=1;if(l.msg_type==='mandatory')manSent[l.rcpt]=1;}
       if(l.pos==='top'){opened[l.rcpt]=1;if(l.msg_type==='mandatory')manOpened[l.rcpt]=1;}
+      if(l.pos==='click')clicked[l.rcpt]=1;
     });
-    var sN=Object.keys(sent).length,oN=Object.keys(opened).length,mS=Object.keys(manSent).length,mO=Object.keys(manOpened).length;
-    return {sent:sN,opened:oN,reach:sN>0?Math.round(oN/sN*100):null,manSent:mS,manOpened:mO,manRate:mS>0?Math.round(mO/mS*100):null,manRemain:Math.max(0,mS-mO)};
+    var sN=Object.keys(sent).length,oN=Object.keys(opened).length,cN=Object.keys(clicked).length,mS=Object.keys(manSent).length,mO=Object.keys(manOpened).length;
+    return {sent:sN,opened:oN,clicked:cN,reach:sN>0?Math.round(oN/sN*100):null,ctor:oN>0?Math.round(cN/oN*100):null,manSent:mS,manOpened:mO,manRate:mS>0?Math.round(mO/mS*100):null,manRemain:Math.max(0,mS-mO)};
   }
   return {cur:win(cutNow,now),prev:win(cutPrev,cutNow)};
 }
@@ -294,7 +295,7 @@ module.exports = async (req,res) => {
   var range='<div class="seg">'+rangeLink(0,'Tất cả')+rangeLink(7,'7N')+rangeLink(30,'30N')+rangeLink(90,'90N')+'</div>';
 
   var emailKpi1=email.cur.reach!=null?email.cur.reach+'%':'—';
-  var emailKpi2=email.cur.manSent>0?email.cur.manRate+'%':'—';
+  var emailKpi2=email.cur.ctor!=null?email.cur.ctor+'%':'—';
   var fbKpi1=nf(fb.cur.views);
   var fbKpi2=fb.cur.er+'%';
 
@@ -357,7 +358,7 @@ module.exports = async (req,res) => {
     +'<div class="sec"><div class="eyebrow">Hai kênh · '+(days>0?days+' ngày':'toàn bộ dữ liệu')+'</div>'
     +'<div class="exec-k">'
     +'<div class="kpi"><div class="kl">Email · Reach</div><div class="kv">'+emailKpi1+'</div><div class="ksub">'+chip(deltaTxt(email.cur.reach,email.prev.reach,true))+'</div></div>'
-    +'<div class="kpi"><div class="kl">Email bắt buộc · xác nhận</div><div class="kv">'+emailKpi2+'</div><div class="ksub">'+(email.cur.manSent>0?'còn '+email.cur.manRemain+' người cần nhắc':'không có chiến dịch bắt buộc')+'</div></div>'
+    +'<div class="kpi"><div class="kl">Email · CTOR</div><div class="kv">'+emailKpi2+'</div><div class="ksub">'+chip(deltaTxt(email.cur.ctor,email.prev.ctor,true))+' click ÷ mở</div></div>'
     +'<div class="kpi"><div class="kl">Facebook · Lượt xem</div><div class="kv">'+fbKpi1+'</div><div class="ksub">'+chip(deltaTxt(fb.cur.views,fb.prev.views,true))+'</div></div>'
     +'<div class="kpi"><div class="kl">Facebook · ER trung bình</div><div class="kv">'+fbKpi2+'</div><div class="ksub">'+chip(deltaTxt(fb.cur.er,fb.prev.er,true))+' so kỳ trước</div></div>'
     +'</div></div>'
