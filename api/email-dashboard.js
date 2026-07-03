@@ -1323,9 +1323,9 @@ function filterBar(d){
     +'</div>';
 }
 function navLinks(d){
-  var L='<a href="#s-ov" class="on">Tổng quan</a><a href="#s-seg">Phân khúc</a><a href="#s-rec">Người nhận</a>';
+  var L='<a href="#s-ov" class="on">Tổng quan</a><a href="#s-camp">Chiến dịch</a><a href="#s-seg">Phân khúc</a><a href="#s-rec">Người nhận</a>';
   if(d.hasInitiative)L+='<a href="#s-ini">Squad/Dự án</a>';
-  L+='<a href="#s-camp">Chiến dịch</a><a href="#s-openhm">Giờ mở</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Việc cần làm ★</a><a href="#s-health">Chất lượng DL</a><a href="#s-dict">Từ điển</a>';
+  L+='<a href="#s-openhm">Giờ mở</a><a href="#s-aud">Đối tượng</a><a href="#s-ins">Việc cần làm ★</a><a href="#s-health">Chất lượng DL</a><a href="#s-dict">Từ điển</a>';
   return L;
 }
 function masthead(mode){
