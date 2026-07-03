@@ -1391,12 +1391,18 @@ function masthead(mode){
 }
 
 /* ── views ── */
+function top5CampPanel(d){
+  if(!d.campaigns||!d.campaigns.length)return '';
+  var top=d.campaigns.slice().sort(function(a,b){var ra=a.verifiedReach!=null?a.verifiedReach:(a.reach||0),rb=b.verifiedReach!=null?b.verifiedReach:(b.reach||0);return rb-ra;}).slice(0,5);
+  var rows=top.map(function(c){var r=c.verifiedReach!=null?c.verifiedReach:c.reach;return '<tr><td><span class="nm">'+esc(fmtCamp(c.name))+'</span></td><td class="num">'+(c.sent>0?nf(c.sent):'—')+'</td><td class="num">'+pill(r,c.sent)+'</td><td class="num">'+nf(c.clickers||0)+'</td><td class="num">'+(c.ctor>0?c.ctor+'%':'—')+'</td></tr>';}).join('');
+  return '<div class="panel" style="margin-top:16px"><div class="panel-h" data-tip="5 chiến dịch có tỉ lệ mở cao nhất trong kỳ đang xem.">Top 5 chiến dịch tốt nhất</div><div class="tw"><table><thead><tr><th>Chiến dịch</th><th class="num">Đã gửi</th><th class="num">Tỉ lệ mở</th><th class="num">Đã click</th><th class="num">CTOR</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+}
 function operational(d,cur,prev,ser){
   var sub='<div class="subnav"><div class="subnav-in">'+navLinks(d)+'</div></div>';
   return masthead('op')+sub+filterStatusBar()+
     '<div class="wrap">'+filterBar(d)+
     '<section id="s-ov" style="padding-top:14px"><div class="eyebrow">Tổng quan</div>'+
-    heroRow(d,cur,prev,ser)+heroChart(d,ser)+
+    heroRow(d,cur,prev,ser)+heroChart(d,ser)+top5CampPanel(d)+
     '<div class="row2">'+funnelPanel(d)+devicePanel(d)+'</div>'+
     (d.clickStats.has?'<div style="margin-top:16px">'+clickPanel(d)+'</div>':'')+
     '</section>'+

@@ -160,12 +160,15 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .pgsw{display:flex;align-items:center;gap:4px;background:var(--glass);border:1px solid var(--stroke);border-radius:12px;padding:4px}
 .pgsw a{display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:9px;font-size:12px;font-weight:700;color:var(--text-2);text-decoration:none;white-space:nowrap}
 .pgsw a.on{background:var(--grad);color:#fff;box-shadow:0 6px 16px -8px rgba(225,29,42,.7)}
+.pgsw a svg{width:14px;height:14px;flex:none}
 .ctrls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .seg{display:flex;background:var(--glass);border:1px solid var(--stroke);border-radius:12px;padding:3px}
 .seg a{color:var(--muted);padding:6px 13px;font-size:12px;font-weight:600;border-radius:9px;text-decoration:none}
 .seg a.on{background:var(--grad);color:#fff}
 .gbtn{background:var(--grad);color:#fff;border:none;font:inherit;font-size:12px;font-weight:700;padding:9px 16px;border-radius:11px;cursor:pointer;box-shadow:0 8px 20px -8px rgba(225,29,42,.6)}
 .obtn{background:var(--glass);border:1px solid var(--stroke-2);color:var(--text);font:inherit;font-size:12px;font-weight:700;padding:9px 16px;border-radius:11px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+.mode-btn{background:var(--grad);color:#fff;border:none;padding:9px 16px;border-radius:11px;cursor:pointer;font:inherit;font-size:12px;font-weight:700;box-shadow:0 8px 20px -8px rgba(225,29,42,.6);text-decoration:none;display:inline-block}
+.mode-btn.alt{background:var(--glass);color:var(--text);border:1px solid var(--stroke);box-shadow:none}
 .sec{padding-top:26px}
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:15px;display:flex;align-items:center;gap:10px}
 .hlk{font-size:19px;font-weight:800;letter-spacing:-.02em;line-height:1.45;padding-top:24px}
@@ -253,12 +256,12 @@ module.exports = async (req,res) => {
     +'<title>SHB CM · Tóm tắt lãnh đạo</title>'
     +'<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
     +'<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">'
-    +'<style>'+CSS+'.embed .mast .brand{display:none}.embed .mast .pgsw{display:none}.embed .mast .mast-in{justify-content:flex-end}</style></head>'
+    +'<style>'+CSS+'.embed .mast .brand{display:none}.embed .mast .mast-in{justify-content:flex-end}</style></head>'
     +'<body><script>try{if(window.self!==window.top)document.documentElement.classList.add(\'embed\')}catch(e){document.documentElement.classList.add(\'embed\')}</script>'
     +'<div class="mast"><div class="mast-in">'
     +'<div class="brand"><img class="mh-logo" src="'+LOGO_URI+'" alt="SHB"><span class="mh-div"></span><span class="mh-sub">CM Dashboard · Tóm tắt lãnh đạo</span></div>'
-    +'<div class="pgsw"><a href="/api/facebook">📘 Facebook</a><a href="/api/email">✉ Email</a><a class="on" href="/api/leader">◈ Tóm tắt lãnh đạo</a></div>'
-    +'<div class="ctrls">'+range+'<button class="gbtn" onclick="window.print()">Tải PDF 1 trang</button><a class="obtn" href="/">Bảng điều hành</a></div>'
+    +'<div class="pgsw"><a href="/api/facebook" data-tip="Facebook Dashboard"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 22v-8h2.7l.4-3H13V9c0-.9.2-1.5 1.5-1.5H16V4.9C15.7 4.9 14.8 4.8 13.7 4.8 11.4 4.8 9.9 6.2 9.9 8.7V11H7.2v3H9.9v8z"/></svg>Facebook</a><a href="/api/email" data-tip="Email Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</a></div>'
+    +'<div class="ctrls">'+range+'<button class="gbtn" onclick="window.print()">Tải PDF 1 trang</button><a class="mode-btn alt" href="/">Bảng điều hành</a></div>'
     +'</div></div>'
     +'<div class="wrap">'
     +'<div class="hlk">'+headline+'</div>'
