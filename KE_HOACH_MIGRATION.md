@@ -155,27 +155,28 @@ Các lý do kỹ thuật đứng sau, xếp theo sức nặng:
 
 | # | Câu hỏi | Người xác nhận | Trạng thái |
 |---|---|---|---|
-| 1 | Cấp **PostgreSQL/MySQL nội bộ** (~100MB cho cả 2) | Nam Tran Hoang (DevOps) | Chờ |
-| 2 | **EKS pods** connect được DB đó | Nam Tran Hoang | Chờ |
-| 3 | **GitLab CI runner** connect được DB đó | Nam Tran Hoang | Chờ |
-| 4 | Deploy **1 Node server (:3001)** song song nginx | Nam Tran Hoang | Chờ |
-| 5 | Tạo **GitLab repo** nội bộ + cấp quyền | Quang Doan Van (GitLab Admin) | Chờ |
-| 6 | Cấp **DNS subdomain** nội bộ (1 domain chung) | Mạnh (System) | Chờ |
-| 7 | Máy **admin chạy userscript** reach được domain nội bộ để POST `/api/ingest` | CM Team | ✅ **CÓ** (đã xác nhận) |
-| ~~8~~ | ~~Egress tới graph.facebook.com~~ | — | **Không cần** (đã bỏ `fetch.js` — Phương án A) |
+| 1 | Cấp **schema MySQL nội bộ** mới (~100MB cho cả 2, tái dùng DB có sẵn của NHS — không xin DB riêng) | Quang Doan Van (DevOps) | 🟡 **Nhận cover** — chờ QA anh Quốc Anh duyệt |
+| 2 | **GitLab CI runner** connect được DB đó (để `sync.js` đọc DB lúc build) | Quang Doan Van | 🟡 **Nhận cover** — chờ QA anh Quốc Anh duyệt |
+| 3 | Deploy thêm **1 service Node (:3001)** có port riêng, chạy thường trực song song app tĩnh hiện tại (`cm-dashboard` trên ArgoCD/EKS) | Quang Doan Van | 🟡 **Nhận cover** — chờ QA anh Quốc Anh duyệt |
+| 4 | Tạo/mở rộng **GitLab repo** nội bộ + cấp quyền (tái dùng pattern CI/CD của `cm-dashboard`: registry `gitlab-nhs.shb.com.vn:5050` → ECR → ArgoCD) | Quang Doan Van (GitLab Admin) | ✅ Repo mẫu đã có sẵn (`cm-dashboard`), chỉ cần mở rộng |
+| 5 | Cấp **DNS subdomain** nội bộ (1 domain chung, dạng `*.dev-saha.aws.shb.com.vn`) | Mạnh (System) | Chờ |
+| 6 | Máy **admin chạy userscript** reach được domain nội bộ để POST `/api/ingest` | CM Team | ✅ **CÓ** (đã xác nhận) |
+| ~~7~~ | ~~Egress tới graph.facebook.com~~ | — | **Không cần** (đã bỏ `fetch.js` — Phương án A) |
 
-**Lưu ý:** egress Internet không còn là điều kiện chặn nhờ bỏ `fetch.js`. Beacon Email (Outlook) và POST userscript (browser admin) đều phát từ **trong mạng SHB** tới domain nội bộ — đã xác nhận khả thi (câu 7).
+**Cập nhật 03/07/2026:** Đã trao đổi với **Quang Doan Van (DevOps)** trên Teams — anh xác nhận **nhận cover cả 3 điểm hạ tầng mới** (schema MySQL, runner connect DB, service Node port riêng trên EKS), chỉ chờ **anh Quốc Anh duyệt (QA)**. → Bước tiếp theo: **gửi email trình bày kế hoạch cho anh Quốc Anh (cc anh Quang)** để xin duyệt, không cần họp riêng từng điểm kỹ thuật nữa vì DevOps đã thống nhất phương án.
+
+**Lưu ý:** egress Internet không còn là điều kiện chặn nhờ bỏ `fetch.js`. Beacon Email (Outlook) và POST userscript (browser admin) đều phát từ **trong mạng SHB** tới domain nội bộ — đã xác nhận khả thi (câu 6). Ngoài ra, đã xác nhận repo `cm-dashboard` (dashboard Jira nội bộ có sẵn của team CM) dùng đúng pattern hạ tầng cần thiết (GitLab CI → registry nội bộ → AWS ECR → ArgoCD → EKS), nên phần build/deploy tĩnh không còn là ẩn số — chỉ cần bổ sung phần DB + service ingest thường trực.
 
 ---
 
 ## 7. Kế hoạch thực hiện
 
 ### Giai đoạn 0 — Chuẩn bị (1–2 tuần)
-- [ ] Họp Nam: xác nhận DB nội bộ + connectivity (câu 1–4).
-- [ ] Họp Quang: tạo 1 GitLab repo hợp nhất.
-- [ ] Thống nhất 1 DNS chung với Mạnh.
+- [x] Trao đổi Quang (DevOps): xác nhận sẽ cover schema MySQL + runner connect DB + service Node port riêng (câu 1–3) — chờ QA.
+- [ ] Gửi email trình bày kế hoạch cho anh Quốc Anh (cc anh Quang) xin duyệt (QA).
+- [ ] Thống nhất 1 DNS chung với Mạnh (câu 5).
 - [ ] Export toàn bộ data: Supabase Email (`events`, ~40k) + Supabase FB (`fb_group_posts`, `fb_page_insights`).
-- **Điều kiện sang G1:** câu 1–4 ✅.
+- **Điều kiện sang G1:** anh Quốc Anh duyệt (QA) ✅.
 
 ### Giai đoạn 1 — Code migration + hợp nhất (5–7 ngày)
 > Bắt đầu từ repo unified `shb-dashboard-Facebook` (đã gộp ở §1.3) — KHÔNG còn bước "gộp repo".
