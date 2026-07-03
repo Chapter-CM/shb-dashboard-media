@@ -1038,15 +1038,10 @@ function masthead(mode){
 }
 
 /* ── views ── */
-function top5PostsPanel(d){
-  if(!d.rows||!d.rows.length)return '';
-  var top=d.rows.slice(0,5).map(function(r){return '<tr><td><span class="nm">'+esc(r.p.msg.slice(0,60))+'</span></td><td><span class="pill p-neutral">'+esc(r.p.type)+'</span></td><td class="num">'+nf(r.p.views)+'</td><td class="num"><b>'+nf(r.eng)+'</b></td><td class="num">'+r.er+'%</td></tr>';}).join('');
-  return '<div class="panel" style="margin-top:16px"><div class="panel-h" data-tip="5 bài có lượt tương tác cao nhất trong kỳ đang xem.">Top 5 bài viết tốt nhất</div><div class="tw"><table><thead><tr><th>Bài viết</th><th>Loại</th><th class="num">Lượt xem</th><th class="num">Tương tác</th><th class="num">ER</th></tr></thead><tbody>'+top+'</tbody></table></div></div>';
-}
 function operational(d,cur,prev,ser){
   return masthead('op')+'<div class="subnav"><div class="subnav-in">'+navLinks()+'</div></div>'+filterStatusBar()
     +'<div class="wrap">'+filterBar(d)
-    +'<section id="s-ov" style="padding-top:14px"><div class="eyebrow">Tổng quan</div>'+heroRow(d,cur,prev,ser)+heroChart(d,ser)+top5PostsPanel(d)+'</section>'
+    +'<section id="s-ov" style="padding-top:14px"><div class="eyebrow">Tổng quan</div>'+heroRow(d,cur,prev,ser)+heroChart(d,ser)+'</section>'
     +contentSection(d)+mixSection(d)+goalSection(d)
     +'<section id="s-time"><div class="eyebrow">Khung giờ hiệu quả</div>'+timingPanel(d)+'</section>'
     +audienceSection(d)+insightSection(d)+healthSection(d)+dictSection()
