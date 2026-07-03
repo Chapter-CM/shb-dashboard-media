@@ -26,7 +26,7 @@ const EMAIL_SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env
 function fetchEmailLogs(){
   if(!EMAIL_SUPABASE_URL||!EMAIL_SERVICE_KEY)return Promise.resolve([]);
   var host=EMAIL_SUPABASE_URL.replace(/^https?:\/\//,'');
-  var sel='pos,rcpt,msg_type,initiative,timestamp:ts';
+  var sel='pos,rcpt,msg_type,initiative,campaign,timestamp:ts';
   var hdrs={apikey:EMAIL_SERVICE_KEY,Authorization:'Bearer '+EMAIL_SERVICE_KEY,Accept:'application/json'};
   var PAGE=1000;
   var base='/rest/v1/events?select='+encodeURIComponent(sel);
@@ -125,6 +125,25 @@ function crossover(posts,logs,days){
   return rows;
 }
 
+/* ── Top 5 bài Facebook theo tương tác trong kỳ ── */
+function topFbPosts(posts,days){
+  var now=Date.now(),cut=days>0?now-days*864e5:0;
+  return posts.filter(function(p){var t=+new Date(p.created_time);return t>cut&&t<=now;})
+    .map(function(p){var eng=(p.like_count||0)+(p.love_count||0)+(p.haha_count||0)+(p.wow_count||0)+(p.sad_count||0)+(p.angry_count||0)+(p.comments||0)+(p.shares||0);
+      return {msg:p.message||'(không có nội dung)',views:p.views||0,eng:eng,er:p.views>0?pc(eng/p.views*100):0};})
+    .sort(function(a,b){return b.eng-a.eng;}).slice(0,5);
+}
+/* ── Top 5 chiến dịch Email theo tỉ lệ mở trong kỳ ── */
+function topEmailCampaigns(logs,days){
+  var now=Date.now(),cut=days>0?now-days*864e5:0;
+  var map={};
+  logs.forEach(function(l){var t=+new Date(l.timestamp);if(!(t>cut&&t<=now)||!l.campaign)return;
+    var k=l.campaign;if(!map[k])map[k]={name:k,sent:{},opened:{}};
+    if(l.pos==='sent')map[k].sent[l.rcpt]=1;if(l.pos==='top')map[k].opened[l.rcpt]=1;});
+  return Object.keys(map).map(function(k){var c=map[k],sN=Object.keys(c.sent).length,oN=Object.keys(c.opened).length;
+    return {name:c.name,sent:sN,opened:oN,reach:sN>0?Math.round(oN/sN*100):null};})
+    .filter(function(c){return c.sent>0;}).sort(function(a,b){return (b.reach||0)-(a.reach||0);}).slice(0,5);
+}
 function buildInsights(fb,email){
   var ins=[];
   if(email.cur.reach!=null){
@@ -181,6 +200,14 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .delta{font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:3px;font-family:var(--num);padding:2px 7px;border-radius:99px}
 .delta.up{color:var(--good);background:var(--good-bg)}.delta.down{color:var(--risk);background:var(--risk-bg)}.delta.flat{color:var(--muted)}
 .panel{background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r);padding:16px 18px;backdrop-filter:blur(18px)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:9px 10px;color:var(--muted);font-weight:700;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--stroke);white-space:nowrap}
+td{padding:10px 10px;border-bottom:1px solid var(--hair);font-size:12.5px;color:var(--text-2)}
+tbody tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;font-family:var(--num)}
+.nm{color:var(--text);font-weight:600}
 .xc-row{display:grid;grid-template-columns:1.3fr 1fr 1fr .7fr;gap:14px;align-items:center;padding:11px 0;border-bottom:1px solid var(--hair)}
 .xc-row:last-child{border-bottom:none}
 .xc-row.hd{padding:4px 0 8px;border-bottom:1px solid var(--stroke)}
@@ -252,6 +279,20 @@ module.exports = async (req,res) => {
 
   var insHtml=insights.map(function(i){return '<div class="in '+(i.t==='warn'?'warn':i.t==='good'?'good':'')+'"><div class="mk"></div><div class="x">'+i.x+'</div></div>';}).join('');
 
+  var topPosts=topFbPosts(posts,days);
+  var topPostsPanel=topPosts.length
+    ?'<div class="panel"><div class="tw"><table><thead><tr><th>Bài viết</th><th class="num">Lượt xem</th><th class="num">Tương tác</th><th class="num">ER</th></tr></thead><tbody>'
+      +topPosts.map(function(p){return '<tr><td><span class="nm">'+esc(String(p.msg).slice(0,60))+'</span></td><td class="num">'+nf(p.views)+'</td><td class="num"><b>'+nf(p.eng)+'</b></td><td class="num">'+p.er+'%</td></tr>';}).join('')
+      +'</tbody></table></div></div>'
+    :'<div class="nd">Chưa có bài Facebook nào trong kỳ này.</div>';
+
+  var topCamps=topEmailCampaigns(logs,days);
+  var topCampsPanel=topCamps.length
+    ?'<div class="panel"><div class="tw"><table><thead><tr><th>Chiến dịch</th><th class="num">Đã gửi</th><th class="num">Tỉ lệ mở</th></tr></thead><tbody>'
+      +topCamps.map(function(c){return '<tr><td><span class="nm">'+esc(fmtCamp(c.name))+'</span></td><td class="num">'+nf(c.sent)+'</td><td class="num">'+(c.reach!=null?c.reach+'%':'—')+'</td></tr>';}).join('')
+      +'</tbody></table></div></div>'
+    :'<div class="nd">Chưa có chiến dịch email nào trong kỳ này.</div>';
+
   res.send('<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     +'<title>SHB CM · Tóm tắt lãnh đạo</title>'
     +'<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
@@ -274,6 +315,8 @@ module.exports = async (req,res) => {
     +'<div class="kpi"><div class="kl">Facebook · ER trung bình</div><div class="kv">'+fbKpi2+'</div><div class="ksub">'+chip(deltaTxt(fb.cur.er,fb.prev.er,true))+' so kỳ trước</div></div>'
     +'</div></div>'
     +'<div class="sec"><div class="eyebrow">Squad/Dự án · hai kênh nhìn chung</div>'+crossPanel+'</div>'
+    +'<div class="row2"><div class="sec"><div class="eyebrow">Top 5 bài viết Facebook tốt nhất</div>'+topPostsPanel+'</div>'
+    +'<div class="sec"><div class="eyebrow">Top 5 chiến dịch Email tốt nhất</div>'+topCampsPanel+'</div></div>'
     +'<div class="sec" style="padding-bottom:6px"><div class="eyebrow">Điểm chính kỳ này</div><div class="ins">'+insHtml+'</div></div>'
     +'<div class="foot">Cập nhật lúc '+new Date().toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'})+' · '+now+' · dữ liệu ghép từ Facebook + Email Supabase</div>'
     +'</div></body></html>');
