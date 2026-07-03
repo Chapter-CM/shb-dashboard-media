@@ -16,7 +16,37 @@ function fbGet(path){
     }).on('error',function(){resolve([]);});
   });
 }
+// Khi thiếu SUPABASE_URL/SUPABASE_SERVICE_KEY, fb-dashboard.js tự sinh dữ liệu mock để demo —
+// làm tương tự ở đây để Top 5 bài Facebook / KPI Facebook trên trang lãnh đạo khớp với dashboard chính.
+function genMockPosts(){
+  var seed=20260622;function rnd(){seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;}
+  function ri(a,b){return Math.floor(a+rnd()*(b-a+1));}
+  var types=['Ảnh','Video','Reel','Text','Link'];
+  var topics=['Sản phẩm vay','Tuyển dụng','Sự kiện','Thông báo','CSR','Khuyến mãi'];
+  var samples=['Ra mắt gói vay ưu đãi','Hướng dẫn mở tài khoản online','60 giây hiểu về lãi kép',
+    'Thông báo lịch nghỉ lễ','Album tri ân khách hàng','Cơ hội nghề nghiệp tại SHB',
+    'Chương trình hoàn tiền thẻ tín dụng','Cẩm nang tài chính cá nhân','SHB đồng hành cùng cộng đồng',
+    'Mở thẻ nhận quà liền tay','Lãi suất tiết kiệm mới','Sự kiện kết nối doanh nghiệp'];
+  var now=Date.now(),DAY=864e5,posts=[];
+  for(var i=0;i<38;i++){
+    var type=types[ri(0,4)],ageD=Math.floor(rnd()*90),ts=now-ageD*DAY-ri(0,86399)*1000;
+    var views=ri(8000,60000),base=views/1000;
+    var like=ri(Math.round(base*30),Math.round(base*70)),love=ri(Math.round(base*8),Math.round(base*40));
+    var haha=ri(0,Math.round(base*12)),wow=ri(0,Math.round(base*10));
+    var sad=ri(0,Math.round(base*4)),angry=ri(0,Math.round(base*3));
+    var comments=ri(Math.round(base*2),Math.round(base*12)),shares=ri(Math.round(base),Math.round(base*10));
+    posts.push({
+      post_id:'p'+i, created_time:new Date(ts).toISOString(), views:views,
+      like_count:like, love_count:love, haha_count:haha, wow_count:wow, sad_count:sad, angry_count:angry,
+      comments:comments, shares:shares,
+      message:samples[ri(0,samples.length-1)]+(rnd()>.5?' #'+topics[ri(0,5)]:''),
+      topic:topics[ri(0,5)],
+    });
+  }
+  return posts;
+}
 function fetchFbPosts(){
+  if(!process.env.SUPABASE_URL||!process.env.SUPABASE_SERVICE_KEY)return Promise.resolve(genMockPosts());
   return fbGet('/rest/v1/fb_posts?select=post_id,created_time,views,like_count,love_count,haha_count,wow_count,sad_count,angry_count,comments,shares,message,topic&order=created_time.desc&limit=800');
 }
 
