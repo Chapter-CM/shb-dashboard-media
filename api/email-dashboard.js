@@ -381,7 +381,7 @@ tbody tr:hover .pin{background:rgba(255,255,255,.028)}
 .hm{display:grid;grid-template-columns:44px repeat(7,1fr);gap:3px;margin-top:6px}
 .hm-lbl{font-size:10px;color:var(--faint);font-family:var(--num);text-align:center;align-self:center}
 .hm-lbl.r{text-align:right;padding-right:6px;color:var(--muted);font-weight:600}
-.hm-cell{aspect-ratio:1;border-radius:4px;min-height:26px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff}
+.hm-cell{aspect-ratio:1;border-radius:3px;min-height:13px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff}
 .hm-scale{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:10.5px;color:var(--faint)}
 .hm-grad{flex:0 0 90px;height:7px;border-radius:99px;background:linear-gradient(90deg,rgba(239,68,68,.1),rgba(239,68,68,.9))}
 /* ── 9f: sức khoẻ dữ liệu dạng hz-row ── */
