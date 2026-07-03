@@ -381,7 +381,7 @@ tbody tr:hover .pin{background:rgba(255,255,255,.028)}
 .hm{display:grid;grid-template-columns:44px repeat(7,1fr);gap:3px;margin-top:6px}
 .hm-lbl{font-size:10px;color:var(--faint);font-family:var(--num);text-align:center;align-self:center}
 .hm-lbl.r{text-align:right;padding-right:6px;color:var(--muted);font-weight:600}
-.hm-cell{aspect-ratio:1;border-radius:3px;min-height:13px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff}
+.hm-cell{height:20px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff}
 .hm-scale{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:10.5px;color:var(--faint)}
 .hm-grad{flex:0 0 90px;height:7px;border-radius:99px;background:linear-gradient(90deg,rgba(239,68,68,.1),rgba(239,68,68,.9))}
 /* ── 9f: sức khoẻ dữ liệu dạng hz-row ── */
@@ -410,7 +410,6 @@ function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'
 function jsq(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 function norm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');}
 function normMail(s){return norm(s).replace(/[-.]/g,'');}
-function audSearch(f,q){var qq=q.replace(/[-.]/g,'');var hay=normMail(f.rcpt)+' '+normMail(fmtRcpt(f.rcpt));return hay.indexOf(qq)>-1;}
 
 
 function fmtRcpt(r){
@@ -1014,13 +1013,15 @@ function recipientSection(d){
   var people=d.people||[];
   if(!people.length)return '';
   var notOpenN=people.filter(function(p){return !p.opened;}).length;
-  var rows=_recTab==='no'?people.filter(function(p){return !p.opened;}):people;
+  var notClickN=people.filter(function(p){return p.opened&&!p.clicked;}).length;
+  var rows=_recTab==='no'?people.filter(function(p){return !p.opened;}):_recTab==='cl'?people.filter(function(p){return p.opened&&!p.clicked;}):people;
   window.__rec=rows;
   regTable({id:'rec',rows:rows,render:recRow,pageSize:20,cols:5,placeholder:'Tìm người nhận / email…',search:function(p,q){return normMail(p.rcpt).indexOf(q.replace(/[-.]/g,''))>-1||norm(fmtRcpt(p.rcpt)).indexOf(q)>-1;},sortVal:function(p,k){return k==='name'?norm(fmtRcpt(p.rcpt)):k==='dept'?norm(fmtSeg(p.dept||p.role)||''):k==='open'?(p.opened?p.openCount:0):k==='last'?(p.lastOpen||0):k==='click'?(p.clicked?p.clickCount:0):0;}});
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('rec','Tìm người nhận / email…')
     +'<div class="seg"><button class="'+(_recTab==='all'?'on':'')+'" onclick="setRecTab(\'all\')">Tất cả <span class="pill p-neutral" style="font-size:10px">'+people.length+'</span></button>'
-    +'<button class="'+(_recTab==='no'?'on':'')+'" onclick="setRecTab(\'no\')">Chưa mở <span class="pill p-neutral" style="font-size:10px">'+notOpenN+'</span></button></div></div>';
+    +'<button class="'+(_recTab==='no'?'on':'')+'" onclick="setRecTab(\'no\')">Chưa mở <span class="pill p-neutral" style="font-size:10px">'+notOpenN+'</span></button>'
+    +'<button class="'+(_recTab==='cl'?'on':'')+'" onclick="setRecTab(\'cl\')">Chưa click <span class="pill p-neutral" style="font-size:10px">'+notClickN+'</span></button></div></div>';
   return '<section id="s-rec"><div class="eyebrow">Người nhận — trạng thái mở &amp; click '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h">Person-level <button class="csv" onclick="exportRecipients()">Xuất CSV</button></div>'
     +tabs
@@ -1156,23 +1157,6 @@ function clickPanel(d){
     +'</tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
 
-function audRow(f,kind){
-  var seg=(f.dept||f.role)?'<span style="color:var(--faint);font-size:11px"> · '+esc(fmtSeg(f.dept||f.role))+'</span>':'';
-  return '<tr><td><span class="nm">'+esc(fmtRcpt(f.rcpt))+'</span>'+seg+'</td>'
-    +'<td>'+esc(fmtCamp(f.campaign))+'</td>'
-    +'<td style="color:var(--faint);font-size:11px">'+fmtTime(f.first)+'</td>'
-    +'<td><span class="pill p-'+(kind==='no'?'risk':'warn')+'" data-tip="'+(kind==='no'?'Người này chưa mở email — cần follow-up trực tiếp':'Người này đã mở nhưng chưa click CTA nào')+'">'+
-      (kind==='no'?'Chưa mở':'Chưa click')+'</span></td></tr>';
-}
-function actTable(list,kind,id){
-  id=id||'aud';
-  if(!list.length)return '<div class="nd">'+(kind==='no'?'Tất cả đã mở ✓':'Tất cả đã click ✓')+'</div>';
-  regTable({id:id,rows:list,render:function(f){return audRow(f,kind);},pageSize:20,cols:4,placeholder:'Tìm theo email…',search:audSearch});
-  return searchBox(id,'Tìm theo email…')
-    +'<div class="tw"><table><thead><tr><th>Người nhận</th><th>Chiến dịch</th><th>Thời gian</th><th>Trạng thái</th></tr></thead><tbody id="tb-'+id+'"></tbody></table></div>'
-    +'<div class="pager" id="pg-'+id+'"></div>';
-}
-
 
 function audienceSection(d){
   var t=d.tiers;
@@ -1183,17 +1167,9 @@ function audienceSection(d){
     +tc('var(--muted)',t.cold.length,'Cold','Reach < 30%','Ít tương tác. Cần chiến lược khác — họp trực tiếp, nhắc qua quản lý.')
     +tc('var(--risk)',t.never.length,'Never','0 lượt mở','Chưa bao giờ mở email. Ưu tiên cao nhất để follow-up. Kiểm tra địa chỉ email đúng chưa.')
     +'</div>';
-  var clickP=clickPanel(d);
-  window.__notOpen=d.notOpened;
-  var noPanel=d.sum.hasSent?'<div class="panel"><div class="panel-h" data-tip="Người được gửi nhưng chưa mở. Cần nhắc trực tiếp.">Đã gửi nhưng chưa mở'+(d.notOpened.length?' <button class="csv" onclick="exportNotOpen()">Xuất CSV</button>':'')+'</div>'+actTable(d.notOpened,'no','aud-no')+'</div>':'';
-  var grid=noPanel?'<div class="row2">'+clickP+noPanel+'</div>':clickP;
   window.__fu=d.followUp;
-  var fuPanel='';
-  if(d.followUp.length>0){
-    fuPanel='<div class="panel" style="margin-top:16px"><div class="panel-h" data-tip="Người đã mở nhưng chưa click link nào — thêm CTA rõ để tăng hành động.">Đã mở nhưng chưa click <button class="csv" onclick="exportFU()">Xuất CSV</button></div>'+actTable(d.followUp,'cl','aud-fu')+'</div>';
-  }
   return '<section id="s-aud"><div class="eyebrow">Đối tượng · ai cần hành động '+qclearBtn()+'</div>'
-    +tiers+grid+fuPanel+'</section>';
+    +tiers+'</section>';
 }
 
 
@@ -1526,7 +1502,6 @@ function toggleTheme(){_theme=_theme==='dark'?'light':'dark';try{localStorage.se
 function toggleDensity(){_density=_density==='compact'?'comfortable':'compact';try{localStorage.setItem('shb-et-density',_density);}catch(e){}applyDensity();}
 function segView(attr,el){document.querySelectorAll('.seg-tg button').forEach(function(b){b.classList.remove('on');});el.classList.add('on');document.getElementById('segbox').innerHTML=segBars(window.__seg[attr],attr);}
 function exportFU(){var rows=window.__fu||[];if(!rows.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac,Chien Dich,Thoi Gian Mo\n';rows.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+fmtCamp(r.campaign)+'","'+fmtTime(r.first)+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mo-chua-click-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
-function exportNotOpen(){var rows=window.__notOpen||[];if(!rows.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac,Chien Dich,Thoi Gian Gui\n';rows.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+fmtCamp(r.campaign)+'","'+fmtTime(r.first)+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='chua-mo-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 function exportRecipients(){var rows=window.__rec||[];if(!rows.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac,So Lan Mo,Mo Gan Nhat,So Lan Click\n';rows.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+(r.opened?r.openCount:0)+'","'+(r.lastOpen?fmtTime(r.lastOpen):'')+'","'+(r.clicked?r.clickCount:0)+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='nguoi-nhan-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 function findMandatory(name){return(window.__mandatory||[]).filter(function(M){return M.name===name;})[0];}
 function exportMandatory(name){var M=findMandatory(name);if(!M||!M.notOpened.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac\n';M.notOpened.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='chua-mo-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
