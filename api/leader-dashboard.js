@@ -45,9 +45,26 @@ function genMockPosts(){
   }
   return posts;
 }
+// fb-dashboard.js gộp bài Trang (fb_posts) VÀ bài Group "SHB Một Nhà" (fb_group_posts, nạp qua
+// userscript -> /api/ingest) làm 1 nguồn nội dung — làm tương tự ở đây để không bỏ sót phần lớn
+// bài viết thực tế (chủ yếu nằm ở group, không phải page).
 function fetchFbPosts(){
   if(!process.env.SUPABASE_URL||!process.env.SUPABASE_SERVICE_KEY)return Promise.resolve(genMockPosts());
-  return fbGet('/rest/v1/fb_posts?select=post_id,created_time,views,like_count,love_count,haha_count,wow_count,sad_count,angry_count,comments,shares,message,topic&order=created_time.desc&limit=800');
+  return Promise.all([
+    fbGet('/rest/v1/fb_posts?select=post_id,created_time,views,like_count,love_count,haha_count,wow_count,sad_count,angry_count,comments,shares,message,topic&order=created_time.desc&limit=800'),
+    fbGet('/rest/v1/fb_group_posts?select=post_id,created_time,reach,engagement,comments,title&order=created_time.desc&limit=500'),
+  ]).then(function(r){
+    var pagePosts=r[0]||[];
+    var groupPosts=(r[1]||[]).map(function(g){
+      var eng=g.engagement||0,cmt=g.comments||0;
+      return {
+        post_id:'g_'+g.post_id, created_time:g.created_time, views:g.reach||0,
+        like_count:Math.max(0,eng-cmt), love_count:0, haha_count:0, wow_count:0, sad_count:0, angry_count:0,
+        comments:cmt, shares:0, message:g.title||'(không có nội dung)', topic:'',
+      };
+    });
+    return pagePosts.concat(groupPosts);
+  });
 }
 
 /* ── fetch Email (EMAIL_SUPABASE_URL / EMAIL_SUPABASE_SERVICE_KEY) ── */
