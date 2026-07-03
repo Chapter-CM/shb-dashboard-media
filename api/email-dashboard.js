@@ -598,8 +598,9 @@ function process(logs){
   var persons=Object.values(personMap);
   var hasSeg=persons.some(function(p){return p.dept||p.role||p.loc;});
 
-  // Người được gửi: nếu có sent events → chỉ đếm người có sent event
-  var pSent   =persons.filter(function(p){return hasSent?p.sent:p.opened;});
+  // Người được gửi: nếu có sent events → đếm người có sent event, cộng thêm người đã mở nhưng
+  // thiếu sent event (VD do lỗi log) để tránh Người mở > Người gửi (tỉ lệ mở vượt 100%)
+  var pSent   =persons.filter(function(p){return hasSent?(p.sent||p.opened):p.opened;});
   var pOpened =persons.filter(function(p){return p.opened;});
   var pClicked=persons.filter(function(p){return p.clicked;});
 
@@ -929,20 +930,20 @@ function mountAllTables(){Object.keys(_TBL).forEach(tblRender);}
 
 function heroRow(d,cur,prev,ser){
   var s=d.sum,oS=ser.map(function(b){return b.o;}),sS=ser.map(function(b){return b.s;}),cS=ser.map(function(b){return b.r;});
-  var gVal=s.verifiedReach!=null?Math.min(100,s.verifiedReach):s.reach!=null?Math.min(100,s.reach):0;
+  var gVal=s.openRate!=null?Math.min(100,s.openRate):0;
   var gHead='Tỉ lệ mở · mục tiêu '+REACH_TARGET+'%';var remain=(s.openRate!=null&&s.openRate<REACH_TARGET)?(REACH_TARGET-s.openRate):0;var nCamp=(d.campaigns&&d.campaigns.length)||0;
   var note=s.proxyOpens>0?' · đã loại '+s.proxyOpens+' người chỉ mở qua proxy':'';
   var gSub=s.hasSent?(s.uniqOpeners+' người mở / '+s.sent+' người được gửi'+note):(s.uniqOpeners+' người đã mở');
   var rDelta=deltaChip(cur.reach,prev.reach,true);
-  var gauge='<div class="gauge-card" data-tip="Reach đã kiểm chứng = số người mở thật ÷ tổng gửi. Open giả từ security gateway đã được loại bỏ. Mục tiêu '+REACH_TARGET+'%."><div class="gc-h">'+gHead+'</div><div class="gauge-wrap">'+radialGauge(gVal,REACH_TARGET)+'</div><div class="gc-sub">'+(rDelta?rDelta+' so kỳ trước · ':'')+gSub+' · '+(remain>0?'còn '+remain+'% tới mục tiêu':'đạt mục tiêu')+' · '+nCamp+' chiến dịch</div></div>';
+  var gauge='<div class="gauge-card" data-tip="Tỉ lệ mở = Người mở ÷ Người gửi (person-level), cùng công thức với thẻ Tỉ lệ mở bên cạnh. Mục tiêu '+REACH_TARGET+'%."><div class="gc-h">'+gHead+'</div><div class="gauge-wrap">'+radialGauge(gVal,REACH_TARGET)+'</div><div class="gc-sub">'+(rDelta?rDelta+' so kỳ trước · ':'')+gSub+' · '+(remain>0?'còn '+remain+'% tới mục tiêu':'đạt mục tiêu')+' · '+nCamp+' chiến dịch</div></div>';
   function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl">'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
-  // 6 KPI chuẩn email (person-level): Đã gửi · Đã mở (lượt) · Tỉ lệ mở · Đã click · CTOR · Xác nhận đọc
+  // 6 KPI chuẩn email (person-level): Đã gửi · Đã mở (lượt) · Tỉ lệ mở · Đã click · CTOR · Mở TB/người
   var k1=card('Đã gửi',null,s.hasSent?nf(s.sent):'—',(s.hasSent?deltaChip(cur.sent,prev.sent,true):'')+' người · duy nhất',spark(sS,'var(--accent-2)'),'Số người nhận duy nhất có sự kiện gửi (pos=sent). 1 người nhận nhiều chiến dịch = chỉ tính 1 người.');
   var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' đã trừ mở lại &lt;5s',spark(oS,'var(--accent-2)'),'Tổng số lần email được mở, đã trừ mở-lại &lt;5s (Outlook tự reload). Đóng rồi mở lại (gap &gt;5s) = +1 lượt.');
   var k3=card('Tỉ lệ mở',null,s.openRate!=null?s.openRate+'%':'—',s.openRate!=null?(s.openRate>=REACH_TARGET?'<span class="delta up">▲ đạt</span>mục tiêu '+REACH_TARGET+'%':'<span class="delta down">▼ dưới</span>mục tiêu '+REACH_TARGET+'%'):'',spark(oS,'var(--accent)'),'Người mở ÷ Người gửi (person-level) — không bao giờ vượt 100%. Mục tiêu '+REACH_TARGET+'%.');
   var k4=card('Đã click',null,nf(s.nClickers||0),deltaChip(cur.clickers,prev.clickers,true)+' người click',spark(cS,'var(--accent)'),'Số người unique đã click ít nhất 1 link.');
   var k5=card('CTOR',null,(d.clickStats.ctor||0)+'%',deltaChip(cur.ctor,prev.ctor,true)+' click ÷ mở',spark(cS,'var(--accent-2)'),'Click-to-Open Rate = Người click ÷ Người mở.');
-  var k6=card('Xác nhận đọc',null,nf(s.nConfirmed||0),deltaChip(cur.confirmed,prev.confirmed,true)+' đọc trên mobile',spark(oS,'var(--accent-2)'),'Người đã nhấn link ✓ Xác nhận đã đọc trong email — tín hiệu đọc mạnh nhất, không bị cache mobile.');
+  var k6=card('Mở TB/người',null,s.avgOpensPerReader!=null?s.avgOpensPerReader:'—',s.uniqOpeners+' người đã mở',spark(oS,'var(--accent-2)'),'Số lượt mở trung bình trên mỗi người đã mở ít nhất 1 lần = Tổng lượt mở ÷ Người mở.');
   return '<div class="hero-row">'+gauge+'<div class="kpi-grid six">'+k1+k2+k3+k4+k5+k6+'</div></div>';
 }
 
@@ -959,7 +960,6 @@ function funnelPanel(d){
     +(s.hasSent?fr('Lượt gửi',s.sentSessions,null,'var(--accent)','Tổng số email đã gửi (= sessions có sent event). 1 người nhận 3 đợt = 3 lượt gửi.'):'')
     +fr('Người mở',s.uniqOpeners,s.hasSent?s.openRate:null,'var(--accent-2)','Người mở = số người duy nhất đã mở ≥1 lần. Open Rate = Người mở ÷ Người gửi (không bao giờ >100%).')
     +(s.hasSent?fr('Chưa mở',s.notOpenCount!=null?s.notOpenCount:0,s.notOpenRate,'var(--risk)','Người nhận email nhưng chưa mở lần nào. Cần follow-up trực tiếp.'):'')
-    +(s.nConfirmed>0?fr('Xác nhận đọc',s.nConfirmed,s.confirmRate,'var(--good)','Người đã nhấn link ✓ Xác nhận đã đọc trong email. Đây là tín hiệu đọc MẠNH NHẤT — chắc chắn hơn pixel tracking, không bị cache mobile.'):'')
     +fr('Lượt mở',s.opens,null,'var(--good)','Tổng lượt mở = tổng số lần email được mở, kể cả mở lại nhiều lần. 1 người mở 3 lần = 3 lượt. Khác với Người mở (đếm unique).')
     +fr('Người click',s.nClickers,s.clickRate,'#f5a623','Người click = số người duy nhất đã click ≥1 link. Unique clickers, không phải tổng lượt click.')
     +'</div>'
@@ -1008,15 +1008,14 @@ function recRow(p){
     +'<td>'+esc(fmtSeg(p.dept||p.role))+'</td>'
     +'<td class="num">'+(p.opened?p.openCount:0)+'</td>'
     +'<td class="num" style="font-size:11px">'+(p.lastOpen?fmtTime(p.lastOpen):'—')+'</td>'
-    +'<td class="num">'+(p.clicked?p.clickCount:0)+'</td>'
-    +'<td class="num">'+(p.confirmed?'<span class="pill p-good">✔</span>':'—')+'</td></tr>';
+    +'<td class="num">'+(p.clicked?p.clickCount:0)+'</td></tr>';
 }
 function recipientSection(d){
   var people=d.people||[];
   if(!people.length)return '';
   var notOpenN=people.filter(function(p){return !p.opened;}).length;
   var rows=_recTab==='no'?people.filter(function(p){return !p.opened;}):people;
-  regTable({id:'rec',rows:rows,render:recRow,pageSize:20,cols:6,placeholder:'Tìm người nhận / email…',search:function(p,q){return normMail(p.rcpt).indexOf(q.replace(/[-.]/g,''))>-1||norm(fmtRcpt(p.rcpt)).indexOf(q)>-1;},sortVal:function(p,k){return k==='name'?norm(fmtRcpt(p.rcpt)):k==='dept'?norm(fmtSeg(p.dept||p.role)||''):k==='open'?(p.opened?p.openCount:0):k==='last'?(p.lastOpen||0):k==='click'?(p.clicked?p.clickCount:0):k==='conf'?(p.confirmed?1:0):0;}});
+  regTable({id:'rec',rows:rows,render:recRow,pageSize:20,cols:5,placeholder:'Tìm người nhận / email…',search:function(p,q){return normMail(p.rcpt).indexOf(q.replace(/[-.]/g,''))>-1||norm(fmtRcpt(p.rcpt)).indexOf(q)>-1;},sortVal:function(p,k){return k==='name'?norm(fmtRcpt(p.rcpt)):k==='dept'?norm(fmtSeg(p.dept||p.role)||''):k==='open'?(p.opened?p.openCount:0):k==='last'?(p.lastOpen||0):k==='click'?(p.clicked?p.clickCount:0):0;}});
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('rec','Tìm người nhận / email…')
     +'<div class="seg"><button class="'+(_recTab==='all'?'on':'')+'" onclick="setRecTab(\'all\')">Tất cả <span class="pill p-neutral" style="font-size:10px">'+people.length+'</span></button>'
@@ -1024,7 +1023,7 @@ function recipientSection(d){
   return '<section id="s-rec"><div class="eyebrow">Người nhận — trạng thái mở &amp; click '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h">Person-level</div>'
     +tabs
-    +'<div class="tw"><table><thead><tr>'+th('rec','name','Người nhận','pin','Tên/email người nhận')+th('rec','dept','Phòng ban','','Phòng ban / vai trò')+th('rec','open','Lần mở','num','Số lần người này mở email')+th('rec','last','Mở gần nhất','num','Thời điểm mở gần nhất')+th('rec','click','Click','num','Số lần click')+th('rec','conf','Xác nhận','num','Đã nhấn ✓ xác nhận đọc')+'</tr></thead><tbody id="tb-rec"></tbody></table></div>'
+    +'<div class="tw"><table><thead><tr>'+th('rec','name','Người nhận','pin','Tên/email người nhận')+th('rec','dept','Phòng ban','','Phòng ban / vai trò')+th('rec','open','Lần mở','num','Số lần người này mở email')+th('rec','last','Mở gần nhất','num','Thời điểm mở gần nhất')+th('rec','click','Click','num','Số lần click')+'</tr></thead><tbody id="tb-rec"></tbody></table></div>'
     +'<div class="clegend"><span><span class="tdot hot"></span>Đã mở &amp; click</span><span><span class="tdot warm"></span>Đã mở, chưa click</span><span><span class="tdot cold"></span>Chưa mở</span></div>'
     +'<div class="pager" id="pg-rec"></div></div></section>';
 }
@@ -1095,9 +1094,7 @@ function campRow(c){
     +'<td class="num" data-tip="'+nf(c.openEvents)+' lượt mở từ '+nf(c.opens)+' người"><b>'+nf(c.openEvents)+'</b></td>'
     +'<td class="num" data-tip="'+(N(c.sent)?'Mẫu nhỏ N='+c.sent+' — % không đủ đại diện thống kê':(c.notOpen||0)+' người được gửi nhưng chưa mở')+'"><span class="erc"><b>'+(r!=null?r+'%':'—')+'</b><span class="erbar2"><i style="width:'+rw+'%"></i></span></span></td>'
     +'<td class="num">'+nf(c.clickers||0)+'</td>'
-    +'<td class="num">'+(c.ctor>0?c.ctor+'%':'—')+'</td>'
-    +'<td class="num" data-tip="'+c.confirmed+' người đã nhấn ✓ Xác nhận đã đọc">'
-      +(c.confirmed>0?'<span class="pill p-good">'+c.confirmed+'</span>':'—')+'</td></tr>';
+    +'<td class="num">'+(c.ctor>0?c.ctor+'%':'—')+'</td></tr>';
 }
 function N(n){return n!=null&&n<MIN_N;}
 var _campTab='all';
@@ -1107,7 +1104,7 @@ function campaignSection(d){
   var F=_filter||{};
   var goalN=d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}).length;
   var rows=_campTab==='goal'?d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}):d.campaigns;
-  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:8,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.openEvents||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):k==='confirmed'?(c.confirmed||0):0;}});
+  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:7,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.openEvents||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):0;}});
   var clearBtn=(F.campaign&&F.campaign.length)?'<button class="csv" onclick="clearFilter(\'campaign\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc chiến dịch</button>':'';
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('camp','Tìm chiến dịch…')
@@ -1125,7 +1122,6 @@ function campaignSection(d){
     +th('camp','reach','Tỉ lệ mở','num','Tỉ lệ mở = Người mở ÷ Người gửi (person-level, đã loại proxy)')
     +th('camp','clickers','Đã click','num','Số người unique đã click ≥1 link')
     +th('camp','ctor','CTOR','num','CTOR = Click-to-Open Rate = Người click ÷ Người mở')
-    +th('camp','confirmed','Xác nhận','num','Số người nhấn ✓ Xác nhận đã đọc — tín hiệu mạnh nhất, không bị cache mobile')
     +'</tr></thead><tbody id="tb-camp"></tbody></table></div>'
     +'<div class="clegend"><span><span class="tdot hot"></span>Đạt mục tiêu '+REACH_TARGET+'%</span><span><span class="tdot warm"></span>Trung bình</span><span><span class="tdot cold"></span>Thấp — cần cải thiện tiêu đề/thời điểm</span></div>'
     +'<div class="pager" id="pg-camp"></div></div>'
@@ -1208,8 +1204,8 @@ function insightSection(d){
       var byUnit={};worst.notOpened.forEach(function(p){var k=fmtSeg(p.dept||p.role||'(Chưa phân loại)');byUnit[k]=(byUnit[k]||0)+1;});
       var top=Object.keys(byUnit).map(function(k){return[k,byUnit[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,2);
       var topTxt=top.length?('Tập trung ở '+top.map(function(t){return esc(t[0])+' ('+t[1]+')';}).join(' và ')+'.'):'';
-      cards.push({tone:'risk',tag:'Khẩn',n:worst.notOpened.length,t:'Chưa xác nhận email bắt buộc',
-        desc:'"'+esc(fmtCamp(worst.name))+'" còn '+worst.notOpened.length+' người chưa xác nhận. '+topTxt,
+      cards.push({tone:'risk',tag:'Khẩn',n:worst.notOpened.length,t:'Chưa mở email bắt buộc',
+        desc:'"'+esc(fmtCamp(worst.name))+'" còn '+worst.notOpened.length+' người chưa mở. '+topTxt,
         actions:'<button class="gbtn" onclick="exportMandatory(\''+jsq(worst.name)+'\')">Xuất DS nhắc (CSV)</button><button class="csv" onclick="copyMandatoryEmails(\''+jsq(worst.name)+'\')">Copy '+worst.notOpened.length+' email</button>'});
     }
   }
@@ -1271,7 +1267,7 @@ function initiativeSection(d){
 
 function manRow(s){
   var seg=(s.dept||s.role)?'<span style="color:var(--faint);font-size:11px"> · '+esc(fmtSeg(s.dept||s.role))+'</span>':'';
-  return '<tr><td><span class="nm">'+esc(fmtRcpt(s.rcpt))+'</span>'+seg+'</td><td><span class="pill p-risk" data-tip="Người này chưa mở email bắt buộc — cần escalate hoặc nhắc trực tiếp">Chưa xác nhận đọc</span></td></tr>';
+  return '<tr><td><span class="nm">'+esc(fmtRcpt(s.rcpt))+'</span>'+seg+'</td><td><span class="pill p-risk" data-tip="Người này chưa mở email bắt buộc — cần escalate hoặc nhắc trực tiếp">Chưa mở</span></td></tr>';
 }
 function mandatorySection(d){
   if(!d.hasMandatory)return '';
@@ -1282,13 +1278,13 @@ function mandatorySection(d){
     var body;
     if(M.notOpened.length){
       regTable({id:id,rows:M.notOpened,render:manRow,pageSize:20,cols:2,placeholder:'Tìm theo email…',search:audSearch});
-      body=searchBox(id,'Tìm theo email…')+'<div class="tw"><table><thead><tr><th>Người chưa xác nhận</th><th>Trạng thái</th></tr></thead><tbody id="tb-'+id+'"></tbody></table></div><div class="pager" id="pg-'+id+'"></div>';
+      body=searchBox(id,'Tìm theo email…')+'<div class="tw"><table><thead><tr><th>Người chưa mở</th><th>Trạng thái</th></tr></thead><tbody id="tb-'+id+'"></tbody></table></div><div class="pager" id="pg-'+id+'"></div>';
     }else{
-      body='<div class="nd" style="color:var(--good)">Tất cả đã xác nhận đọc ✓</div>';
+      body='<div class="nd" style="color:var(--good)">Tất cả đã mở ✓</div>';
     }
-    blocks+='<div class="panel" style="margin-bottom:14px"><div class="panel-h">'+esc(fmtCamp(M.name))+'&nbsp;<span class="pill '+rt+'" data-tip="Tỷ lệ xác nhận đọc = số người mở ÷ số người được gửi. Email bắt buộc cần đạt 100%.">'+M.rate+'% xác nhận</span></div>'+body+'</div>';
+    blocks+='<div class="panel" style="margin-bottom:14px"><div class="panel-h">'+esc(fmtCamp(M.name))+'&nbsp;<span class="pill '+rt+'" data-tip="Tỷ lệ mở email bắt buộc = số người mở ÷ số người được gửi. Cần đạt 100%.">'+M.rate+'% đã mở</span></div>'+body+'</div>';
   });
-  return '<section id="s-man"><div class="eyebrow">Email bắt buộc · theo dõi 100% xác nhận '+qclearBtn()+'</div>'+blocks+'<div class="so">→ Danh sách "chưa xác nhận" cần nhắc trực tiếp / escalate cho compliance.</div></section>';
+  return '<section id="s-man"><div class="eyebrow">Email bắt buộc · theo dõi 100% đã mở '+qclearBtn()+'</div>'+blocks+'<div class="so">→ Danh sách "chưa mở" cần nhắc trực tiếp / escalate cho compliance.</div></section>';
 }
 
 
@@ -1306,7 +1302,6 @@ function dataHealthSection(d){
     +'<div class="panel"><div class="panel-h">Sức khoẻ dữ liệu email</div><div class="hz">'+hzRows+'</div></div>'
     +'<div class="panel" style="margin-top:16px">'
     +'<div class="dh-grid">'
-    +stat('Xác nhận đọc',s.nConfirmed||0,(s.nConfirmed||0)+' / '+(s.uniqOpeners||0)+' người mở',s.nConfirmed>0?'good':'','Người đã nhấn link ✓ Xác nhận đã đọc ở cuối email. Số liệu này KHÔNG bị ảnh hưởng bởi cache mobile.')
     +stat('Tổng sự kiện',q.events+(q.events>=EVENTS_LIMIT*0.95?' ⚠️':''),span,q.events>=EVENTS_LIMIT*0.95?'risk':'','Tổng số event đã ghi vào Supabase. Giới hạn query: '+EVENTS_LIMIT+'. '+(q.events>=EVENTS_LIMIT*0.95?'⚠️ Gần hoặc đạt giới hạn — dữ liệu cũ có thể bị cắt. Tăng EVENTS_LIMIT trên Vercel env.':'OK.'))
     +stat('Người mở thật',q.humanOpens,'người (không phải proxy)','good','Người mở bằng thiết bị thật (không phải security gateway/proxy). Dùng để tính Reach kiểm chứng.')
     +stat('Open giả (proxy)',q.proxyOpens,pp+'% — gateway auto-fetch',pp>30?'risk':pp>10?'warn':'good','Open tự động bởi security gateway (GoogleImageProxy, Outlook Safelinks...). KHÔNG phải người thật — đã loại khỏi Reach kiểm chứng.')
@@ -1553,7 +1548,7 @@ function toggleDensity(){_density=_density==='compact'?'comfortable':'compact';t
 function segView(attr,el){document.querySelectorAll('.seg-tg button').forEach(function(b){b.classList.remove('on');});el.classList.add('on');document.getElementById('segbox').innerHTML=segBars(window.__seg[attr],attr);}
 function exportFU(){var rows=window.__fu||[];if(!rows.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac,Chien Dich,Thoi Gian Mo\n';rows.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+fmtCamp(r.campaign)+'","'+fmtTime(r.first)+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mo-chua-click-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 function findMandatory(name){return(window.__mandatory||[]).filter(function(M){return M.name===name;})[0];}
-function exportMandatory(name){var M=findMandatory(name);if(!M||!M.notOpened.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac\n';M.notOpened.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='chua-xac-nhan-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
+function exportMandatory(name){var M=findMandatory(name);if(!M||!M.notOpened.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac\n';M.notOpened.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='chua-mo-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 function copyMandatoryEmails(name){var M=findMandatory(name);if(!M||!M.notOpened.length)return;var text=M.notOpened.map(function(r){return r.rcpt;}).join('; ');(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(text):Promise.reject()).catch(function(){var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(ta);});}
 function filterLowUnits(names){_filter.dept=names?names.split('\u00A7'):[];paint();}
 
