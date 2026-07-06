@@ -26,6 +26,7 @@ sync_dashboard_data:
     - if: '$CI_PIPELINE_SOURCE == "trigger"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   script:
+    - npm ci
     - node sync.js
   artifacts:
     paths:

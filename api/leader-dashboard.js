@@ -7,7 +7,9 @@ const LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABEwAAAF1CAYAAADy
 const REACH_TARGET = 70;
 
 /* ── fetch Facebook (SUPABASE_URL / SUPABASE_SERVICE_KEY) ── */
+const dbClient = require('../lib/db-client');
 function fbGet(path){
+  if(dbClient.isEnabled())return dbClient.get(path).then(function(d){return Array.isArray(d)?d:[];}).catch(function(){return [];});
   return new Promise(function(resolve){
     var base=(process.env.SUPABASE_URL||'').replace(/\/$/,''),key=process.env.SUPABASE_SERVICE_KEY||'';
     if(!base||!key)return resolve([]);
@@ -78,6 +80,7 @@ function fetchEmailLogs(){
   var PAGE=1000;
   var base='/rest/v1/events?select='+encodeURIComponent(sel);
   function fetchOne(path){
+    if(dbClient.isEnabled())return dbClient.get(path).catch(function(){return [];});
     return new Promise(function(resolve){
       var done=false;function fin(v){if(!done){done=true;resolve(v);}}
       var req=https.request({hostname:host,path:path,headers:hdrs},function(r){
