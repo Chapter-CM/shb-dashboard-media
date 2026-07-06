@@ -181,16 +181,16 @@ Các lý do kỹ thuật đứng sau, xếp theo sức nặng:
 ### Giai đoạn 1 — Code migration + hợp nhất (5–7 ngày)
 > Bắt đầu từ repo unified `shb-dashboard-Facebook` (đã gộp ở §1.3) — KHÔNG còn bước "gộp repo".
 
-| Task | Mô tả |
-|---|---|
-| `api/email-track.js` + `api/fb-ingest.js` | Vercel handler → Node HTTP server (:3001) (thêm `url.parse()` thủ công ~10 dòng cho track); giữ check `x-ingest-secret` |
-| **Bỏ `api/fb-fetch.js`** | Theo Phương án A — userscript là nguồn FB duy nhất, server khỏi egress |
-| `sync.js` chung | Đọc DB nội bộ (events + fb_*) → bake HTML cho `portal/fb-dashboard/email-dashboard` (thay tầng đọc Supabase REST) |
-| Đổi env DB | `SUPABASE_*` (FB) + `EMAIL_SUPABASE_*` (Email) → credentials DB nội bộ |
-| `Dockerfile` + `.gitlab-ci.yml` | ingest (Node :3001) + dashboard (nginx static) + schedule sync |
-| Font | Google Fonts → font nội bộ/system |
-| Cập nhật bộ thu thập | VBA: đổi URL beacon sang nội bộ · Userscript: đổi `INGEST` URL + `@connect` nội bộ |
-| Test | Toàn bộ chức năng (2 tab) trên dev |
+| Task | Mô tả | Trạng thái |
+|---|---|---|
+| `api/email-track.js` + `api/fb-ingest.js` | Vercel handler → Node HTTP server (:3001) (thêm `url.parse()` thủ công ~10 dòng cho track); giữ check `x-ingest-secret` | ✅ `server/ingest-server.js` + `server/vercel-compat.js` — test chạy local OK |
+| **Bỏ `api/fb-fetch.js`** | Theo Phương án A — userscript là nguồn FB duy nhất, server khỏi egress | ⬜ Chưa xoá (chưa cutover) |
+| `sync.js` chung | Đọc DB nội bộ (events + fb_*) → bake HTML cho `portal/fb-dashboard/email-dashboard/leader-dashboard` (thay tầng đọc Supabase REST) | ✅ `sync.js` — gọi lại đúng handler cũ qua shim, test build ra 4 file HTML |
+| Đổi env DB | `SUPABASE_*` (FB) + `EMAIL_SUPABASE_*` (Email) → credentials DB nội bộ | ✅ `lib/db-client.js` (MySQL, xác nhận với Quang 09/07 — ảnh Teams) dịch lại cú pháp PostgREST của `sbGet()`/`fbGet()`/`fetchLogs()` sang SQL; bật bằng env `MYSQL_HOST`, không set thì fallback Supabase như cũ. `db/schema.mysql.sql` — bảng `events` suy ra từ code, cần đối chiếu lại trước khi chạy thật. Chưa test với MySQL thật (không có Docker daemon trong sandbox) |
+| `Dockerfile` + `.gitlab-ci.yml` | ingest (Node :3001) + dashboard (nginx static) + schedule sync | ✅ `Dockerfile.ingest`, `Dockerfile.dashboard`, `nginx.conf`, `.gitlab-ci.yml` — khung mẫu, phần `deploy_to_eks` còn là placeholder cần Quang điền lệnh ArgoCD/kubectl thật |
+| Font | Google Fonts → font nội bộ/system | ✅ Đã bỏ hết `<link>` tới `fonts.googleapis.com`/`fonts.gstatic.com` ở 4 dashboard, fallback system-ui/monospace |
+| Cập nhật bộ thu thập | VBA: đổi URL beacon sang nội bộ · Userscript: đổi `INGEST` URL + `@connect` nội bộ | ⬜ Chưa làm (chờ có DNS nội bộ thật) |
+| Test | Toàn bộ chức năng (2 tab) trên dev | ⬜ Mới test cục bộ với mock data, chưa test trên môi trường EKS/MySQL thật |
 
 ### Giai đoạn 2 — Deploy & kiểm thử (2–3 ngày)
 - [ ] Pipeline chạy lần đầu → ECR → ArgoCD deploy EKS.
