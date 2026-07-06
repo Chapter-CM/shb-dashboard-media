@@ -61,7 +61,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
   <span class="synctime" title="Thời điểm trang portal này được tạo — trên bản build tĩnh (GitLab) là lúc sync.js chạy; trên Vercel là lúc mở trang">Cập nhật: ${new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span>
 </div></div>
 <script>
-var SRC={fb:'/api/fb-dashboard',email:'/api/email-dashboard',jira:'/api/jira/'},loaded={},cur='fb';
+var SRC={fb:'/api/facebook',email:'/api/email',jira:'/api/jira/'},loaded={},cur='fb';
 function setLoad(on){var l=document.getElementById('ld');if(l)l.style.display=on?'flex':'none';}
 function ensure(k){var f=document.getElementById('if-'+k);if(!loaded[k]){setLoad(true);f.onload=function(){loaded[k]=1;if(cur===k)setLoad(false);};f.src=SRC[k];}else if(cur===k){setLoad(false);}}
 function show(k){
