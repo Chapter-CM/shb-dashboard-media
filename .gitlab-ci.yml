@@ -104,15 +104,13 @@ docker build ecr:
     - docker build -f Dockerfile.ingest -t $AWS_ECR_CICD/$DOCKER_IMAGE_INGEST_NAME:dev .
     - docker push $AWS_ECR_CICD/$DOCKER_IMAGE_INGEST_NAME:dev
 
-# TODO Quang: xác nhận APP_NAME thật trên ArgoCD cho cụm dev-saha — nếu dashboard
-# tĩnh + ingest service là 2 Deployment riêng trong cùng 1 ArgoCD Application thì 1
-# job restart là đủ; nếu là 2 Application riêng thì cần thêm 1 job update_manifest
-# thứ 2 với APP_NAME khác (vd cm-dashboard-ingest).
+# Tách app riêng cho ingest (khuyến nghị — xem lý do trong KE_HOACH_MIGRATION.md §7c):
+# dashboard tĩnh restart theo schedule mỗi ≤1h không được kéo theo restart ingest
+# service (đang giữ kết nối ghi DB real-time từ VBA/userscript).
+# TODO Quang: xác nhận đúng tên APP_NAME thật đã tạo trên ArgoCD cho 2 app này
+# (đây là tên đề xuất theo pattern cm-dashboard, cần Quang confirm/đổi lại).
 .update_manifest_template: &update_manifest_template
   stage: update_helm_value
-  variables:
-    APP_NAME: cm-dashboard
-    ARGO_URL: alb-internal.dev-saha.aws.shb.com.vn
   image:
     name: jfrog.shb.com.vn/omni-docker-local/argocd:v2.10.6
   before_script:
@@ -124,6 +122,15 @@ update_manifest_aws_dev:
   <<: *update_manifest_template
   variables:
     APP_NAME: cm-dashboard
+    ARGO_URL: alb-internal.dev-saha.aws.shb.com.vn
+  only:
+    refs:
+      - main
+
+update_manifest_ingest_aws_dev:
+  <<: *update_manifest_template
+  variables:
+    APP_NAME: cm-dashboard-ingest
     ARGO_URL: alb-internal.dev-saha.aws.shb.com.vn
   only:
     refs:
