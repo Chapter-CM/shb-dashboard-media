@@ -235,17 +235,25 @@ Các lý do kỹ thuật đứng sau, xếp theo sức nặng:
 
 > **Quyết định:** không xin repo GitLab mới, không xin domain mới. **Mở rộng repo `cm-dashboard` đã có** (tái dùng đúng pattern CI/CD: GitLab CI → registry nội bộ → ECR → ArgoCD → EKS đang chạy sẵn cho Jira dashboard) làm nơi build portal hợp nhất 3 tab **Email / Facebook / Jira**, phục vụ chung 1 URL nội bộ. Chỉ team CM xem nên gộp chung tiện theo dõi; không có rủi ro kỹ thuật đáng kể nếu tách đúng theo route.
 
-**Nguyên tắc hợp nhất:** portal chỉ là lớp vỏ chuyển tab — 3 dashboard vẫn là 3 module render độc lập, giữ nguyên cơ chế dữ liệu riêng của từng cái (Jira: đọc động qua Jira API như hiện tại; Email/Facebook: build tĩnh theo schedule như §3.2). Không ép Jira dashboard sang build tĩnh.
+**Đính chính (06/07/2026, sau khi xem code thật của `cm-dashboard`):** Jira dashboard **cũng build tĩnh**, không phải đọc động như dự đoán ban đầu — `sync.js` gọi thẳng Jira REST API (`/rest/api/3/search/jql`) trong CI stage `sync_data`, ghi ra `public/data.json`; `index.html` là 1 SPA React (nhúng UMD bundle React/Recharts/html2canvas/jsPDF vào `public/vendors/` ngay trong Docker build, không gọi CDN) đọc `data.json` client-side. Vậy cả 3 dashboard (Jira/Email/Facebook) đều là **static + refresh theo schedule**, chỉ khác input: Jira gọi REST API trong lúc build, Email/Facebook đọc DB nội bộ trong lúc build.
+
+**Pattern hạ tầng thật đã xác nhận** (từ `.gitlab-ci.yml`/`Dockerfile`/`nginx.conf` gốc, xem file trong repo `shb-dashboard-media`):
+- Base image nội bộ `gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-nginx-amd` (node+nginx gộp sẵn) và `node:20-alpine-amd` cho stage sync.
+- Registry **đẩy image thật là AWS ECR** (`$AWS_ECR_CICD`), KHÔNG phải registry GitLab `:5050` (cái đó chỉ để **pull** base image) — khác với suy đoán ban đầu ở mục 6 câu 4.
+- Pipeline: `sync_data` → `pages` (expose lại `public/` — dùng cho preview) → `aws-authen` (lấy token ECR qua AWS CLI) → `docker_build_ecr` (build + push ECR, chỉ chạy trên `main`) → `update_helm_value` (login ArgoCD, `argocd app actions run $APP_NAME restart --kind Deployment`) — **không phải `kubectl set image`** như bản nháp ban đầu.
+- `nginx.conf` thật: cổng 80 (không phải 8080), có `/health`, gzip, security headers, SPA fallback `try_files ... /index.html`.
+
+**Nguyên tắc hợp nhất:** portal vẫn là lớp vỏ chuyển tab, 3 dashboard là 3 route độc lập bake tĩnh theo đúng 1 pipeline chung ở trên. Khác biệt kiến trúc thật sự duy nhất so với Jira: Email/Facebook cần **1 service Node (:3001) chạy thường trực** để nhận beacon/POST real-time (Jira không cần, chỉ đọc REST theo lịch) — nên cần build/deploy thêm 1 image `Dockerfile.ingest` + 1 ArgoCD Deployment nữa, còn lại dùng chung đúng 1 pipeline/registry/ArgoCD app pattern.
 
 **Các bước:**
-1. **Thêm route thứ 3** — đưa code hiện tại của `cm-dashboard` (Jira) vào route riêng trong project hợp nhất (ví dụ `api/jira-dashboard.js` hoặc giữ nguyên server con nếu cơ chế khác), không đổi logic gọi Jira API.
+1. **Thêm route thứ 3** — đưa code hiện tại của `cm-dashboard` (Jira, gồm `sync.js` phần Jira + `index.html` SPA) vào project hợp nhất dưới route riêng (vd `/api/jira` bake ra `public/api/jira/`), giữ nguyên logic gọi Jira REST API + cách chuẩn hoá hạng mục (`HANG_MUC_PATTERNS`).
 2. **Sửa `portal.js`** — thêm tab thứ 3 (nút chuyển + iframe same-origin trỏ route Jira), theo đúng pattern lazy-load + giữ trạng thái đang dùng cho Email/Facebook.
-3. **Rewrites/nginx** — thêm rule route cho Jira dashboard, giữ nguyên mọi route cũ (không phá URL VBA/userscript/Jira webhook nếu có).
-4. **Tách secret theo namespace** — token Jira API để env riêng, không chung với `SUPABASE_*`/`EMAIL_SUPABASE_*`, tránh lộ chéo giữa 3 module.
-5. **Resource pod** — xác nhận nhanh với DevOps (Quang) là pod hiện tại đủ CPU/RAM chạy thêm 1 module động (Jira) song song 2 module tĩnh (Email/FB); không phải xin duyệt hạng mục hạ tầng mới, chỉ hỏi để chắc không cần scale thêm.
-6. **Test song song** — chạy thử cả 3 tab trên môi trường dev trước khi cutover, xác nhận tab Jira không bị ảnh hưởng bởi lịch build tĩnh (schedule) của Email/Facebook.
+3. **nginx.conf** — thêm location cho route Jira (static + `try_files` về `index.html` riêng của SPA đó vì nó tự route client-side, khác 2 dashboard kia là HTML tĩnh 1 trang).
+4. **Tách secret theo namespace** — `JIRA_TOKEN`/`JIRA_EMAIL` để riêng, không chung với `MYSQL_*`/`SUPABASE_*`.
+5. **1 pipeline chung, 2 image dashboard** — `sync.js` hợp nhất chạy cả phần Jira (fetch REST) lẫn phần Email/Facebook (đọc MySQL) trong cùng 1 stage `sync_data`, output vào cùng `public/`; build cùng 1 `Dockerfile.dashboard`. Thêm riêng `Dockerfile.ingest` + 1 job build/deploy cho service Node — xem TODO trong `.gitlab-ci.yml`.
+6. **Test song song** — chạy thử cả 3 tab trên môi trường dev trước khi cutover.
 
-**Không cần xin thêm so với mục 6:** DB, runner, Node service (:3001), DNS subdomain — các hạng mục đã liệt kê đều đủ dùng chung cho cả 3 dashboard; gộp thêm Jira không phát sinh câu hỏi hạ tầng mới với IT/DevOps.
+**Không cần xin thêm so với mục 6**, nhưng cần Quang xác nhận: APP_NAME ArgoCD nào cho service Node ingest mới (dùng chung `cm-dashboard` hay tách app riêng `cm-dashboard-ingest`) — đã đánh dấu TODO trong `.gitlab-ci.yml`.
 
 ---
 
