@@ -52,7 +52,9 @@ sync_data:
     # SPA Jira (public/api/jira/index.html) load thư viện UMD từ /vendors/ — bản gốc
     # làm bước này trong Dockerfile (kèm ARG chứa JIRA_TOKEN, bake secret vào image);
     # giờ Dockerfile.dashboard chỉ COPY nên tạo vendors ở đây, cùng chỗ assemble public/.
-    - npm install --no-save react@18 react-dom@18 @babel/standalone prop-types@15.8.1 recharts@2.12.7 html2canvas@1.4.1 jspdf@2.5.1
+    # Pin @babel/standalone@7: Dockerfile gốc không pin — Babel 8 đổi preset React
+    # mặc định sang automatic runtime (chèn import vào output) làm SPA chết trắng.
+    - npm install --no-save react@18 react-dom@18 @babel/standalone@7 prop-types@15.8.1 recharts@2.12.7 html2canvas@1.4.1 jspdf@2.5.1
     - mkdir -p public/vendors
     - cp node_modules/react/umd/react.production.min.js public/vendors/
     - cp node_modules/react-dom/umd/react-dom.production.min.js public/vendors/
@@ -108,7 +110,10 @@ docker build ecr:
   only:
     refs:
       - main
-  needs: ["aws-authen-cicd"]
+  # PHẢI có sync_data trong needs: Dockerfile.dashboard COPY public/ từ artifact của
+  # job đó (bản gốc chạy sync.js bên trong Docker build nên không cần) — thiếu thì
+  # image chỉ có mỗi public/api/jira đã commit, portal + 3 dashboard trắng trơn.
+  needs: ["aws-authen-cicd", "sync_data"]
   script:
     - docker login --username AWS --password $AWS_TOKEN $AWS_ECR_CICD
     - docker build -f Dockerfile.dashboard -t $AWS_ECR_CICD/$DOCKER_IMAGE_BASE_NAME:dev .

@@ -28,12 +28,25 @@
 7. **Đang chờ**: bấm "Create merge request" (đã hướng dẫn, chưa xác nhận đã bấm) — **CHƯA merge vào `main`**.
 
 **Việc cần làm tiếp (chiều nay hoặc buổi sau):**
-- [ ] Xác nhận đã tạo Merge Request `merge-email-facebook` → `main` chưa (chưa bấm nút Merge).
-- [ ] Xem kết quả Pipeline trên MR — báo lỗi cụ thể nếu có stage đỏ.
+- [x] MR `!3` đã tạo, Pipeline PASS nhiều vòng (sync_data/pages/aws-authen-cicd).
 - [ ] Khai báo CI/CD Variables mới trên GitLab (`Settings → CI/CD → Variables`): `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`, `INGEST_SECRET` (nhờ Quang cấp giá trị thật).
-- [ ] Xin Quang xác nhận `APP_NAME` ArgoCD cho service ingest mới (`cm-dashboard-ingest` — tên đề xuất, chưa xác nhận có tồn tại hay cần tạo).
+- [ ] Xin Quang xác nhận `APP_NAME` ArgoCD cho service ingest mới (`cm-dashboard-ingest` — tên đề xuất, chưa xác nhận có tồn tại hay cần tạo) + tên DNS service nội bộ để sửa `ingest-service` trong `nginx.conf`.
 - [ ] Chạy `db/schema.mysql.sql` trên DB nội bộ thật (đối chiếu bảng `events` trước).
 - [ ] Chỉ merge vào `main` sau khi Pipeline xanh + đủ CI/CD Variables + Quang xác nhận hạ tầng.
+
+**⏳ CHỜ COPY SANG GITLAB (06/07 tối — user chưa ở công ty):** 9 file đã sửa/fix trong đợt
+tổng rà soát tối 06/07, ĐÃ commit vào repo GitHub này nhưng CHƯA đẩy sang `cm-dashboard`
+(nhánh `merge-email-facebook`). Danh sách + lệnh copy: xem file `GITLAB_COPY_LIST.md`.
+Các lỗi đã bắt được trong đợt rà (chi tiết ở commit message):
+1. `email-track.js`/`fb-ingest.js` chỉ ghi Supabase, KHÔNG có đường ghi MySQL → deploy nội
+   bộ sẽ nuốt beacon/ingest im lặng. Đã thêm `dbClient.insert()` (bulk + upsert COALESCE).
+2. `fb-dashboard.js` loadData trả MOCK khi thiếu Supabase dù MySQL bật → số liệu giả trên
+   production nội bộ. Guard 3 file dashboard đã sửa thành "thiếu cả 2 nguồn mới fallback".
+3. `docker build ecr` thiếu `sync_data` trong `needs` → image dashboard không có public/
+   (portal trắng trơn sau deploy).
+4. `@babel/standalone` chưa pin @7 trong CI (Babel 8 làm Jira SPA chết — đã tái hiện).
+5. `Dockerfile.ingest` thiếu `lib/` + npm install (giờ email-track/fb-ingest cần mysql2).
+6. Jira SPA (`reference/.../index.html`): thêm chế độ embed cho portal 3 tab (đã test).
 
 ## 🧩 Cấu trúc HỢP NHẤT (1 repo + 1 Vercel) — PR #33
 Tên file = **route**; đặt theo sản phẩm để mở ra hiểu ngay. URL cũ giữ nguyên qua `rewrites` (không cần sửa VBA/userscript).

@@ -13,7 +13,8 @@ const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPAB
 const EVENTS_LIMIT = parseInt(process.env.EMAIL_EVENTS_LIMIT || process.env.EVENTS_LIMIT || '40000', 10);
 
 function fetchLogs() {
-  if (!SUPABASE_URL || !SERVICE_KEY) return Promise.resolve([]);
+  // Có MySQL nội bộ (MYSQL_HOST) thì fetchOne bên dưới tự rẽ sang db-client — chỉ chặn khi thiếu cả 2.
+  if (!dbClient.isEnabled() && (!SUPABASE_URL || !SERVICE_KEY)) return Promise.resolve([]);
   var host = SUPABASE_URL.replace(/^https?:\/\//, '');
   var sel  = 'id:event_id,pos,rcpt,campaign,subject,msg_type,initiative,target_size,dept,role,loc,link,dest,ua,timestamp:ts';
   var hdrs = { apikey: SERVICE_KEY, Authorization: 'Bearer ' + SERVICE_KEY, Accept: 'application/json' };

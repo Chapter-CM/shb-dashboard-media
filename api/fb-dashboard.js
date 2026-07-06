@@ -191,7 +191,8 @@ function mapGroupPosts(rows) {
   });
 }
 async function loadData() {
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) return genMock();
+  // Có MySQL nội bộ (MYSQL_HOST) hoặc Supabase thì đọc thật; thiếu cả 2 mới dùng mock.
+  if (!dbClient.isEnabled() && (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY)) return genMock();
   try {
     var r = await Promise.all([
       sbGet('/rest/v1/fb_posts?select=*&order=created_time.desc&limit=500'),

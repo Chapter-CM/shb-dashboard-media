@@ -13,6 +13,7 @@
  * Env cần: INGEST_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 const https = require('https');
+const dbClient = require('../lib/db-client');
 
 const SB_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -76,7 +77,7 @@ module.exports = async (req, res) => {
   setCors(res);
   if (req.method === 'OPTIONS') { res.status(204).end(); return; }
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
-  if (!SECRET || !SB_URL || !SB_KEY) { res.status(500).json({ error: 'Thiếu env: INGEST_SECRET / SUPABASE_URL / SUPABASE_SERVICE_KEY' }); return; }
+  if (!SECRET || (!dbClient.isEnabled() && (!SB_URL || !SB_KEY))) { res.status(500).json({ error: 'Thiếu env: INGEST_SECRET + (MYSQL_* hoặc SUPABASE_URL/SUPABASE_SERVICE_KEY)' }); return; }
 
   var got = req.headers['x-ingest-secret'];
   if (!got || got !== SECRET) { res.status(401).json({ error: 'unauthorized' }); return; }
@@ -94,7 +95,8 @@ module.exports = async (req, res) => {
       if (!Object.keys(prow.metrics).length && !Object.keys(prow.series).length) {
         res.status(200).json({ ok: true, kind: 'page', note: 'không có metric' }); return;
       }
-      await sbWrite('/rest/v1/fb_page_insights', [prow], 'return=minimal');
+      if (dbClient.isEnabled()) await dbClient.insert('fb_page_insights', prow);
+      else await sbWrite('/rest/v1/fb_page_insights', [prow], 'return=minimal');
       res.status(200).json({ ok: true, kind: 'page', metrics: Object.keys(prow.metrics).length, series: Object.keys(prow.series).length }); return;
     }
 
@@ -104,9 +106,14 @@ module.exports = async (req, res) => {
     var rows = list.map(normalize).filter(Boolean);
     if (!rows.length) { res.status(200).json({ ok: true, received: list.length, upserted: 0, note: 'không có post_id hợp lệ' }); return; }
 
-    await sbWrite('/rest/v1/fb_group_posts?on_conflict=post_id', rows, 'resolution=merge-duplicates,return=minimal');
     var snaps = rows.map(function (r) { return { post_id: r.post_id, reach: r.reach, viewers: r.viewers, engagement: r.engagement, comments: r.comments }; });
-    await sbWrite('/rest/v1/fb_group_post_snapshots', snaps, 'return=minimal');
+    if (dbClient.isEnabled()) {
+      await dbClient.insert('fb_group_posts', rows, { upsert: true });
+      await dbClient.insert('fb_group_post_snapshots', snaps);
+    } else {
+      await sbWrite('/rest/v1/fb_group_posts?on_conflict=post_id', rows, 'resolution=merge-duplicates,return=minimal');
+      await sbWrite('/rest/v1/fb_group_post_snapshots', snaps, 'return=minimal');
+    }
 
     res.status(200).json({ ok: true, received: list.length, upserted: rows.length });
   } catch (e) {

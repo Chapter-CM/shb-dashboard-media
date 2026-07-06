@@ -74,7 +74,8 @@ function fetchFbPosts(){
 const EMAIL_SUPABASE_URL = process.env.EMAIL_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const EMAIL_SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
 function fetchEmailLogs(){
-  if(!EMAIL_SUPABASE_URL||!EMAIL_SERVICE_KEY)return Promise.resolve([]);
+  // Có MySQL nội bộ (MYSQL_HOST) thì fetchOne bên dưới tự rẽ sang db-client — chỉ chặn khi thiếu cả 2.
+  if(!dbClient.isEnabled()&&(!EMAIL_SUPABASE_URL||!EMAIL_SERVICE_KEY))return Promise.resolve([]);
   var host=EMAIL_SUPABASE_URL.replace(/^https?:\/\//,'');
   var sel='pos,rcpt,msg_type,initiative,campaign,timestamp:ts';
   var hdrs={apikey:EMAIL_SERVICE_KEY,Authorization:'Bearer '+EMAIL_SERVICE_KEY,Accept:'application/json'};
