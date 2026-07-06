@@ -12,13 +12,11 @@ module.exports = (req, res) => {
   res.send(`<!DOCTYPE html><html lang="vi"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SHB CM Dashboard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0b0916;--bar:rgba(20,17,38,.92);--stroke:rgba(255,255,255,.10);--text:#f2effc;--muted:#9a95bd;--accent:#ef4444;--grad:linear-gradient(135deg,#e11d2a 0%,#fb7427 100%)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
 /* Logo + tab nổi (overlay) lên cùng dòng với thanh điều khiển của dashboard (vùng trái masthead trống do brand đã ẩn khi nhúng) */
 .topbar{position:absolute;top:0;left:0;right:0;z-index:5;height:63px;pointer-events:none}
 .topbar-in{max-width:1200px;margin:0 auto;height:100%;display:flex;align-items:center;gap:14px;padding:0 26px}
