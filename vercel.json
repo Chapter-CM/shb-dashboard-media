@@ -1,7 +1,4 @@
 {
-  "crons": [
-    { "path": "/api/fb-fetch", "schedule": "0 1 * * *" }
-  ],
   "functions": {
     "api/portal.js": { "maxDuration": 5 },
     "api/fb-dashboard.js": { "maxDuration": 15 },

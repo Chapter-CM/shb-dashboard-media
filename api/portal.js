@@ -1,7 +1,9 @@
 'use strict';
 /*
- * Portal gộp 2 dashboard CM về 1 URL: tab Email | Facebook.
- * Mỗi tab nhúng same-origin /api/fb-dashboard và /api/email-dashboard (đều là trang HTML đầy đủ).
+ * Portal gộp 3 dashboard CM về 1 URL: tab Facebook | Email | Jira.
+ * Mỗi tab nhúng same-origin /api/fb-dashboard, /api/email-dashboard (Vercel function,
+ * đều là trang HTML đầy đủ) và /api/jira/ (thư mục tĩnh do sync.js bake ra khi merge
+ * vào cm-dashboard nội bộ — không tồn tại trên bản Vercel).
  * Iframe lazy-load (chỉ set src khi mở lần đầu) + giữ trạng thái khi chuyển tab.
  * Đây là bước "gộp 1 project" để test/demo trên Vercel trước khi migrate nội bộ.
  */
@@ -12,13 +14,11 @@ module.exports = (req, res) => {
   res.send(`<!DOCTYPE html><html lang="vi"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SHB CM Dashboard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0b0916;--bar:rgba(20,17,38,.92);--stroke:rgba(255,255,255,.10);--text:#f2effc;--muted:#9a95bd;--accent:#ef4444;--grad:linear-gradient(135deg,#e11d2a 0%,#fb7427 100%)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
 /* Logo + tab nổi (overlay) lên cùng dòng với thanh điều khiển của dashboard (vùng trái masthead trống do brand đã ẩn khi nhúng) */
 .topbar{position:absolute;top:0;left:0;right:0;z-index:5;height:63px;pointer-events:none}
 .topbar-in{max-width:1200px;margin:0 auto;height:100%;display:flex;align-items:center;gap:14px;padding:0 26px}
@@ -45,6 +45,7 @@ body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--b
   <div class="ld" id="ld"><span class="sp"></span><span>Đang tải…</span></div>
   <iframe id="if-fb" title="Facebook Dashboard"></iframe>
   <iframe id="if-email" title="Email Dashboard" hidden></iframe>
+  <iframe id="if-jira" title="Jira Dashboard" hidden></iframe>
 </div>
 <div class="topbar"><div class="topbar-in">
   <div class="brand">
@@ -54,15 +55,16 @@ body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:var(--b
   <div class="seg">
     <button class="tab on" id="tab-fb" onclick="show('fb')"><svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M13 22v-8h2.7l.4-3H13V9c0-.9.2-1.5 1.5-1.5H16V4.9C15.7 4.9 14.8 4.8 13.7 4.8 11.4 4.8 9.9 6.2 9.9 8.7V11H7.2v3H9.9v8z"/></svg>Facebook</button>
     <button class="tab" id="tab-email" onclick="show('email')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</button>
+    <button class="tab" id="tab-jira" onclick="show('jira')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Jira</button>
   </div>
 </div></div>
 <script>
-var SRC={fb:'/api/fb-dashboard',email:'/api/email-dashboard'},loaded={},cur='fb';
+var SRC={fb:'/api/fb-dashboard',email:'/api/email-dashboard',jira:'/api/jira/'},loaded={},cur='fb';
 function setLoad(on){var l=document.getElementById('ld');if(l)l.style.display=on?'flex':'none';}
 function ensure(k){var f=document.getElementById('if-'+k);if(!loaded[k]){setLoad(true);f.onload=function(){loaded[k]=1;if(cur===k)setLoad(false);};f.src=SRC[k];}else if(cur===k){setLoad(false);}}
 function show(k){
   cur=k;
-  ['fb','email'].forEach(function(x){
+  ['fb','email','jira'].forEach(function(x){
     document.getElementById('if-'+x).hidden=(x!==k);
     document.getElementById('tab-'+x).classList.toggle('on',x===k);
   });

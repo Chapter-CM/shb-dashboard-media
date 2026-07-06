@@ -1,0 +1,14 @@
+# Base image nội bộ giống cm-dashboard gốc (đã có node + nginx sẵn).
+# Khác cm-dashboard gốc 1 điểm CÓ CHỦ Ý: KHÔNG chạy `node sync.js` bên trong build
+# (cm-dashboard gốc làm vậy, truyền JIRA_TOKEN qua ARG — bake secret vào layer/
+# history image). Ở đây public/ đã được build sẵn ở stage `sync_data` của
+# .gitlab-ci.yml (đọc MYSQL_* — nhạy cảm hơn JIRA token) rồi truyền vào làm build
+# context, nên Dockerfile chỉ COPY, không cần thấy secret DB nào cả.
+FROM gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-nginx-amd
+
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY public /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

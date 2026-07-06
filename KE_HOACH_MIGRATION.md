@@ -181,16 +181,16 @@ Các lý do kỹ thuật đứng sau, xếp theo sức nặng:
 ### Giai đoạn 1 — Code migration + hợp nhất (5–7 ngày)
 > Bắt đầu từ repo unified `shb-dashboard-Facebook` (đã gộp ở §1.3) — KHÔNG còn bước "gộp repo".
 
-| Task | Mô tả |
-|---|---|
-| `api/email-track.js` + `api/fb-ingest.js` | Vercel handler → Node HTTP server (:3001) (thêm `url.parse()` thủ công ~10 dòng cho track); giữ check `x-ingest-secret` |
-| **Bỏ `api/fb-fetch.js`** | Theo Phương án A — userscript là nguồn FB duy nhất, server khỏi egress |
-| `sync.js` chung | Đọc DB nội bộ (events + fb_*) → bake HTML cho `portal/fb-dashboard/email-dashboard` (thay tầng đọc Supabase REST) |
-| Đổi env DB | `SUPABASE_*` (FB) + `EMAIL_SUPABASE_*` (Email) → credentials DB nội bộ |
-| `Dockerfile` + `.gitlab-ci.yml` | ingest (Node :3001) + dashboard (nginx static) + schedule sync |
-| Font | Google Fonts → font nội bộ/system |
-| Cập nhật bộ thu thập | VBA: đổi URL beacon sang nội bộ · Userscript: đổi `INGEST` URL + `@connect` nội bộ |
-| Test | Toàn bộ chức năng (2 tab) trên dev |
+| Task | Mô tả | Trạng thái |
+|---|---|---|
+| `api/email-track.js` + `api/fb-ingest.js` | Vercel handler → Node HTTP server (:3001) (thêm `url.parse()` thủ công ~10 dòng cho track); giữ check `x-ingest-secret` | ✅ `server/ingest-server.js` + `server/vercel-compat.js` — test chạy local OK |
+| **Bỏ `api/fb-fetch.js`** | Theo Phương án A — userscript là nguồn FB duy nhất, server khỏi egress | ✅ **06/07/2026**: đã xoá file + cron trong `vercel.json` (repo `shb-dashboard-media`) |
+| `sync.js` chung | Đọc DB nội bộ (events + fb_*) → bake HTML cho `portal/fb-dashboard/email-dashboard/leader-dashboard` (thay tầng đọc Supabase REST) | ✅ `sync.js` — gọi lại đúng handler cũ qua shim, test build ra 4 file HTML |
+| Đổi env DB | `SUPABASE_*` (FB) + `EMAIL_SUPABASE_*` (Email) → credentials DB nội bộ | ✅ `lib/db-client.js` (MySQL, xác nhận với Quang 09/07 — ảnh Teams) dịch lại cú pháp PostgREST của `sbGet()`/`fbGet()`/`fetchLogs()` sang SQL; bật bằng env `MYSQL_HOST`, không set thì fallback Supabase như cũ. `db/schema.mysql.sql` — bảng `events` suy ra từ code, **đang chờ Quang xác nhận** trước khi chạy thật. Chưa test với MySQL thật |
+| `Dockerfile` + `.gitlab-ci.yml` | ingest (Node :3001) + dashboard (nginx static) + schedule sync | ✅ Đã merge vào repo `cm-dashboard` thật (nhánh `merge-email-facebook`, MR `!3`) — Pipeline chạy PASS (`sync_data`/`pages`/`aws-authen-cicd`). `docker_build_ecr`/`update_helm_value` chỉ chạy trên `main` (chưa merge nên chưa test được) |
+| Font | Google Fonts → font nội bộ/system | ✅ Đã bỏ hết `<link>` tới `fonts.googleapis.com`/`fonts.gstatic.com` ở 4 dashboard, fallback system-ui/monospace |
+| Cập nhật bộ thu thập | VBA: đổi URL beacon sang nội bộ · Userscript: đổi `INGEST` URL + `@connect` nội bộ | ⬜ Chưa làm (chờ có DNS nội bộ thật) |
+| Test | Toàn bộ chức năng (2 tab) trên dev | ⬜ Mới test cục bộ với mock data, chưa test trên môi trường EKS/MySQL thật |
 
 ### Giai đoạn 2 — Deploy & kiểm thử (2–3 ngày)
 - [ ] Pipeline chạy lần đầu → ECR → ArgoCD deploy EKS.
@@ -235,17 +235,25 @@ Các lý do kỹ thuật đứng sau, xếp theo sức nặng:
 
 > **Quyết định:** không xin repo GitLab mới, không xin domain mới. **Mở rộng repo `cm-dashboard` đã có** (tái dùng đúng pattern CI/CD: GitLab CI → registry nội bộ → ECR → ArgoCD → EKS đang chạy sẵn cho Jira dashboard) làm nơi build portal hợp nhất 3 tab **Email / Facebook / Jira**, phục vụ chung 1 URL nội bộ. Chỉ team CM xem nên gộp chung tiện theo dõi; không có rủi ro kỹ thuật đáng kể nếu tách đúng theo route.
 
-**Nguyên tắc hợp nhất:** portal chỉ là lớp vỏ chuyển tab — 3 dashboard vẫn là 3 module render độc lập, giữ nguyên cơ chế dữ liệu riêng của từng cái (Jira: đọc động qua Jira API như hiện tại; Email/Facebook: build tĩnh theo schedule như §3.2). Không ép Jira dashboard sang build tĩnh.
+**Đính chính (06/07/2026, sau khi xem code thật của `cm-dashboard`):** Jira dashboard **cũng build tĩnh**, không phải đọc động như dự đoán ban đầu — `sync.js` gọi thẳng Jira REST API (`/rest/api/3/search/jql`) trong CI stage `sync_data`, ghi ra `public/data.json`; `index.html` là 1 SPA React (nhúng UMD bundle React/Recharts/html2canvas/jsPDF vào `public/vendors/` ngay trong Docker build, không gọi CDN) đọc `data.json` client-side. Vậy cả 3 dashboard (Jira/Email/Facebook) đều là **static + refresh theo schedule**, chỉ khác input: Jira gọi REST API trong lúc build, Email/Facebook đọc DB nội bộ trong lúc build.
+
+**Pattern hạ tầng thật đã xác nhận** (từ `.gitlab-ci.yml`/`Dockerfile`/`nginx.conf` gốc, xem file trong repo `shb-dashboard-media`):
+- Base image nội bộ `gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-nginx-amd` (node+nginx gộp sẵn) và `node:20-alpine-amd` cho stage sync.
+- Registry **đẩy image thật là AWS ECR** (`$AWS_ECR_CICD`), KHÔNG phải registry GitLab `:5050` (cái đó chỉ để **pull** base image) — khác với suy đoán ban đầu ở mục 6 câu 4.
+- Pipeline: `sync_data` → `pages` (expose lại `public/` — dùng cho preview) → `aws-authen` (lấy token ECR qua AWS CLI) → `docker_build_ecr` (build + push ECR, chỉ chạy trên `main`) → `update_helm_value` (login ArgoCD, `argocd app actions run $APP_NAME restart --kind Deployment`) — **không phải `kubectl set image`** như bản nháp ban đầu.
+- `nginx.conf` thật: cổng 80 (không phải 8080), có `/health`, gzip, security headers, SPA fallback `try_files ... /index.html`.
+
+**Nguyên tắc hợp nhất:** portal vẫn là lớp vỏ chuyển tab, 3 dashboard là 3 route độc lập bake tĩnh theo đúng 1 pipeline chung ở trên. Khác biệt kiến trúc thật sự duy nhất so với Jira: Email/Facebook cần **1 service Node (:3001) chạy thường trực** để nhận beacon/POST real-time (Jira không cần, chỉ đọc REST theo lịch) — nên cần build/deploy thêm 1 image `Dockerfile.ingest` + 1 ArgoCD Deployment nữa, còn lại dùng chung đúng 1 pipeline/registry/ArgoCD app pattern.
 
 **Các bước:**
-1. **Thêm route thứ 3** — đưa code hiện tại của `cm-dashboard` (Jira) vào route riêng trong project hợp nhất (ví dụ `api/jira-dashboard.js` hoặc giữ nguyên server con nếu cơ chế khác), không đổi logic gọi Jira API.
+1. **Thêm route thứ 3** — đưa code hiện tại của `cm-dashboard` (Jira, gồm `sync.js` phần Jira + `index.html` SPA) vào project hợp nhất dưới route riêng (vd `/api/jira` bake ra `public/api/jira/`), giữ nguyên logic gọi Jira REST API + cách chuẩn hoá hạng mục (`HANG_MUC_PATTERNS`).
 2. **Sửa `portal.js`** — thêm tab thứ 3 (nút chuyển + iframe same-origin trỏ route Jira), theo đúng pattern lazy-load + giữ trạng thái đang dùng cho Email/Facebook.
-3. **Rewrites/nginx** — thêm rule route cho Jira dashboard, giữ nguyên mọi route cũ (không phá URL VBA/userscript/Jira webhook nếu có).
-4. **Tách secret theo namespace** — token Jira API để env riêng, không chung với `SUPABASE_*`/`EMAIL_SUPABASE_*`, tránh lộ chéo giữa 3 module.
-5. **Resource pod** — xác nhận nhanh với DevOps (Quang) là pod hiện tại đủ CPU/RAM chạy thêm 1 module động (Jira) song song 2 module tĩnh (Email/FB); không phải xin duyệt hạng mục hạ tầng mới, chỉ hỏi để chắc không cần scale thêm.
-6. **Test song song** — chạy thử cả 3 tab trên môi trường dev trước khi cutover, xác nhận tab Jira không bị ảnh hưởng bởi lịch build tĩnh (schedule) của Email/Facebook.
+3. **nginx.conf** — thêm location cho route Jira (static + `try_files` về `index.html` riêng của SPA đó vì nó tự route client-side, khác 2 dashboard kia là HTML tĩnh 1 trang).
+4. **Tách secret theo namespace** — `JIRA_TOKEN`/`JIRA_EMAIL` để riêng, không chung với `MYSQL_*`/`SUPABASE_*`.
+5. **1 pipeline chung, 2 image dashboard** — `sync.js` hợp nhất chạy cả phần Jira (fetch REST) lẫn phần Email/Facebook (đọc MySQL) trong cùng 1 stage `sync_data`, output vào cùng `public/`; build cùng 1 `Dockerfile.dashboard`. Thêm riêng `Dockerfile.ingest` + 1 job build/deploy cho service Node — xem TODO trong `.gitlab-ci.yml`.
+6. **Test song song** — chạy thử cả 3 tab trên môi trường dev trước khi cutover.
 
-**Không cần xin thêm so với mục 6:** DB, runner, Node service (:3001), DNS subdomain — các hạng mục đã liệt kê đều đủ dùng chung cho cả 3 dashboard; gộp thêm Jira không phát sinh câu hỏi hạ tầng mới với IT/DevOps.
+**Không cần xin thêm so với mục 6**, nhưng cần Quang xác nhận: APP_NAME ArgoCD nào cho service Node ingest mới (dùng chung `cm-dashboard` hay tách app riêng `cm-dashboard-ingest`) — đã đánh dấu TODO trong `.gitlab-ci.yml`.
 
 ---
 

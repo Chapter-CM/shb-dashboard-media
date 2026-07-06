@@ -1,0 +1,137 @@
+# Pipeline nội bộ SHB — copy sát pattern thật của cm-dashboard (Jira dashboard, xem
+# ảnh + file .gitlab-ci.yml/Dockerfile/nginx.conf/sync.js gốc gửi 06/07/2026).
+# Khác cm-dashboard gốc ở đúng 1 điểm cần thiết: có thêm 1 service Node (:3001) chạy
+# THƯỜNG TRỰC để nhận beacon email (VBA) + POST userscript Facebook theo thời gian
+# thực — Jira dashboard không cần vì chỉ đọc qua REST API theo lịch.
+#
+# ⚠️ Các biến/tên dưới đây (AWS_ECR_CICD, ARGO_URL, APP_NAME...) copy nguyên từ
+# cm-dashboard gốc — cần Quang xác nhận lại project/app ArgoCD THẬT cho repo này
+# (có thể tái dùng đúng app `cm-dashboard` nếu gộp chung, hoặc cần thêm 1 app mới
+# `cm-dashboard-ingest` cho service Node — xem mục "TODO Quang" ở cuối file).
+
+variables:
+  DOCKER_IMAGE_BASE_NAME: $CI_PROJECT_NAME
+  DOCKER_IMAGE_INGEST_NAME: "${CI_PROJECT_NAME}-ingest"
+  GIT_STRATEGY: clone
+  GIT_DEPTH: 0
+
+default:
+  image: jfrog.shb.com.vn/omni-channel/docker:latest
+  before_script:
+    - |
+      if [[ "$CI_COMMIT_REF_NAME" =~ "develop/" ]]; then
+        IMAGE_TAG="dev"
+      elif [[ "$CI_COMMIT_REF_NAME" =~ "develop" ]]; then
+        IMAGE_TAG="dev"
+      elif [[ "$CI_COMMIT_REF_NAME" =~ "qc/" ]]; then
+        IMAGE_TAG="sit"
+      elif [[ "$CI_COMMIT_REF_NAME" =~ "release/" ]]; then
+        IMAGE_TAG="uat"
+      else
+        IMAGE_TAG=$CI_COMMIT_SHORT_SHA
+      fi
+      export IMAGE_TAG
+
+stages:
+  - sync_data
+  - pages
+  - aws-authen
+  - docker_build_ecr
+  - update_helm_value
+
+# Bake HTML tĩnh (portal/facebook/email/leader) từ DB nội bộ — tương đương sync_data
+# của cm-dashboard gốc (ở đó fetch Jira; ở đây gọi lại handler api/*.js qua sync.js,
+# xem sync.js trong repo này). Cần MYSQL_* là GitLab CI/CD Variables (protected).
+sync_data:
+  stage: sync_data
+  image: gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-alpine-amd
+  script:
+    - node --version
+    - npm ci
+    - node sync.js
+    - ls -la public/
+  artifacts:
+    paths:
+      - public/
+    expire_in: 2 hours
+
+pages:
+  stage: pages
+  image: gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-alpine-amd
+  script:
+    - ls -la public/
+  artifacts:
+    paths:
+      - public
+  dependencies:
+    - sync_data
+
+.aws-authen:
+  stage: aws-authen
+  image:
+    name: gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/aws-cli:latest
+    entrypoint: [""]
+  before_script:
+    - mkdir -p $CI_PROJECT_DIR/.aws
+    - cp $AWS_ECR_POLICY $CI_PROJECT_DIR/.aws/policy.json
+    - cp $AWS_ECR_EXPIRED_POLICY $CI_PROJECT_DIR/.aws/expired_policy.json
+  script:
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - echo "AWS_TOKEN=$(aws ecr get-login-password --region $AWS_DEFAULT_REGION)" > vars.env
+    - ( aws ecr describe-repositories --repository-names ${DOCKER_IMAGE_BASE_NAME} --region $AWS_DEFAULT_REGION ) || ( aws ecr create-repository --repository-name ${DOCKER_IMAGE_BASE_NAME} --region $AWS_DEFAULT_REGION --image-scanning-configuration scanOnPush=true && aws ecr set-repository-policy --repository-name ${DOCKER_IMAGE_BASE_NAME} --policy-text file://$CI_PROJECT_DIR/.aws/policy.json && aws ecr put-lifecycle-policy --repository-name ${DOCKER_IMAGE_BASE_NAME} --region $AWS_DEFAULT_REGION --lifecycle-policy-text file://$CI_PROJECT_DIR/.aws/expired_policy.json)
+    - ( aws ecr describe-repositories --repository-names ${DOCKER_IMAGE_INGEST_NAME} --region $AWS_DEFAULT_REGION ) || ( aws ecr create-repository --repository-name ${DOCKER_IMAGE_INGEST_NAME} --region $AWS_DEFAULT_REGION --image-scanning-configuration scanOnPush=true && aws ecr set-repository-policy --repository-name ${DOCKER_IMAGE_INGEST_NAME} --policy-text file://$CI_PROJECT_DIR/.aws/policy.json && aws ecr put-lifecycle-policy --repository-name ${DOCKER_IMAGE_INGEST_NAME} --region $AWS_DEFAULT_REGION --lifecycle-policy-text file://$CI_PROJECT_DIR/.aws/expired_policy.json)
+  artifacts:
+    reports:
+      dotenv: vars.env
+
+aws-authen-cicd:
+  extends: .aws-authen
+  variables:
+    AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID_CICD
+    AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY_CICD
+
+docker build ecr:
+  stage: docker_build_ecr
+  only:
+    refs:
+      - main
+  needs: ["aws-authen-cicd"]
+  script:
+    - docker login --username AWS --password $AWS_TOKEN $AWS_ECR_CICD
+    - docker build -f Dockerfile.dashboard -t $AWS_ECR_CICD/$DOCKER_IMAGE_BASE_NAME:dev .
+    - docker push $AWS_ECR_CICD/$DOCKER_IMAGE_BASE_NAME:dev
+    - docker build -f Dockerfile.ingest -t $AWS_ECR_CICD/$DOCKER_IMAGE_INGEST_NAME:dev .
+    - docker push $AWS_ECR_CICD/$DOCKER_IMAGE_INGEST_NAME:dev
+
+# Tách app riêng cho ingest (khuyến nghị — xem lý do trong KE_HOACH_MIGRATION.md §7c):
+# dashboard tĩnh restart theo schedule mỗi ≤1h không được kéo theo restart ingest
+# service (đang giữ kết nối ghi DB real-time từ VBA/userscript).
+# TODO Quang: xác nhận đúng tên APP_NAME thật đã tạo trên ArgoCD cho 2 app này
+# (đây là tên đề xuất theo pattern cm-dashboard, cần Quang confirm/đổi lại).
+.update_manifest_template: &update_manifest_template
+  stage: update_helm_value
+  image:
+    name: jfrog.shb.com.vn/omni-docker-local/argocd:v2.10.6
+  before_script:
+    - argocd login $ARGO_URL --username $ARGO_ADMIN_USER --password $ARGO_ADMIN_PASS --skip-test-tls --insecure --grpc-web-root-path /argocd
+  script:
+    - argocd app actions run $APP_NAME restart --kind Deployment
+
+update_manifest_aws_dev:
+  <<: *update_manifest_template
+  variables:
+    APP_NAME: cm-dashboard
+    ARGO_URL: alb-internal.dev-saha.aws.shb.com.vn
+  only:
+    refs:
+      - main
+
+update_manifest_ingest_aws_dev:
+  <<: *update_manifest_template
+  variables:
+    APP_NAME: cm-dashboard-ingest
+    ARGO_URL: alb-internal.dev-saha.aws.shb.com.vn
+  only:
+    refs:
+      - main

@@ -1,9 +1,39 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 02/07/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 06/07/2026)
 
 > Repo này giờ là **bản hợp nhất 1 repo + 1 Vercel** cho cả 2 dashboard CM.
 > Live (portal): https://shb-fb-dashboard.vercel.app/ → tab **Facebook | Email**.
 > Quy trình: branch dev → PR vào `claude/loving-planck-y6lw57` (production, Vercel auto-deploy).
 > Branch dev gần nhất: `claude/email-reading-time-measurement-nrytc2` (PR #56–61, đã merge hết).
+
+## 🚧 ĐANG DỞ (06/07/2026 chiều) — Merge vào `cm-dashboard` (GitLab nội bộ)
+
+**Bối cảnh:** Đang thực hiện §7c trong `KE_HOACH_MIGRATION.md` — mở rộng repo `cm-dashboard` (Jira dashboard nội bộ, `gitlab-nhs.shb.com.vn/cm/cm-dashboard`) thành portal 3 tab Facebook | Email | Jira, thay vì xin repo/domain mới.
+
+**Đã làm xong trong `shb-dashboard-media`** (branch `claude/dashboard-log-repo-strategy-v2t8f1`, PR #75):
+- `lib/db-client.js` — đọc MySQL nội bộ (xác nhận với Quang: MySQL, không phải Postgres), dịch lại cú pháp PostgREST của `sbGet()`/`fbGet()`/`fetchLogs()` sang SQL, fallback Supabase nếu không set `MYSQL_HOST`.
+- `db/schema.mysql.sql` — schema MySQL (bảng `events` suy đoán từ code, **cần đối chiếu lại** trước khi chạy thật).
+- `server/ingest-server.js` + `server/vercel-compat.js` — Node service :3001 gộp `/api/track` + `/api/ingest`.
+- `sync.js` v4 — **gộp sẵn** cả phần Jira (copy nguyên logic từ `cm-dashboard/sync.js` v3) lẫn phần Email/Facebook (bake tĩnh qua handler `api/*.js`) trong 1 script.
+- `Dockerfile.dashboard`, `Dockerfile.ingest`, `nginx.conf`, `.gitlab-ci.yml`, `package.json` — đã khớp đúng pattern thật của `cm-dashboard` (AWS ECR, `argocd app actions run restart`, không phải kubectl).
+- `api/portal.js` — đã thêm tab thứ 3 "Jira" (route `/api/jira/`).
+- Đã test toàn bộ cục bộ với mock data — chạy ổn, không lỗi.
+
+**Đã làm trên GitLab (`cm-dashboard`, người dùng thao tác qua Web IDE):**
+1. ✅ Tạo nhánh backup `backup/before-merge-email-facebook` từ `main`.
+2. ✅ Tạo nhánh làm việc `merge-email-facebook` từ `main`.
+3. ✅ Đổi tên `sync.js` gốc → `sync.jira-original.js`.
+4. ✅ Chuyển `public/index.html` + `public/config.json` (Jira SPA) → `public/api/jira/`.
+5. ✅ Upload xong `api/`, `lib/`, `server/`, `db/`, `Dockerfile.dashboard`, `Dockerfile.ingest`, `nginx.conf`, `.gitlab-ci.yml`, `sync.js`, `package.json` (đè bản cũ khi trùng tên) qua Web IDE (upload từng file, không dùng kéo-thả vì bị lỗi).
+6. ✅ Commit lên nhánh `merge-email-facebook`.
+7. **Đang chờ**: bấm "Create merge request" (đã hướng dẫn, chưa xác nhận đã bấm) — **CHƯA merge vào `main`**.
+
+**Việc cần làm tiếp (chiều nay hoặc buổi sau):**
+- [ ] Xác nhận đã tạo Merge Request `merge-email-facebook` → `main` chưa (chưa bấm nút Merge).
+- [ ] Xem kết quả Pipeline trên MR — báo lỗi cụ thể nếu có stage đỏ.
+- [ ] Khai báo CI/CD Variables mới trên GitLab (`Settings → CI/CD → Variables`): `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`, `INGEST_SECRET` (nhờ Quang cấp giá trị thật).
+- [ ] Xin Quang xác nhận `APP_NAME` ArgoCD cho service ingest mới (`cm-dashboard-ingest` — tên đề xuất, chưa xác nhận có tồn tại hay cần tạo).
+- [ ] Chạy `db/schema.mysql.sql` trên DB nội bộ thật (đối chiếu bảng `events` trước).
+- [ ] Chỉ merge vào `main` sau khi Pipeline xanh + đủ CI/CD Variables + Quang xác nhận hạ tầng.
 
 ## 🧩 Cấu trúc HỢP NHẤT (1 repo + 1 Vercel) — PR #33
 Tên file = **route**; đặt theo sản phẩm để mở ra hiểu ngay. URL cũ giữ nguyên qua `rewrites` (không cần sửa VBA/userscript).
@@ -14,9 +44,10 @@ Tên file = **route**; đặt theo sản phẩm để mở ra hiểu ngay. URL c
 | `api/fb-dashboard.js` | Dashboard Facebook (**file UI chính**) | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | `/api/facebook` |
 | `api/email-dashboard.js` | Dashboard Email (copy từ email-tracker-data/dashboard.js) | `EMAIL_SUPABASE_URL`, `EMAIL_SUPABASE_SERVICE_KEY` | `/api/email` |
 | `api/fb-ingest.js` | Nạp bài Group từ userscript (FB) | `SUPABASE_*` + `INGEST_SECRET` | `/api/ingest` |
-| `api/fb-fetch.js` | Cron Graph API FB (phụ; migration nội bộ sẽ bỏ) | `SUPABASE_*` + `FB_*` | (cron) |
 | `api/email-track.js` | **Beacon Email** (pixel/click/read) — v3.5 | `EMAIL_SUPABASE_*` | `/api/track` |
-| `vercel.json` | rewrites giữ URL cũ; cron `/api/fb-fetch`; maxDuration | — | — |
+| `vercel.json` | rewrites giữ URL cũ; maxDuration | — | — |
+
+> ✅ **06/07/2026**: đã xoá hẳn `api/fb-fetch.js` + cron tương ứng trong `vercel.json` (Phương án A, `KE_HOACH_MIGRATION.md` §3.1) — post-insights Graph đã chết, `fb-dashboard.js` không cần dữ liệu này, server hết egress ra Internet.
 - **1 Vercel project** `shb-fb-dashboard` chạy tất cả. URL công khai (qua rewrite) giữ nguyên: `/` · `/api/facebook` · `/api/email` · `/api/ingest` · `/api/track`. Userscript (`/api/ingest`) & VBA (`/api/track`) KHÔNG cần đổi.
 - ⚠️ **Đồng bộ**: `api/email-dashboard.js` + `api/email-track.js` là **bản copy** từ repo `email-tracker-data`. Sửa gốc thì đồng bộ lại (hoặc ngược lại). Sau migration nội bộ repo email gốc nghỉ hẳn.
 - ✅ **VBA đã cập nhật**: `CampaignTracker.bas` v4.9 (repo email-tracker-data) đã đổi `TRACK_URL` → `shb-fb-dashboard.vercel.app/api/track`. User cần cài bản này vào Outlook + test trước khi tắt Vercel email cũ.
