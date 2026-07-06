@@ -1,0 +1,77 @@
+# Pipeline nội bộ SHB — tái dùng pattern có sẵn của `cm-dashboard`
+# (GitLab CI -> registry nội bộ -> ECR -> ArgoCD -> EKS, xem KE_HOACH_MIGRATION.md §6 câu 4).
+#
+# Stages:
+#   sync    - chạy sync.js đọc DB nội bộ, bake HTML tĩnh -> dist/ (chạy trên schedule, §4)
+#   build   - build 2 image: dashboard tĩnh (nginx) + ingest service (Node, luôn chạy)
+#   deploy  - push registry + trigger ArgoCD (giữ đúng pattern cm-dashboard, điền lại cho khớp cụm thật)
+
+stages:
+  - sync
+  - build
+  - deploy
+
+variables:
+  REGISTRY: gitlab-nhs.shb.com.vn:5050
+  IMAGE_DASHBOARD: $REGISTRY/$CI_PROJECT_PATH/dashboard
+  IMAGE_INGEST: $REGISTRY/$CI_PROJECT_PATH/ingest
+
+# Job này chạy: (1) trên GitLab Schedule mỗi ≤1h để refresh dữ liệu (§3.2),
+# (2) có thể trigger ngay sau ingest nếu muốn F5 thấy số mới sau ~1-2' (§3.3).
+sync_dashboard_data:
+  stage: sync
+  image: node:20-alpine
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - node sync.js
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 2 hours
+
+build_dashboard_image:
+  stage: build
+  image: docker:24
+  services: [docker:24-dind]
+  needs: ["sync_dashboard_data"]
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$REGISTRY"
+    - docker build -f Dockerfile.dashboard -t "$IMAGE_DASHBOARD:$CI_COMMIT_SHORT_SHA" -t "$IMAGE_DASHBOARD:latest" .
+    - docker push "$IMAGE_DASHBOARD:$CI_COMMIT_SHORT_SHA"
+    - docker push "$IMAGE_DASHBOARD:latest"
+
+build_ingest_image:
+  stage: build
+  image: docker:24
+  services: [docker:24-dind]
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$REGISTRY"
+    - docker build -f Dockerfile.ingest -t "$IMAGE_INGEST:$CI_COMMIT_SHORT_SHA" -t "$IMAGE_INGEST:latest" .
+    - docker push "$IMAGE_INGEST:$CI_COMMIT_SHORT_SHA"
+    - docker push "$IMAGE_INGEST:latest"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      changes:
+        - api/email-track.js
+        - api/fb-ingest.js
+        - server/**/*
+        - Dockerfile.ingest
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+
+# Placeholder: điền lại cho khớp pattern ArgoCD thật của cm-dashboard (app-of-apps /
+# image updater / kubectl set image...). Team DevOps (Quang) đã xác nhận có sẵn pattern
+# này cho cm-dashboard nên chỉ cần sao chép, không thiết kế mới.
+deploy_to_eks:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  needs: ["build_dashboard_image", "build_ingest_image"]
+  script:
+    - echo "TODO: cập nhật lệnh deploy theo đúng pattern ArgoCD của cm-dashboard"
+    - echo "vd: kubectl set image deployment/cm-dashboard dashboard=$IMAGE_DASHBOARD:$CI_COMMIT_SHORT_SHA -n <namespace>"
+    - echo "vd: kubectl set image deployment/cm-dashboard-ingest ingest=$IMAGE_INGEST:$CI_COMMIT_SHORT_SHA -n <namespace>"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  when: manual
