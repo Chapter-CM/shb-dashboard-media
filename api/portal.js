@@ -38,7 +38,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .ld{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;gap:10px}
 .sp{width:16px;height:16px;border:2px solid var(--stroke);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
-@media(max-width:560px){.pn{display:none}.tab{padding:7px 12px}}
+.synctime{font-size:11px;color:var(--muted);padding-left:10px;white-space:nowrap}
+@media(max-width:560px){.pn{display:none}.tab{padding:7px 12px}.synctime{display:none}}
 </style></head>
 <body>
 <div class="stage">
@@ -48,7 +49,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
   <iframe id="if-jira" title="Jira Dashboard" hidden></iframe>
 </div>
 <div class="topbar"><div class="topbar-in">
-  <div class="brand">
+  <div class="brand" onclick="show('fb')" style="cursor:pointer" title="Về trang mặc định">
     <img class="logo" src="${LOGO_URI}" alt="SHB" height="26">
     <span class="pn">CM Dashboard</span>
   </div>
@@ -57,6 +58,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
     <button class="tab" id="tab-email" onclick="show('email')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</button>
     <button class="tab" id="tab-jira" onclick="show('jira')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Jira</button>
   </div>
+  <span class="synctime" title="Thời điểm trang portal này được tạo — trên bản build tĩnh (GitLab) là lúc sync.js chạy; trên Vercel là lúc mở trang">Cập nhật: ${new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span>
 </div></div>
 <script>
 var SRC={fb:'/api/fb-dashboard',email:'/api/email-dashboard',jira:'/api/jira/'},loaded={},cur='fb';
