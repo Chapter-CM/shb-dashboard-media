@@ -47,8 +47,20 @@ sync_data:
   image: gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-alpine-amd
   script:
     - node --version
-    - npm ci
+    - npm install
     - node sync.js
+    # SPA Jira (public/api/jira/index.html) load thư viện UMD từ /vendors/ — bản gốc
+    # làm bước này trong Dockerfile (kèm ARG chứa JIRA_TOKEN, bake secret vào image);
+    # giờ Dockerfile.dashboard chỉ COPY nên tạo vendors ở đây, cùng chỗ assemble public/.
+    - npm install --no-save react@18 react-dom@18 @babel/standalone prop-types@15.8.1 recharts@2.12.7 html2canvas@1.4.1 jspdf@2.5.1
+    - mkdir -p public/vendors
+    - cp node_modules/react/umd/react.production.min.js public/vendors/
+    - cp node_modules/react-dom/umd/react-dom.production.min.js public/vendors/
+    - cp node_modules/@babel/standalone/babel.min.js public/vendors/
+    - cp node_modules/prop-types/prop-types.min.js public/vendors/
+    - cp node_modules/recharts/umd/Recharts.js public/vendors/Recharts.min.js
+    - cp node_modules/html2canvas/dist/html2canvas.min.js public/vendors/
+    - cp node_modules/jspdf/dist/jspdf.umd.min.js public/vendors/
     - ls -la public/
   artifacts:
     paths:

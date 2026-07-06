@@ -13,7 +13,12 @@ Bối cảnh merge: xem `KE_HOACH_MIGRATION.md` mục 7c và `HANDOFF.md` trong 
 ## Nội dung còn giữ (không trùng với gì đã có trong repo này)
 - `EXCEL_SCHEMA.js` — tài liệu cấu trúc cột Excel (nguồn Power Automate, tiền thân của `sync.js`).
 - `INDEX_PATCH.js` — ghi chú các chỗ đã sửa trong `index.html` (chuyển từ đọc Google Sheet sang đọc `data.json` tĩnh).
-- `public/index.html`, `public/config.json` — SPA React + cấu hình giao diện gốc của Jira dashboard.
+- `public/index.html` — SPA React của Jira dashboard. ⚠️ **Không còn là bản chụp thuần**: đã
+  sửa thêm chế độ embed (06/07/2026 — script phát hiện iframe + CSS `html.embed`: chừa dải
+  63px cho thanh tab portal, ẩn brand trùng lặp; mở trực tiếp thì y nguyên). Đây là **bản
+  nguồn hiện hành** cho `public/api/jira/index.html` bên `cm-dashboard` — sửa ở đây rồi
+  copy sang, đừng sửa lệch 2 nơi.
+- `public/config.json` — cấu hình giao diện gốc của Jira dashboard (bản chụp thuần).
 - `public/data.json` — rỗng trong bản chụp này (chưa từng sync hoặc đã bị xoá trước khi export).
 
 ## Đã xoá khỏi bản lưu này (tránh nhầm với bản đã merge)
