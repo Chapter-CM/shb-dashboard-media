@@ -2,7 +2,7 @@
 /*
  * Build tĩnh cho GitLab CI/CD Schedule (§3.2, §4 kế hoạch): gọi lại đúng handler
  * hiện có của mỗi route (không sửa code trong api/*.js) với req/res giả lập, chụp
- * lại HTML trả về, ghi ra dist/ để nginx phục vụ như file tĩnh — không có DB/secret
+ * lại HTML trả về, ghi ra public/ để nginx phục vụ như file tĩnh — không có DB/secret
  * nào lộ ra ở tầng phục vụ trang.
  *
  * Route KHÔNG bake tĩnh: /api/track, /api/ingest (đã tách sang server/ingest-server.js,
@@ -29,7 +29,7 @@ const ROUTES = [
   { file: './api/leader-dashboard.js', out: 'api/leader.html' },
 ];
 
-const OUT_DIR = path.join(__dirname, 'dist');
+const OUT_DIR = path.join(__dirname, 'public');
 
 function fakeReq(url) {
   return Object.assign(
@@ -63,7 +63,7 @@ async function buildOne({ file, out }) {
   const outPath = path.join(OUT_DIR, out);
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, body);
-  console.log(`[sync] ${file} -> dist/${out} (${body.length} bytes)`);
+  console.log(`[sync] ${file} -> public/${out} (${body.length} bytes)`);
 }
 
 async function main() {

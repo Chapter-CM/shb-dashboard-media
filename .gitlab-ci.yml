@@ -2,7 +2,7 @@
 # (GitLab CI -> registry nội bộ -> ECR -> ArgoCD -> EKS, xem KE_HOACH_MIGRATION.md §6 câu 4).
 #
 # Stages:
-#   sync    - chạy sync.js đọc DB nội bộ, bake HTML tĩnh -> dist/ (chạy trên schedule, §4)
+#   sync    - chạy sync.js đọc DB nội bộ, bake HTML tĩnh -> public/ (chạy trên schedule, §4)
 #   build   - build 2 image: dashboard tĩnh (nginx) + ingest service (Node, luôn chạy)
 #   deploy  - push registry + trigger ArgoCD (giữ đúng pattern cm-dashboard, điền lại cho khớp cụm thật)
 
@@ -30,7 +30,7 @@ sync_dashboard_data:
     - node sync.js
   artifacts:
     paths:
-      - dist/
+      - public/
     expire_in: 2 hours
 
 build_dashboard_image:
