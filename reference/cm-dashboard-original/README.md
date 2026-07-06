@@ -10,11 +10,16 @@ lịch sử/đối chiếu, KHÔNG dùng để deploy hay copy đè lên bản �
 
 Bối cảnh merge: xem `KE_HOACH_MIGRATION.md` mục 7c và `HANDOFF.md` trong repo này.
 
-## Nội dung
-- `.gitlab-ci.yml`, `Dockerfile`, `nginx.conf`, `package.json` — pipeline/hạ tầng gốc.
-- `sync.js` — script fetch Jira REST API, ghi `public/data.json`.
+## Nội dung còn giữ (không trùng với gì đã có trong repo này)
 - `EXCEL_SCHEMA.js` — tài liệu cấu trúc cột Excel (nguồn Power Automate, tiền thân của `sync.js`).
 - `INDEX_PATCH.js` — ghi chú các chỗ đã sửa trong `index.html` (chuyển từ đọc Google Sheet sang đọc `data.json` tĩnh).
-- `SETUP_GUIDE.md` — hướng dẫn cũ (đã lỗi thời theo xác nhận của người dùng 06/07/2026, không dùng được nữa).
-- `public/index.html`, `public/config.json` — SPA React + cấu hình giao diện.
+- `public/index.html`, `public/config.json` — SPA React + cấu hình giao diện gốc của Jira dashboard.
 - `public/data.json` — rỗng trong bản chụp này (chưa từng sync hoặc đã bị xoá trước khi export).
+
+## Đã xoá khỏi bản lưu này (tránh nhầm với bản đã merge)
+`Dockerfile`, `nginx.conf`, `package.json`, `package-lock.json`, `sync.js` — repo này
+đã có bản **thay thế/gộp** cho đúng những file này ở gốc repo (`Dockerfile.dashboard`
++ `Dockerfile.ingest`, `nginx.conf`, `package.json`, `sync.js` ở thư mục gốc) — dùng
+bản đó, không dùng bản gốc trong `.gitlab-ci.yml` cũ nữa.
+
+`SETUP_GUIDE.md` — đã xác nhận là bản cũ/lỗi thời (06/07/2026), không còn dùng được.
