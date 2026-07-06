@@ -231,6 +231,24 @@ Các lý do kỹ thuật đứng sau, xếp theo sức nặng:
 
 ---
 
+## 7c. Hợp nhất thêm Jira dashboard (`cm-dashboard`) vào cùng portal
+
+> **Quyết định:** không xin repo GitLab mới, không xin domain mới. **Mở rộng repo `cm-dashboard` đã có** (tái dùng đúng pattern CI/CD: GitLab CI → registry nội bộ → ECR → ArgoCD → EKS đang chạy sẵn cho Jira dashboard) làm nơi build portal hợp nhất 3 tab **Email / Facebook / Jira**, phục vụ chung 1 URL nội bộ. Chỉ team CM xem nên gộp chung tiện theo dõi; không có rủi ro kỹ thuật đáng kể nếu tách đúng theo route.
+
+**Nguyên tắc hợp nhất:** portal chỉ là lớp vỏ chuyển tab — 3 dashboard vẫn là 3 module render độc lập, giữ nguyên cơ chế dữ liệu riêng của từng cái (Jira: đọc động qua Jira API như hiện tại; Email/Facebook: build tĩnh theo schedule như §3.2). Không ép Jira dashboard sang build tĩnh.
+
+**Các bước:**
+1. **Thêm route thứ 3** — đưa code hiện tại của `cm-dashboard` (Jira) vào route riêng trong project hợp nhất (ví dụ `api/jira-dashboard.js` hoặc giữ nguyên server con nếu cơ chế khác), không đổi logic gọi Jira API.
+2. **Sửa `portal.js`** — thêm tab thứ 3 (nút chuyển + iframe same-origin trỏ route Jira), theo đúng pattern lazy-load + giữ trạng thái đang dùng cho Email/Facebook.
+3. **Rewrites/nginx** — thêm rule route cho Jira dashboard, giữ nguyên mọi route cũ (không phá URL VBA/userscript/Jira webhook nếu có).
+4. **Tách secret theo namespace** — token Jira API để env riêng, không chung với `SUPABASE_*`/`EMAIL_SUPABASE_*`, tránh lộ chéo giữa 3 module.
+5. **Resource pod** — xác nhận nhanh với DevOps (Quang) là pod hiện tại đủ CPU/RAM chạy thêm 1 module động (Jira) song song 2 module tĩnh (Email/FB); không phải xin duyệt hạng mục hạ tầng mới, chỉ hỏi để chắc không cần scale thêm.
+6. **Test song song** — chạy thử cả 3 tab trên môi trường dev trước khi cutover, xác nhận tab Jira không bị ảnh hưởng bởi lịch build tĩnh (schedule) của Email/Facebook.
+
+**Không cần xin thêm so với mục 6:** DB, runner, Node service (:3001), DNS subdomain — các hạng mục đã liệt kê đều đủ dùng chung cho cả 3 dashboard; gộp thêm Jira không phát sinh câu hỏi hạ tầng mới với IT/DevOps.
+
+---
+
 ## 8. Rủi ro & xử lý (hợp nhất)
 
 | Rủi ro | Mức độ | Xử lý |
