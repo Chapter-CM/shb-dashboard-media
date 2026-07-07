@@ -12,6 +12,10 @@ const FONT_FACE = require('../lib/fonts');
 module.exports = (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
+  // Bản build tĩnh GitLab (sync.js) gọi handler qua fakeReq không có header host
+  // (khác Vercel luôn có host) — dùng để phân biệt: nội bộ SHB mặc định mở tab Jira
+  // (đây là dashboard chính của domain cm-dashboard), Vercel vẫn mặc định Facebook.
+  const DEFAULT_TAB = (req.headers && req.headers.host) ? 'fb' : 'jira';
   res.send(`<!DOCTYPE html><html lang="vi"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SHB CM Dashboard</title>
@@ -45,24 +49,24 @@ body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI'
 <body>
 <div class="stage">
   <div class="ld" id="ld"><span class="sp"></span><span>Đang tải…</span></div>
-  <iframe id="if-fb" title="Facebook Dashboard"></iframe>
+  <iframe id="if-fb" title="Facebook Dashboard" ${DEFAULT_TAB === 'fb' ? '' : 'hidden'}></iframe>
   <iframe id="if-email" title="Email Dashboard" hidden></iframe>
-  <iframe id="if-jira" title="Jira Dashboard" hidden></iframe>
+  <iframe id="if-jira" title="Jira Dashboard" ${DEFAULT_TAB === 'jira' ? '' : 'hidden'}></iframe>
 </div>
 <div class="topbar"><div class="topbar-in">
-  <div class="brand" onclick="show('fb')" style="cursor:pointer" title="Về trang mặc định">
+  <div class="brand" onclick="show('${DEFAULT_TAB}')" style="cursor:pointer" title="Về trang mặc định">
     <img class="logo" src="${LOGO_URI}" alt="SHB" height="26">
     <span class="pn">CM Dashboard</span>
   </div>
   <div class="seg">
-    <button class="tab on" id="tab-fb" onclick="show('fb')"><svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M13 22v-8h2.7l.4-3H13V9c0-.9.2-1.5 1.5-1.5H16V4.9C15.7 4.9 14.8 4.8 13.7 4.8 11.4 4.8 9.9 6.2 9.9 8.7V11H7.2v3H9.9v8z"/></svg>Facebook</button>
+    <button class="tab${DEFAULT_TAB === 'fb' ? ' on' : ''}" id="tab-fb" onclick="show('fb')"><svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M13 22v-8h2.7l.4-3H13V9c0-.9.2-1.5 1.5-1.5H16V4.9C15.7 4.9 14.8 4.8 13.7 4.8 11.4 4.8 9.9 6.2 9.9 8.7V11H7.2v3H9.9v8z"/></svg>Facebook</button>
     <button class="tab" id="tab-email" onclick="show('email')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</button>
-    <button class="tab" id="tab-jira" onclick="show('jira')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Jira</button>
+    <button class="tab${DEFAULT_TAB === 'jira' ? ' on' : ''}" id="tab-jira" onclick="show('jira')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Jira</button>
   </div>
   <span class="synctime" title="Thời điểm trang portal này được tạo — trên bản build tĩnh (GitLab) là lúc sync.js chạy; trên Vercel là lúc mở trang">Cập nhật: ${new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span>
 </div></div>
 <script>
-var SRC={fb:'/api/facebook',email:'/api/email',jira:'/api/jira/'},loaded={},cur='fb';
+var SRC={fb:'/api/facebook',email:'/api/email',jira:'/api/jira/'},loaded={},cur='${DEFAULT_TAB}';
 function setLoad(on){var l=document.getElementById('ld');if(l)l.style.display=on?'flex':'none';}
 function ensure(k){var f=document.getElementById('if-'+k);if(!loaded[k]){setLoad(true);f.onload=function(){loaded[k]=1;if(cur===k)setLoad(false);};f.src=SRC[k];}else if(cur===k){setLoad(false);}}
 function show(k){
@@ -77,7 +81,7 @@ function show(k){
 }
 // mở theo hash (#email/#fb) nếu có
 var h=(location.hash||'').replace('#','');
-show(SRC[h]?h:'fb');
+show(SRC[h]?h:'${DEFAULT_TAB}');
 </script>
 </body></html>`);
 };
