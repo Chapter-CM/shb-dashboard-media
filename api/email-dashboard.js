@@ -72,7 +72,7 @@ module.exports = async (req, res) => {
   res.send('<!DOCTYPE html><html lang="vi"><head>'
     + '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     + '<title>SHB CM Email Tracker v4.5</title>'
-    + '<style>' + FONT_FACE + CSS + 'html.embed body{padding-top:63px}.embed .mast{top:63px}.embed .mast .brand{display:none}.embed .mast .pgsw{display:none}.embed .mast .mast-in{justify-content:flex-end}</style></head>'
+    + '<style>' + FONT_FACE + CSS + 'html.embed body{padding-top:63px}.embed .mast{top:63px}.embed .mast .mast-row1{display:none}</style></head>'
     + '<body><script>try{if(window.self!==window.top)document.documentElement.classList.add(\'embed\')}catch(e){document.documentElement.classList.add(\'embed\')}</script><div id="app"></div>'
     + '<script>const LOGS=' + safe + ';const REACH_TARGET=70;const MIN_N=5;const EVENTS_LIMIT=' + EVENTS_LIMIT + ';const LOGO_URI=' + JSON.stringify(LOGO_URI) + ';' + JS + '</script></body></html>');
 };
@@ -120,7 +120,9 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 [data-tip]{cursor:help}
 /* ── Masthead ── */
 .mast{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(20px) saturate(150%);border-bottom:1px solid var(--hair)}
-.mast-in{max-width:1200px;margin:0 auto;padding:14px 26px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.mast-row1{max-width:1200px;margin:0 auto;padding:12px 26px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.mast-row2{max-width:1200px;margin:0 auto;padding:0 26px 12px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.mast-row2-left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.mast-row2-right{display:flex;align-items:center;gap:8px;flex:none}
 .brand{display:flex;align-items:center;gap:12px}
 .logo{width:34px;height:34px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px;box-shadow:0 8px 22px -6px rgba(225,29,42,.6);flex-shrink:0}
 .brand .tt{font-size:15px;font-weight:700;letter-spacing:-.01em}.brand .ss{font-size:11.5px;color:var(--muted);margin-top:1px}
@@ -841,7 +843,7 @@ function radialGauge(pct,target){
     +'<path d="'+gArc(cx,cy,r,A0,A0+SPAN)+'" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="'+sw+'" stroke-linecap="round"/>'
     +'<path d="'+gArc(cx,cy,r,A0,valEnd)+'" fill="none" stroke="url(#gg)" stroke-width="'+sw+'" stroke-linecap="round" filter="url(#glow)"/>'
     +'<line x1="'+ti[0].toFixed(1)+'" y1="'+ti[1].toFixed(1)+'" x2="'+to[0].toFixed(1)+'" y2="'+to[1].toFixed(1)+'" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>'
-    +'<text x="110" y="104" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="46" font-weight="700" letter-spacing="-2">'+Math.round(p)+'%</text>'
+    +'<text x="110" y="104" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="34" font-weight="700" letter-spacing="-1">'+Math.round(p)+'%</text>'
     +'<text x="110" y="130" text-anchor="middle" fill="rgba(255,255,255,.78)" font-family="Plus Jakarta Sans,sans-serif" font-size="12" font-weight="600">Mục tiêu '+target+'%</text>'
     +'</svg>';
 }
@@ -1336,14 +1338,14 @@ function masthead(mode){
   var presets=[[0,'Tất cả'],[7,'7N'],[30,'30N'],[90,'90N']].map(function(p){return '<button class="'+((!custom&&_days===p[0])?'on':'')+'" onclick="flt('+p[0]+')">'+p[1]+'</button>';}).join('');
   var lbl=custom?(fmtDay(_from)+'–'+fmtDay(_to)):'Tuỳ chọn';
   var pgsw='<div class="pgsw"><a href="/api/facebook" data-tip="Facebook Dashboard"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 22v-8h2.7l.4-3H13V9c0-.9.2-1.5 1.5-1.5H16V4.9C15.7 4.9 14.8 4.8 13.7 4.8 11.4 4.8 9.9 6.2 9.9 8.7V11H7.2v3H9.9v8z"/></svg>Facebook</a><a class="on" href="/api/email" data-tip="Email Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</a></div>';
-  return '<div class="mast"><div class="mast-in"><div class="brand"><img class="mh-logoimg" src="'+LOGO_URI+'" alt="SHB"><span class="mh-div"></span><span class="mh-sub">CM Dashboard</span></div>'
+  var mhGrp='<div class="mh-grp"><button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K) — tìm kiếm tính năng">⌘K</button>'
+    +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Đổi giao diện sáng/tối" id="thBtn">'+(_theme==='dark'?'☼':'☾')+'</button></div>';
+  return '<div class="mast"><div class="mast-row1"><div class="brand"><img class="mh-logoimg" src="'+LOGO_URI+'" alt="SHB"><span class="mh-div"></span><span class="mh-sub">CM Dashboard</span></div>'
     +pgsw
-    +'<div class="ctrls"><div class="seg mh-range">'+presets+'</div>'
+    +'</div><div class="mast-row2"><div class="mast-row2-left"><div class="seg mh-range">'+presets+'</div>'
     +'<div class="csel"><button class="dtbtn'+(custom?' on':'')+'" onclick="toggleDtPop(event)" data-tip="Chọn khoảng ngày tuỳ chọn"><span>📅 '+esc(lbl)+'</span><span class="arr">▾</span></button>'
     +'<div class="csel-dd dtpop" id="dt-pop" style="display:none" onclick="event.stopPropagation()"><div class="dtpop-h">Khoảng ngày tuỳ chọn</div><label class="dtpop-l">Từ ngày<input type="date" id="dt-from" value="'+isoDate(_from)+'"></label><label class="dtpop-l">Đến ngày<input type="date" id="dt-to" value="'+isoDate(_to)+'"></label><button class="dtpop-apply" onclick="onRange()">Áp dụng</button>'+(custom?'<button class="dtpop-clear" onclick="flt(0)">Xoá lọc ngày</button>':'')+'</div></div>'
-    +'<div class="mh-grp"><button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K) — tìm kiếm tính năng">⌘K</button>'
-    +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Đổi giao diện sáng/tối" id="thBtn">'+(_theme==='dark'?'☼':'☾')+'</button></div>'
-    +mBtn+'</div></div></div>';
+    +'</div><div class="mast-row2-right">'+mhGrp+mBtn+'</div></div></div>';
 }
 
 /* ── views ── */

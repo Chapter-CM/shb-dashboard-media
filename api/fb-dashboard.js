@@ -231,7 +231,9 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .num{font-family:var(--num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .wrap{max-width:1200px;margin:0 auto;padding:0 26px}
 .mast{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(20px) saturate(150%);border-bottom:1px solid var(--hair)}
-.mast-in{max-width:1200px;margin:0 auto;padding:14px 26px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.mast-row1{max-width:1200px;margin:0 auto;padding:12px 26px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.mast-row2{max-width:1200px;margin:0 auto;padding:0 26px 12px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.mast-row2-left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.mast-row2-right{display:flex;align-items:center;gap:8px;flex:none}
 .brand{display:flex;align-items:center;gap:12px}
 .logo{width:34px;height:34px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px}
 .brand .tt{font-size:15px;font-weight:700}.brand .ss{font-size:11.5px;color:var(--muted);margin-top:1px}
@@ -506,7 +508,7 @@ module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send('<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8">'
     + '<meta name="viewport" content="width=device-width,initial-scale=1"><title>SHB Facebook Dashboard</title>'
-    + '<style>' + FONT_FACE + CSS + 'html.embed body{padding-top:63px}.embed .mast{top:63px}.embed .mast .brand{display:none}.embed .mast .pgsw{display:none}.embed .mast .mast-in{justify-content:flex-end}</style></head>'
+    + '<style>' + FONT_FACE + CSS + 'html.embed body{padding-top:63px}.embed .mast{top:63px}.embed .mast .mast-row1{display:none}</style></head>'
     + '<body><script>try{if(window.self!==window.top)document.documentElement.classList.add(\'embed\')}catch(e){document.documentElement.classList.add(\'embed\')}</script><div id="app"></div>'
     + '<script>var DATA=' + safe + ';var TARGET_ER=6;var MIN_N=5;var LOGO_URI=' + JSON.stringify(LOGO_URI) + ';' + JS + '</script></body></html>');
 };
@@ -555,7 +557,7 @@ function radialGauge(pct,target){
     +'<path d="'+gArc(cx,cy,r,A0,A0+SPAN)+'" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="'+sw+'" stroke-linecap="round"/>'
     +'<path d="'+gArc(cx,cy,r,A0,valEnd)+'" fill="none" stroke="url(#gg)" stroke-width="'+sw+'" stroke-linecap="round" filter="url(#glow)"/>'
     +'<line x1="'+ti[0].toFixed(1)+'" y1="'+ti[1].toFixed(1)+'" x2="'+to[0].toFixed(1)+'" y2="'+to[1].toFixed(1)+'" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>'
-    +'<text x="110" y="104" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="46" font-weight="700" letter-spacing="-2">'+pc(p)+'%</text>'
+    +'<text x="110" y="104" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="34" font-weight="700" letter-spacing="-1">'+pc(p)+'%</text>'
     +'<text x="110" y="130" text-anchor="middle" fill="rgba(255,255,255,.78)" font-family="Plus Jakarta Sans,sans-serif" font-size="12" font-weight="600">Mục tiêu '+target+'%</text></svg>';
 }
 function gaugeBig(pct,target,main,sub){
@@ -563,7 +565,7 @@ function gaugeBig(pct,target,main,sub){
   var valEnd=A0+p/100*SPAN,tickA=A0+Math.max(0,Math.min(100,target))/100*SPAN;
   var ti=gPolar(cx,cy,r,tickA),to=gPolar(cx,cy,r+11,tickA);
   var tick=(target>0&&target<100)?'<line x1="'+ti[0].toFixed(1)+'" y1="'+ti[1].toFixed(1)+'" x2="'+to[0].toFixed(1)+'" y2="'+to[1].toFixed(1)+'" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>':'';
-  var fs=main.length>10?26:main.length>7?34:46;
+  var fs=main.length>10?20:main.length>7?26:34;
   return '<svg viewBox="0 0 220 184" style="width:220px;height:auto">'
     +'<path d="'+gArc(cx,cy,r,A0,A0+SPAN)+'" fill="none" stroke="rgba(255,255,255,.32)" stroke-width="'+sw+'" stroke-linecap="round"/>'
     +(p>0?'<path d="'+gArc(cx,cy,r,A0,valEnd)+'" fill="none" stroke="#ffffff" stroke-width="'+sw+'" stroke-linecap="round"/>':'')
@@ -1030,13 +1032,13 @@ function dateCtrl(){
 function masthead(mode){
   var mBtn='<a class="mode-btn" href="/api/leader" target="_top" data-tip="Tóm tắt lãnh đạo — tổng hợp cả Facebook &amp; Email">Tóm tắt lãnh đạo</a>';
   var pgsw='<div class="pgsw"><a class="on" href="/api/facebook" data-tip="Facebook Dashboard"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 22v-8h2.7l.4-3H13V9c0-.9.2-1.5 1.5-1.5H16V4.9C15.7 4.9 14.8 4.8 13.7 4.8 11.4 4.8 9.9 6.2 9.9 8.7V11H7.2v3H9.9v8z"/></svg>Facebook</a><a href="/api/email" data-tip="Email Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</a></div>';
-  return '<div class="mast"><div class="mast-in"><div class="brand"><img class="mh-logoimg" src="'+LOGO_URI+'" alt="SHB"><span class="mh-div"></span><span class="mh-sub">CM Dashboard</span></div>'
+  var mhGrp='<div class="mh-grp"><button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K)">⌘K</button>'
+    +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Sáng/Tối">'+(_theme==='dark'?'☼':'☾')+'</button></div>';
+  return '<div class="mast"><div class="mast-row1"><div class="brand"><img class="mh-logoimg" src="'+LOGO_URI+'" alt="SHB"><span class="mh-div"></span><span class="mh-sub">CM Dashboard</span></div>'
     +pgsw
-    +'<div class="ctrls">'
+    +'</div><div class="mast-row2"><div class="mast-row2-left">'
     +dateCtrl()
-    +'<div class="mh-grp"><button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K)">⌘K</button>'
-    +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Sáng/Tối">'+(_theme==='dark'?'☼':'☾')+'</button></div>'
-    +mBtn+'</div></div></div>';
+    +'</div><div class="mast-row2-right">'+mhGrp+mBtn+'</div></div></div>';
 }
 
 /* ── views ── */
