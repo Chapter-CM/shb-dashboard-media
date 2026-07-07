@@ -43,24 +43,40 @@ Facebook | Email | Jira, thay vì xin repo/domain mới.
   `update_manifest_ingest_aws_dev` (đúng dự đoán — ArgoCD app `cm-dashboard-ingest` chưa được
   Quang xác nhận/tạo). Dashboard chính (Facebook/Email/Jira) đã deploy qua job
   `update_manifest_aws_dev` (PASS).
-- ⚠️ **Bug hạ tầng phát hiện sau khi merge**: giao diện KHÔNG đổi dù pipeline pass, vì
-  image tag cố định `:dev` + `imagePullPolicy` mặc định (không phải `Always`) → pod restart
-  dùng lại image cache cũ, không pull bản mới. **Đã báo Quang xin thêm `imagePullPolicy: Always`**
-  cho 2 Deployment (`cm-dashboard`, `cm-dashboard-ingest`) trên Helm/K8s manifest (ngoài repo này,
-  Quang quản lý) — đây là fix đúng chỗ, ít rủi ro nhất, chưa xác nhận Quang đã làm xong chưa.
+- 🔥 **SỰ CỐ 503 chiều 07/07 — ĐÃ TÌM RA NGUYÊN NHÂN GỐC (lỗi của mình, không phải hạ tầng):**
+  `nginx.conf` merge sáng 07/07 có `proxy_pass http://ingest-service:3001` — nginx phân giải
+  hostname trong proxy_pass **ngay lúc khởi động**, mà Service `ingest-service` chưa tồn tại
+  trên cluster (app ingest chưa deploy được vì PermissionDenied) → nginx chết ngay
+  (`[emerg] host not found in upstream`) → pod crash-loop → **503 toàn site kể cả /health**.
+  Đã TÁI HIỆN được bằng `nginx -t` với chính file đó (fail đúng dòng 61), fix bằng cách
+  **stub 2 route** `/api/track`+`/api/ingest` = `return 503` tạm (commit `b611acb`,
+  `nginx -t` pass) — khi Quang tạo xong Service ingest thì khôi phục proxy_pass theo comment
+  trong file. **Vì sao sáng merge xong vẫn chạy, chiều mới chết:** pod restart sau merge dùng
+  lại image CŨ cache trên node (`imagePullPolicy` không phải `Always` — cũng chính là lý do
+  UI không đổi); image mới nhiễm độc nằm chờ trong ECR, đến khi k8s dựng lại/di chuyển pod
+  sang node phải pull thật → nginx crash. 2 hiện tượng (UI không đổi + 503 muộn) = 1 chuỗi
+  nguyên nhân.
+- ⚠️ **Vẫn cần Quang thêm `imagePullPolicy: Always`** cho 2 Deployment: vừa để fix nginx ở trên
+  chắc chắn được pull về (node đang cache image hỏng tag `:dev`), vừa để mọi lần build sau
+  thực sự lên hình. Chưa xác nhận Quang đã làm.
 - **Đã đẩy tiếp sang GitLab tối 07/07** (qua git CLI, không dùng Web IDE):
   - `api/portal.js` (mặc định tab Jira nội bộ) — đã push.
   - `reference/.../index.html` → `public/api/jira/index.html` (masthead 2 hàng Jira) — đã push.
   - `api/fb-dashboard.js` + `api/email-dashboard.js` (masthead 2 hàng + fix gauge) — **vừa hướng
     dẫn user copy+commit+push xong, CHƯA xác nhận kết quả pipeline lần này.**
 
-### ✅ VIỆC ĐẦU TIÊN PHIÊN SAU
-1. Xác nhận pipeline GitLab (lần push `fb-dashboard.js`+`email-dashboard.js` vừa rồi) PASS.
-2. Hỏi lại Quang đã thêm `imagePullPolicy: Always` cho 2 Deployment chưa — nếu rồi, mở
-   `cm-dashboard.dev-saha.aws.shb.com.vn/` kiểm tra thật: phải thấy portal mở thẳng tab Jira,
-   masthead 2 hàng đồng bộ cả 3 dashboard, không đè chữ, gauge không chạm viền cung.
-3. Nếu Quang chưa xử lý pull policy → nhắc lại, đây là điều kiện BẮT BUỘC để mọi lần
-   push sau này thực sự lên hình (không chỉ lần này).
+### ✅ VIỆC ĐẦU TIÊN PHIÊN SAU (thứ tự bắt buộc — đang có sự cố 503)
+1. **Đẩy `nginx.conf` đã fix sang GitLab** (đã gửi file trong chat 07/07 chiều; nguồn = commit
+   `b611acb` repo này) → commit vào nhánh làm việc → MR → **merge vào `main`** để pipeline
+   build image mới có nginx khởi động được.
+2. **Nhờ Quang thêm `imagePullPolicy: Always`** cho Deployment `cm-dashboard` rồi restart —
+   không có bước này image fix có thể KHÔNG được pull về (node đang cache image hỏng cùng
+   tag `:dev`), site vẫn 503 dù pipeline xanh.
+3. Site sống lại → kiểm tra: portal mở thẳng tab Jira, masthead 2 hàng cả 3 dashboard,
+   gauge không chạm viền. (Lưu ý: bản fb/email masthead 2 hàng push lên nhánh
+   `merge-email-facebook` lúc ~13:40 07/07 — kiểm tra đã merge vào main chưa, user nói đã có.)
+4. Báo Quang thêm vụ RBAC `PermissionDenied` khi restart `cm-dashboard-ingest` (log job
+   `update_manifest_ingest_aws_dev`).
 
 ### Sau đó — chờ/thực hiện theo phản hồi anh Quang (đã hỏi qua Teams 06/07, còn treo)
 - [ ] Nhận **MySQL credentials** → điền CI/CD Variables (`Settings → CI/CD → Variables`):
