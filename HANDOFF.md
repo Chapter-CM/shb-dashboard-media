@@ -11,10 +11,11 @@
 (Jira dashboard nội bộ, `gitlab-nhs.shb.com.vn/cm/cm-dashboard`) thành portal 3 tab
 Facebook | Email | Jira, thay vì xin repo/domain mới.
 
-### Trạng thái 2 repo cuối ngày 06/07
+### Trạng thái 2 repo — cập nhật 07/07/2026
 
-**GitHub `shb-dashboard-media`** (branch `claude/dashboard-log-repo-strategy-v2t8f1`, **PR #76 đang mở**):
-= NGUỒN CHUẨN, chứa bản MỚI NHẤT của mọi thứ. Đã xong + test cục bộ:
+**GitHub `shb-dashboard-media`**: ✅ **Đã merge PR #76 vào `claude/loving-planck-y6lw57`** (production,
+Vercel auto-deploy) — 7 commit tối 06/07 (portal fix, Jira embed, rà soát 6 lỗi, snapshot
+cm-dashboard gốc...) đã lên bản mới nhất trên GitHub. = NGUỒN CHUẨN, chứa bản MỚI NHẤT của mọi thứ:
 - Hạ tầng: `sync.js` v4 (gộp Jira + Email/FB), `lib/db-client.js` (đọc **và ghi** MySQL,
   fallback Supabase), `server/ingest-server.js`, `Dockerfile.dashboard/.ingest`,
   `nginx.conf`, `.gitlab-ci.yml` (khớp pattern thật: AWS ECR + argocd restart + vendors + needs).
@@ -28,14 +29,21 @@ Facebook | Email | Jira, thay vì xin repo/domain mới.
   schema) — chi tiết ở commit `ddfa274`.
 
 **GitLab `cm-dashboard`** (nhánh `merge-email-facebook`, **MR `!3` đang mở**, pipeline PASS):
-= ĐANG TỤT HẬU 9 FILE so với GitHub. Đã có: code merge đợt đầu + DEVOPS_NOTES.md + portal
-sửa route + font. **CHƯA có: 9 file fix của đợt rà soát tối 06/07.**
+= ĐANG TỤT HẬU so với GitHub. Đã có: code merge đợt đầu + DEVOPS_NOTES.md + portal
+sửa route + font. **CHƯA có:**
+- 9 file fix của đợt rà soát tối 06/07 (danh sách + lệnh copy: `GITLAB_COPY_LIST.md`).
+- 2 file bổ sung gửi sau đó cùng tối: `index.html` (Jira SPA — thêm chế độ embed, đồng bộ
+  masthead 63px với 2 dashboard kia) → đích `public/api/jira/index.html`, và `.gitlab-ci.yml`
+  (thêm bước tạo `/vendors/` trong job `sync_data`, thiếu bước này thì tab Jira sẽ trắng trơn
+  khi build thật) → đích `.gitlab-ci.yml`.
 
-### ✅ VIỆC ĐẦU TIÊN SÁNG MAI (trước mọi thứ khác)
+### ✅ VIỆC ĐẦU TIÊN — CHƯA XONG
 1. Giải nén `gitlab-sync.zip` (đã gửi trong chat 06/07 tối; nguồn cũng nằm trong repo này)
    vào `Downloads\gitlab-sync`, rồi làm đúng theo **`GITLAB_COPY_LIST.md`** (9 lệnh copy +
    commit + push có sẵn từng dòng).
-2. Kiểm tra pipeline MR `!3` PASS sau khi push.
+2. Copy tiếp 2 file bổ sung ở trên (`index.html`, `.gitlab-ci.yml`) — ghi đè bản vừa copy ở
+   bước 1 nếu trùng tên.
+3. Kiểm tra pipeline MR `!3` PASS sau khi push.
 
 ### Sau đó — chờ/thực hiện theo phản hồi anh Quang (đã hỏi 3 việc qua Teams 06/07)
 - [ ] Nhận **MySQL credentials** → điền CI/CD Variables (`Settings → CI/CD → Variables`):
