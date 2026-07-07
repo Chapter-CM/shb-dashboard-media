@@ -65,18 +65,53 @@ Facebook | Email | Jira, thay vì xin repo/domain mới.
   - `api/fb-dashboard.js` + `api/email-dashboard.js` (masthead 2 hàng + fix gauge) — **vừa hướng
     dẫn user copy+commit+push xong, CHƯA xác nhận kết quả pipeline lần này.**
 
-### ✅ VIỆC ĐẦU TIÊN PHIÊN SAU (thứ tự bắt buộc — đang có sự cố 503)
-1. **Đẩy `nginx.conf` đã fix sang GitLab** (đã gửi file trong chat 07/07 chiều; nguồn = commit
-   `b611acb` repo này) → commit vào nhánh làm việc → MR → **merge vào `main`** để pipeline
-   build image mới có nginx khởi động được.
-2. **Nhờ Quang thêm `imagePullPolicy: Always`** cho Deployment `cm-dashboard` rồi restart —
-   không có bước này image fix có thể KHÔNG được pull về (node đang cache image hỏng cùng
-   tag `:dev`), site vẫn 503 dù pipeline xanh.
-3. Site sống lại → kiểm tra: portal mở thẳng tab Jira, masthead 2 hàng cả 3 dashboard,
-   gauge không chạm viền. (Lưu ý: bản fb/email masthead 2 hàng push lên nhánh
-   `merge-email-facebook` lúc ~13:40 07/07 — kiểm tra đã merge vào main chưa, user nói đã có.)
+### 🔬 TỔNG REVIEW TỐI 07/07 — toàn bộ code ĐÃ KIỂM CHỨNG BẰNG CHẠY THẬT, không cần test lại
+Sau sự cố 503, đã giả lập **nguyên chuỗi deploy nội bộ** ngay trong sandbox (cài nginx thật)
+để chặn mọi lỗi cùng lớp "syntax pass nhưng deploy chết". Kết quả — TẤT CẢ PASS:
+1. **Syntax**: 12/12 file JS (`api/ lib/ server/ sync.js`) pass `node --check`; `.gitlab-ci.yml`
+   parse YAML hợp lệ.
+2. **Job `sync_data` mô phỏng nguyên bản** với **0 biến env** (đúng tình trạng CI hiện tại):
+   `npm install` → `node sync.js` chạy hết (thiếu JIRA_* chỉ warn rồi bỏ qua phần Jira, không
+   crash) → bake đủ 4 HTML → 7 lệnh `cp` vendors chạy thật OK với đúng version pin
+   (react@18 còn `umd/`, babel@7, recharts 2.12.7, prop-types 15.8.1, html2canvas 1.4.1, jspdf 2.5.1).
+3. **nginx THẬT + `nginx.conf` đã fix + `public/` vừa build**: khởi động OK; probe 10 route:
+   `/health` 200 · `/` 200 (portal, `cur='jira'` đúng mặc định nội bộ) · `/api/facebook|email|leader`
+   200 · `/api/jira/` + `config.json` 200 · `/vendors/*` 200 · `/api/track`+`/api/ingest` 503 stub
+   đúng thiết kế.
+4. **Chromium bấm qua cả 3 tab** trên chính portal nginx đang phục vụ: masthead 2 hàng sạch,
+   không đè chữ, gauge 34px nằm gọn trong cung, KHÔNG lỗi JS mới (chỉ còn 1 lỗi console vô hại
+   có sẵn trong SPA Jira gốc — đã chứng minh tồn tại từ trước khi mình sửa).
+5. **`ingest-server.js`**: boot với 0 env KHÔNG crash (không có nguy cơ crash-loop kiểu nginx);
+   MySQL hỏng → beacon vẫn trả pixel 200 (chỉ log lỗi); sai secret → 401; thiếu env → 500 JSON
+   message rõ; OPTIONS → 204.
+6. **2 Dockerfile** khớp layout đã test (dashboard = COPY nginx.conf+public; ingest = `/app`,
+   require tương đối theo file nên không lệch path).
+7. **Schema MySQL đối chiếu code ghi thật**: bảng `events` 15 cột khớp 100% kể cả độ dài VARCHAR
+   khớp từng giới hạn `clip()`; `fb_group_posts`/`fb_page_insights`/snapshots khớp payload;
+   `buildInsert` convert đúng ISO→Date (mysql2 serialize được), object→JSON string, upsert có
+   `ON DUPLICATE KEY UPDATE` + COALESCE giữ giá trị cũ khi row thiếu cột.
+
+### ✅ VIỆC ĐẦU TIÊN PHIÊN SAU (thứ tự bắt buộc — site nội bộ đang 503)
+1. **Đẩy `nginx.conf` đã fix sang GitLab** — file đã gửi trong chat chiều 07/07 (nguồn = commit
+   `b611acb` repo này, cũng có thể tải lại từ GitHub). Lệnh:
+   ```
+   copy %USERPROFILE%\Downloads\nginx.conf %USERPROFILE%\cm-dashboard\nginx.conf
+   cd %USERPROFILE%\cm-dashboard
+   git checkout main && git pull origin main
+   git checkout -b fix-nginx-ingest-upstream
+   git add nginx.conf
+   git commit -m "Fix 503: stub route ingest - nginx khong khoi dong khi upstream chua ton tai"
+   git push origin fix-nginx-ingest-upstream
+   ```
+   → tạo MR → merge vào `main` ngay (fix sự cố).
+2. Pipeline xanh mà site **vẫn 503** → KHÔNG phải code lỗi: node đang cache image hỏng cùng tag
+   `:dev`. Lúc đó **bắt buộc nhờ Quang thêm `imagePullPolicy: Always`** cho Deployment
+   `cm-dashboard` rồi restart (1 phát giải quyết cả 503 lẫn chuyện mọi bản build sau tự lên hình).
+3. Site sống lại → checklist nghiệm thu: portal mở thẳng tab Jira · masthead 2 hàng đồng bộ cả
+   3 dashboard · không đè chữ · gauge không chạm viền · bấm chuyển tab đủ 3 trang.
 4. Báo Quang thêm vụ RBAC `PermissionDenied` khi restart `cm-dashboard-ingest` (log job
-   `update_manifest_ingest_aws_dev`).
+   `update_manifest_ingest_aws_dev` — tài khoản CI login được nhưng không có quyền
+   restart app ingest).
 
 ### Sau đó — chờ/thực hiện theo phản hồi anh Quang (đã hỏi qua Teams 06/07, còn treo)
 - [ ] Nhận **MySQL credentials** → điền CI/CD Variables (`Settings → CI/CD → Variables`):
