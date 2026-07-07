@@ -555,21 +555,21 @@ function radialGauge(pct,target){
     +'<path d="'+gArc(cx,cy,r,A0,A0+SPAN)+'" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="'+sw+'" stroke-linecap="round"/>'
     +'<path d="'+gArc(cx,cy,r,A0,valEnd)+'" fill="none" stroke="url(#gg)" stroke-width="'+sw+'" stroke-linecap="round" filter="url(#glow)"/>'
     +'<line x1="'+ti[0].toFixed(1)+'" y1="'+ti[1].toFixed(1)+'" x2="'+to[0].toFixed(1)+'" y2="'+to[1].toFixed(1)+'" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>'
-    +'<text x="110" y="104" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="44" font-weight="700">'+pc(p)+'%</text>'
-    +'<text x="110" y="130" text-anchor="middle" fill="rgba(255,255,255,.78)" font-size="12" font-weight="600">Mục tiêu '+target+'%</text></svg>';
+    +'<text x="110" y="104" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="46" font-weight="700" letter-spacing="-2">'+pc(p)+'%</text>'
+    +'<text x="110" y="130" text-anchor="middle" fill="rgba(255,255,255,.78)" font-family="Plus Jakarta Sans,sans-serif" font-size="12" font-weight="600">Mục tiêu '+target+'%</text></svg>';
 }
 function gaugeBig(pct,target,main,sub){
   var p=Math.max(0,Math.min(100,pct||0)),cx=110,cy=110,r=88,sw=18,A0=-135,SPAN=270;
   var valEnd=A0+p/100*SPAN,tickA=A0+Math.max(0,Math.min(100,target))/100*SPAN;
   var ti=gPolar(cx,cy,r,tickA),to=gPolar(cx,cy,r+11,tickA);
   var tick=(target>0&&target<100)?'<line x1="'+ti[0].toFixed(1)+'" y1="'+ti[1].toFixed(1)+'" x2="'+to[0].toFixed(1)+'" y2="'+to[1].toFixed(1)+'" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>':'';
-  var fs=main.length>8?24:main.length>6?30:38;
+  var fs=main.length>10?26:main.length>7?34:46;
   return '<svg viewBox="0 0 220 184" style="width:220px;height:auto">'
     +'<path d="'+gArc(cx,cy,r,A0,A0+SPAN)+'" fill="none" stroke="rgba(255,255,255,.32)" stroke-width="'+sw+'" stroke-linecap="round"/>'
     +(p>0?'<path d="'+gArc(cx,cy,r,A0,valEnd)+'" fill="none" stroke="#ffffff" stroke-width="'+sw+'" stroke-linecap="round"/>':'')
     +tick
-    +'<text x="110" y="102" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="'+fs+'" font-weight="700">'+esc(main)+'</text>'
-    +'<text x="110" y="128" text-anchor="middle" fill="rgba(255,255,255,.82)" font-size="11.5" font-weight="600">'+esc(sub)+'</text></svg>';
+    +'<text x="110" y="102" text-anchor="middle" fill="#fff" font-family="Space Grotesk,monospace" font-size="'+fs+'" font-weight="700" letter-spacing="-2">'+esc(main)+'</text>'
+    +'<text x="110" y="128" text-anchor="middle" fill="rgba(255,255,255,.82)" font-family="Plus Jakarta Sans,sans-serif" font-size="11.5" font-weight="600">'+esc(sub)+'</text></svg>';
 }
 function spark(vals,color){
   if(!vals||vals.length<2)return '';var W=118,H=30,max=Math.max.apply(null,vals),min=Math.min.apply(null,vals);
