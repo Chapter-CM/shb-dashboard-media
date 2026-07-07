@@ -506,7 +506,7 @@ module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send('<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8">'
     + '<meta name="viewport" content="width=device-width,initial-scale=1"><title>SHB Facebook Dashboard</title>'
-    + '<style>' + FONT_FACE + CSS + '.embed .mast .brand{display:none}.embed .mast .pgsw{display:none}.embed .mast .mast-in{justify-content:flex-end}</style></head>'
+    + '<style>' + FONT_FACE + CSS + 'html.embed body{padding-top:63px}.embed .mast{top:63px}.embed .mast .brand{display:none}.embed .mast .pgsw{display:none}.embed .mast .mast-in{justify-content:flex-end}</style></head>'
     + '<body><script>try{if(window.self!==window.top)document.documentElement.classList.add(\'embed\')}catch(e){document.documentElement.classList.add(\'embed\')}</script><div id="app"></div>'
     + '<script>var DATA=' + safe + ';var TARGET_ER=6;var MIN_N=5;var LOGO_URI=' + JSON.stringify(LOGO_URI) + ';' + JS + '</script></body></html>');
 };
