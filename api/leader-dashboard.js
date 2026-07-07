@@ -8,6 +8,7 @@ const REACH_TARGET = 70;
 
 /* ── fetch Facebook (SUPABASE_URL / SUPABASE_SERVICE_KEY) ── */
 const dbClient = require('../lib/db-client');
+const FONT_FACE = require('../lib/fonts');
 function fbGet(path){
   if(dbClient.isEnabled())return dbClient.get(path).then(function(d){return Array.isArray(d)?d:[];}).catch(function(){return [];});
   return new Promise(function(resolve){
@@ -73,7 +74,8 @@ function fetchFbPosts(){
 const EMAIL_SUPABASE_URL = process.env.EMAIL_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const EMAIL_SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
 function fetchEmailLogs(){
-  if(!EMAIL_SUPABASE_URL||!EMAIL_SERVICE_KEY)return Promise.resolve([]);
+  // Có MySQL nội bộ (MYSQL_HOST) thì fetchOne bên dưới tự rẽ sang db-client — chỉ chặn khi thiếu cả 2.
+  if(!dbClient.isEnabled()&&(!EMAIL_SUPABASE_URL||!EMAIL_SERVICE_KEY))return Promise.resolve([]);
   var host=EMAIL_SUPABASE_URL.replace(/^https?:\/\//,'');
   var sel='pos,rcpt,msg_type,initiative,campaign,timestamp:ts';
   var hdrs={apikey:EMAIL_SERVICE_KEY,Authorization:'Bearer '+EMAIL_SERVICE_KEY,Accept:'application/json'};
@@ -346,7 +348,7 @@ module.exports = async (req,res) => {
 
   res.send('<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     +'<title>SHB CM · Tóm tắt lãnh đạo</title>'
-    +'<style>'+CSS+'.embed .mast .brand{display:none}.embed .mast .mast-in{justify-content:flex-end}</style></head>'
+    +'<style>'+FONT_FACE+CSS+'.embed .mast .brand{display:none}.embed .mast .mast-in{justify-content:flex-end}</style></head>'
     +'<body><script>try{if(window.self!==window.top)document.documentElement.classList.add(\'embed\')}catch(e){document.documentElement.classList.add(\'embed\')}</script>'
     +'<div class="mast"><div class="mast-in">'
     +'<div class="brand"><img class="mh-logo" src="'+LOGO_URI+'" alt="SHB"><span class="mh-div"></span><span class="mh-sub">CM Dashboard · Tóm tắt lãnh đạo</span></div>'

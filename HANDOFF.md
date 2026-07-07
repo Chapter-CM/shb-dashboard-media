@@ -5,35 +5,59 @@
 > Quy trình: branch dev → PR vào `claude/loving-planck-y6lw57` (production, Vercel auto-deploy).
 > Branch dev gần nhất: `claude/email-reading-time-measurement-nrytc2` (PR #56–61, đã merge hết).
 
-## 🚧 ĐANG DỞ (06/07/2026 chiều) — Merge vào `cm-dashboard` (GitLab nội bộ)
+## 🚧 ĐANG DỞ — Merge vào `cm-dashboard` (GitLab nội bộ) — CHỐT NGÀY 06/07/2026
 
-**Bối cảnh:** Đang thực hiện §7c trong `KE_HOACH_MIGRATION.md` — mở rộng repo `cm-dashboard` (Jira dashboard nội bộ, `gitlab-nhs.shb.com.vn/cm/cm-dashboard`) thành portal 3 tab Facebook | Email | Jira, thay vì xin repo/domain mới.
+**Bối cảnh:** Thực hiện §7c trong `KE_HOACH_MIGRATION.md` — mở rộng repo `cm-dashboard`
+(Jira dashboard nội bộ, `gitlab-nhs.shb.com.vn/cm/cm-dashboard`) thành portal 3 tab
+Facebook | Email | Jira, thay vì xin repo/domain mới.
 
-**Đã làm xong trong `shb-dashboard-media`** (branch `claude/dashboard-log-repo-strategy-v2t8f1`, PR #75):
-- `lib/db-client.js` — đọc MySQL nội bộ (xác nhận với Quang: MySQL, không phải Postgres), dịch lại cú pháp PostgREST của `sbGet()`/`fbGet()`/`fetchLogs()` sang SQL, fallback Supabase nếu không set `MYSQL_HOST`.
-- `db/schema.mysql.sql` — schema MySQL (bảng `events` suy đoán từ code, **cần đối chiếu lại** trước khi chạy thật).
-- `server/ingest-server.js` + `server/vercel-compat.js` — Node service :3001 gộp `/api/track` + `/api/ingest`.
-- `sync.js` v4 — **gộp sẵn** cả phần Jira (copy nguyên logic từ `cm-dashboard/sync.js` v3) lẫn phần Email/Facebook (bake tĩnh qua handler `api/*.js`) trong 1 script.
-- `Dockerfile.dashboard`, `Dockerfile.ingest`, `nginx.conf`, `.gitlab-ci.yml`, `package.json` — đã khớp đúng pattern thật của `cm-dashboard` (AWS ECR, `argocd app actions run restart`, không phải kubectl).
-- `api/portal.js` — đã thêm tab thứ 3 "Jira" (route `/api/jira/`).
-- Đã test toàn bộ cục bộ với mock data — chạy ổn, không lỗi.
+### Trạng thái 2 repo cuối ngày 06/07
 
-**Đã làm trên GitLab (`cm-dashboard`, người dùng thao tác qua Web IDE):**
-1. ✅ Tạo nhánh backup `backup/before-merge-email-facebook` từ `main`.
-2. ✅ Tạo nhánh làm việc `merge-email-facebook` từ `main`.
-3. ✅ Đổi tên `sync.js` gốc → `sync.jira-original.js`.
-4. ✅ Chuyển `public/index.html` + `public/config.json` (Jira SPA) → `public/api/jira/`.
-5. ✅ Upload xong `api/`, `lib/`, `server/`, `db/`, `Dockerfile.dashboard`, `Dockerfile.ingest`, `nginx.conf`, `.gitlab-ci.yml`, `sync.js`, `package.json` (đè bản cũ khi trùng tên) qua Web IDE (upload từng file, không dùng kéo-thả vì bị lỗi).
-6. ✅ Commit lên nhánh `merge-email-facebook`.
-7. **Đang chờ**: bấm "Create merge request" (đã hướng dẫn, chưa xác nhận đã bấm) — **CHƯA merge vào `main`**.
+**GitHub `shb-dashboard-media`** (branch `claude/dashboard-log-repo-strategy-v2t8f1`, **PR #76 đang mở**):
+= NGUỒN CHUẨN, chứa bản MỚI NHẤT của mọi thứ. Đã xong + test cục bộ:
+- Hạ tầng: `sync.js` v4 (gộp Jira + Email/FB), `lib/db-client.js` (đọc **và ghi** MySQL,
+  fallback Supabase), `server/ingest-server.js`, `Dockerfile.dashboard/.ingest`,
+  `nginx.conf`, `.gitlab-ci.yml` (khớp pattern thật: AWS ECR + argocd restart + vendors + needs).
+- UI: portal 3 tab (route `/api/facebook|/api/email|/api/jira/`), logo bấm về tab mặc định,
+  badge thời điểm build, font thương hiệu nhúng base64 (`lib/fonts.js`).
+- Jira SPA (`reference/cm-dashboard-original/public/index.html`): chế độ embed cho portal
+  (dải 63px cho thanh tab, ẩn brand trùng; mở trực tiếp y nguyên) — đã test 2 chế độ bằng
+  chromium, đủ tính năng (⌘K, Tuỳ chỉnh, CSV/PDF, modal...).
+- Tổng rà soát tối 06/07 bắt + fix 6 lỗi deploy (đường ghi MySQL cho beacon/ingest, guard
+  mock 3 dashboard, needs sync_data, pin babel@7, Dockerfile.ingest thiếu lib, đối chiếu
+  schema) — chi tiết ở commit `ddfa274`.
 
-**Việc cần làm tiếp (chiều nay hoặc buổi sau):**
-- [ ] Xác nhận đã tạo Merge Request `merge-email-facebook` → `main` chưa (chưa bấm nút Merge).
-- [ ] Xem kết quả Pipeline trên MR — báo lỗi cụ thể nếu có stage đỏ.
-- [ ] Khai báo CI/CD Variables mới trên GitLab (`Settings → CI/CD → Variables`): `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`, `INGEST_SECRET` (nhờ Quang cấp giá trị thật).
-- [ ] Xin Quang xác nhận `APP_NAME` ArgoCD cho service ingest mới (`cm-dashboard-ingest` — tên đề xuất, chưa xác nhận có tồn tại hay cần tạo).
-- [ ] Chạy `db/schema.mysql.sql` trên DB nội bộ thật (đối chiếu bảng `events` trước).
-- [ ] Chỉ merge vào `main` sau khi Pipeline xanh + đủ CI/CD Variables + Quang xác nhận hạ tầng.
+**GitLab `cm-dashboard`** (nhánh `merge-email-facebook`, **MR `!3` đang mở**, pipeline PASS):
+= ĐANG TỤT HẬU 9 FILE so với GitHub. Đã có: code merge đợt đầu + DEVOPS_NOTES.md + portal
+sửa route + font. **CHƯA có: 9 file fix của đợt rà soát tối 06/07.**
+
+### ✅ VIỆC ĐẦU TIÊN SÁNG MAI (trước mọi thứ khác)
+1. Giải nén `gitlab-sync.zip` (đã gửi trong chat 06/07 tối; nguồn cũng nằm trong repo này)
+   vào `Downloads\gitlab-sync`, rồi làm đúng theo **`GITLAB_COPY_LIST.md`** (9 lệnh copy +
+   commit + push có sẵn từng dòng).
+2. Kiểm tra pipeline MR `!3` PASS sau khi push.
+
+### Sau đó — chờ/thực hiện theo phản hồi anh Quang (đã hỏi 3 việc qua Teams 06/07)
+- [ ] Nhận **MySQL credentials** → điền CI/CD Variables (`Settings → CI/CD → Variables`):
+      `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`, `INGEST_SECRET`
+      (INGEST_SECRET tự sinh được: `powershell -Command "[guid]::NewGuid().ToString()"`).
+- [ ] Nhờ Quang **chạy `db/schema.mysql.sql`** (đối chiếu bảng `events` với schema gốc trước).
+- [ ] Quang xác nhận **APP_NAME ArgoCD** cho ingest (`cm-dashboard-ingest` là tên đề xuất)
+      + **tên DNS service nội bộ** của ingest → sửa `ingest-service` trong `nginx.conf` cho đúng.
+- [ ] Đủ 3 điều trên → **merge MR `!3` vào `main`** → theo dõi `docker_build_ecr` +
+      `update_manifest_*` (LẦN ĐẦU chạy thật, chỉ chạy trên main) → mở URL nội bộ
+      `cm-dashboard.dev-saha.aws.shb.com.vn` kiểm tra portal 3 tab.
+- [ ] Sau deploy OK: test beacon email + userscript ghi vào MySQL thật (checklist §11 kế hoạch).
+
+### Ghi chú cho phiên mai
+- User thao tác GitLab qua git CLI trên máy Windows (`%USERPROFILE%\cm-dashboard`, đã cài
+  git + có PAT); KHÔNG dùng Web IDE upload (từng lỗi âm thầm). Copy file → `git add` →
+  commit → push là quy trình chuẩn.
+- Claude KHÔNG truy cập được GitLab nội bộ — mọi thay đổi sang GitLab đều qua tay user
+  (gửi file → user copy). Sửa code luôn làm ở repo GitHub này trước rồi đóng gói gửi.
+- PR #76 trên GitHub có thể merge lúc nào cũng được (chỉ là đồng bộ tài liệu/code nội bộ team).
+- Vercel production (`shb-fb-dashboard.vercel.app`) KHÔNG bị ảnh hưởng bởi mọi thay đổi
+  trên — fallback Supabase giữ nguyên hành vi cũ khi không có `MYSQL_HOST`.
 
 ## 🧩 Cấu trúc HỢP NHẤT (1 repo + 1 Vercel) — PR #33
 Tên file = **route**; đặt theo sản phẩm để mở ra hiểu ngay. URL cũ giữ nguyên qua `rewrites` (không cần sửa VBA/userscript).

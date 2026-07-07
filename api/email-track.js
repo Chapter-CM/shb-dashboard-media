@@ -2,6 +2,7 @@
 // ENV: EMAIL_SUPABASE_URL, EMAIL_SUPABASE_SERVICE_KEY (ghi vào Supabase Email — tách khỏi SUPABASE_* của Facebook)
 'use strict';
 const https = require('https');
+const dbClient = require('../lib/db-client');
 
 const SUPABASE_URL = process.env.EMAIL_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
@@ -27,6 +28,8 @@ function fixRcpt(v) {
 }
 
 function insertEvent(row) {
+  // MySQL nội bộ (EKS) — bật bằng MYSQL_HOST; không set thì ghi Supabase như cũ.
+  if (dbClient.isEnabled()) return dbClient.insert('events', row);
   return new Promise((resolve, reject) => {
     if (!SUPABASE_URL || !SERVICE_KEY) return resolve(null);
     const body = JSON.stringify(row);
