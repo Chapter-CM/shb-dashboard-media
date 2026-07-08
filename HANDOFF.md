@@ -1,4 +1,37 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 07/07/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 08/07/2026)
+
+## 🚧 ĐANG DỞ — Sáng 08/07: đã merge fix nginx, còn 403 chờ Quang (imagePullPolicy)
+
+**Đã làm sáng 08/07:**
+- User đã copy `nginx.conf` (commit `b611acb`) sang GitLab, tạo MR `!5` từ branch
+  `fix-nginx-ingest-upstream` → `main`, **đã merge** (commit `d4b67937`).
+- Pipeline `#263945`: 5/6 job pass (`sync_data`, `pages`, `aws-authen-cicd`,
+  `docker_build_ecr`, `update_manifest_aws_dev`) — chỉ fail `update_manifest_ingest_aws_dev`
+  (đúng dự đoán, `PermissionDenied` khi CI gọi ArgoCD restart app `cm-dashboard-ingest`
+  chưa tồn tại/CI chưa có quyền).
+- **Sự cố 503 đã hết** — `/health` trả 200. Nhưng `/` (trang chính) giờ trả **403 Forbidden**.
+- **Đã điều tra kỹ, xác nhận KHÔNG phải lỗi code/config mình vừa đẩy**:
+  - Diff merge `d4b67937` chỉ đổi đúng 2 block `/api/track` + `/api/ingest` (proxy_pass →
+    return 503 tạm) — không đụng gì tới `location /` (nơi đang bị 403).
+  - `public/index.html` build bởi job `sync_data` đúng, đủ 59558 bytes, quyền `-rw-r--r--`
+    (world-readable) — không phải lỗi thiếu file/sai quyền.
+  - Đúng bộ nginx.conf + kiểu file portal.js bake ra đã được test bằng nginx thật trong
+    sandbox tối 07/07 (mục review bên dưới) → `/` trả 200 — chứng minh code đúng.
+  - Job `update_manifest_aws_dev` (job pass, khác job ingest) có dòng
+    `argocd app actions run $APP_NAME restart --kind Deployment` chạy **thành công, không lỗi**
+    → pipeline đã TỰ ĐỘNG trigger restart pod, không cần Quang bấm tay.
+- **Kết luận: pod đã restart nhưng vẫn 403 → đúng nghi vấn cache image cũ do thiếu
+  `imagePullPolicy: Always`** (bài học đã ghi từ hôm 07/07) — restart pod xong nhưng node
+  dùng lại image cache cũ theo tag cố định thay vì pull bản mới.
+- ⏳ **User CHƯA gửi tin nhắn cho Quang** (đang chờ soạn xong/chọn thời điểm gửi). Nội dung
+  cần gửi (đã soạn sẵn, chưa gửi): xin thêm `imagePullPolicy: Always` cho Deployment
+  `cm-dashboard` + hỏi về RBAC `PermissionDenied` cho app `cm-dashboard-ingest`.
+- **Việc đầu tiên phiên sau nếu user báo "Quang đã rep"**: đọc phản hồi của Quang, nếu đã
+  thêm `imagePullPolicy: Always` và restart → hướng dẫn user F5 kiểm tra lại `/`; nếu còn
+  403 thì đào sâu thêm (có thể cần xem trực tiếp pod logs mà Claude không truy cập được,
+  phải nhờ user paste log). Nếu Quang confirm ArgoCD app ingest đã tạo → khôi phục lại
+  2 block `proxy_pass` thật trong `nginx.conf` (đã có sẵn comment hướng dẫn ngay trong file).
+
 
 > Repo này giờ là **bản hợp nhất 1 repo + 1 Vercel** cho cả 2 dashboard CM.
 > Live (portal): https://shb-fb-dashboard.vercel.app/ → tab **Facebook | Email | Jira**.
