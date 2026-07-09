@@ -81,6 +81,9 @@ db_check:
   image: gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-alpine-amd
   when: manual
   allow_failure: true
+  # Không cần artifact public/ của sync_data (job này chỉ đọc code/db/ trong repo
+  # đã clone sẵn) — khai báo rỗng để khỏi tải kèm, tránh lỗi 403 tải artifact thừa.
+  dependencies: []
   script:
     # KHÔNG dùng apk (mysql-client) — runner nội bộ chặn egress ra
     # dl-cdn.alpinelinux.org, y hệt lý do image alpine:3.19 công khai không pull
