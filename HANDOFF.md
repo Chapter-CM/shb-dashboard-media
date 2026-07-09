@@ -1,21 +1,44 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 09/07/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 09/07/2026 tối)
 
-## 🚧 ĐANG DỞ — 09/07: đầu mối hạ tầng chuyển từ anh Quang sang anh Nam, đã gửi tổng hợp 4 việc, đang chờ rep
+## 🚧 ĐANG DỞ — 09/07 tối: anh Nam đã cấp MySQL creds, đang bị ETIMEDOUT — cần mở Security Group
 
-**Cập nhật 09/07:** Đầu mối DevOps phụ trách hạ tầng đã đổi từ anh Quang sang **anh Nam**.
-User đã gửi tin nhắn Teams cho anh Nam gộp đủ 4 việc cần hỗ trợ (thay vì tách lẻ như trước):
-1. Cấp thông tin kết nối MySQL (host/port/user/pass/database) để khai báo CI/CD Variables.
-2. Chạy giúp `db/schema.mysql.sql` (branch `merge-email-facebook`) tạo bảng trên DB, đối chiếu
-   bảng `events` với schema gốc.
-3. Xác nhận service ingest riêng (Node port 3001): có cần ArgoCD App riêng
-   (`cm-dashboard-ingest`) không, pod đủ tài nguyên không, và cấp quyền cho tài khoản CI thao
-   tác app này (đang fail `PermissionDenied` khi restart).
-4. Thêm `imagePullPolicy: Always` cho Deployment `cm-dashboard` (và `cm-dashboard-ingest` nếu
-   tạo mới) — để mỗi lần build/restart pod pull đúng image mới nhất, không giữ bản cache cũ.
+**Cập nhật 09/07 tối:** Đầu mối DevOps phụ trách hạ tầng đã đổi từ anh Quang sang **anh Nam**.
+Đã gửi tin nhắn Teams gộp 4 việc (xem lịch sử bên dưới). Anh Nam đã rep 2 việc:
+- **MySQL creds đã cấp**: user `cm_dashboard_user` / pass `Cmshb@2026` (không lưu plaintext vào
+  repo — chỉ khai báo qua GitLab CI/CD Variables), host `rds-sahadb.dev-saha.aws.shb.com.vn`,
+  port `3306`. Đã cấp quyền chạy SQL trên user này.
+- Còn 2 việc (service ingest riêng + `imagePullPolicy: Always`) **CHƯA thấy anh Nam rep**.
 
-**CHƯA có phản hồi từ anh Nam.** Việc đầu tiên phiên sau: hỏi user "anh Nam đã rep chưa", nếu
-rồi thì đọc nội dung rep và xử lý theo từng mục (đặc biệt mục 4 — sau khi thêm
-`imagePullPolicy: Always` và restart, hướng dẫn user F5 kiểm tra lại `/` xem còn lỗi không).
+**Đã tạo bộ công cụ chẩn đoán trên GitHub** (đích để user copy tay sang GitLab, nhánh dùng lại
+DUY NHẤT `test-db-connection` — LƯU Ý: không tự tạo thêm branch `-2`/`-3`... nữa, đã bị nhắc):
+- `.gitlab-ci.yml`: thêm job tạm `db_check` (stage riêng, `when: manual`, `dependencies: []`).
+- `db/db_check.js`: script Node dùng `mysql2` (KHÔNG dùng `apk add mysql-client` — runner nội
+  bộ chặn egress ra `dl-cdn.alpinelinux.org`, đã thử và fail; cũng không dùng image `alpine:3.19`
+  công khai vì không pull được — đổi sang mirror nội bộ
+  `gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-alpine-amd`, cùng
+  image job `sync_data` đang dùng OK).
+- Cả 2 file đã qua 4 vòng fix lỗi thật (PR #79→#82 trên GitHub, đã merge hết): image không pull
+  được → đổi mirror nội bộ → `apk` không cài được → đổi sang `npm install mysql2` → tải nhầm
+  artifact thừa của `sync_data` bị 403 → thêm `dependencies: []` → biến CI/CD `MYSQL_PASSWORD`
+  bị tick Protected trong khi branch test không phải protected → user bỏ tick → **giờ script
+  chạy được, kết nối được biến, nhưng bị `ETIMEDOUT` khi gọi MySQL** (job #626396).
+
+**🔥 Vướng hạ tầng cần anh Nam xử lý tiếp:** GitLab runner nội bộ **không kết nối được** tới
+`rds-sahadb.dev-saha.aws.shb.com.vn:3306` (timeout, không phải sai user/pass — script đã tới
+được bước gọi `mysql2.createConnection` nhưng treo tới hết timeout). Nghi nhiều khả năng nhất:
+**Security Group của RDS chưa mở inbound port 3306 cho dải IP/subnet của GitLab runner nội bộ**
+(runner chạy trên `runner-d63eeu3`, cùng hạ tầng AWS `dev-saha`, nhưng RDS SG có thể đang chỉ
+whitelist theo SG/IP cụ thể khác). Cần nhờ anh Nam:
+1. Kiểm tra Security Group của RDS `rds-sahadb.dev-saha.aws.shb.com.vn` có cho phép inbound
+   3306 từ SG/subnet của GitLab runner (`omnichannel`/CI runner) không.
+2. Nếu RDS nằm trong VPC riêng, xác nhận GitLab runner có route/peering tới VPC đó không.
+
+**Việc đầu tiên phiên sau**: hỏi user đã có phản hồi anh Nam về SG/network chưa; nếu rồi thì
+chạy lại job `db_check` (Pipelines → nhánh `test-db-connection` → job `db_check` → ▶) và đọc
+log mới. Nếu hết ETIMEDOUT và ra được `SHOW DATABASES`, báo user tên DB rồi điền
+`MYSQL_DATABASE` vào CI/CD Variables, chạy lại job để tự động apply `db/schema.mysql.sql`.
+Sau khi xác nhận xong, XOÁ `db/db_check.js` + job `db_check` khỏi `.gitlab-ci.yml` (chỉ dùng để
+chẩn đoán tạm, không để lại lâu dài).
 
 ### Bối cảnh kỹ thuật dẫn tới việc gửi tin nhắn trên (chi tiết sáng 08/07)
 
