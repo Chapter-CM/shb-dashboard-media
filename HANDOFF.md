@@ -1,6 +1,23 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 08/07/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 09/07/2026)
 
-## 🚧 ĐANG DỞ — Sáng 08/07: đã merge fix nginx, còn 403 chờ Quang (imagePullPolicy)
+## 🚧 ĐANG DỞ — 09/07: đầu mối hạ tầng chuyển từ anh Quang sang anh Nam, đã gửi tổng hợp 4 việc, đang chờ rep
+
+**Cập nhật 09/07:** Đầu mối DevOps phụ trách hạ tầng đã đổi từ anh Quang sang **anh Nam**.
+User đã gửi tin nhắn Teams cho anh Nam gộp đủ 4 việc cần hỗ trợ (thay vì tách lẻ như trước):
+1. Cấp thông tin kết nối MySQL (host/port/user/pass/database) để khai báo CI/CD Variables.
+2. Chạy giúp `db/schema.mysql.sql` (branch `merge-email-facebook`) tạo bảng trên DB, đối chiếu
+   bảng `events` với schema gốc.
+3. Xác nhận service ingest riêng (Node port 3001): có cần ArgoCD App riêng
+   (`cm-dashboard-ingest`) không, pod đủ tài nguyên không, và cấp quyền cho tài khoản CI thao
+   tác app này (đang fail `PermissionDenied` khi restart).
+4. Thêm `imagePullPolicy: Always` cho Deployment `cm-dashboard` (và `cm-dashboard-ingest` nếu
+   tạo mới) — để mỗi lần build/restart pod pull đúng image mới nhất, không giữ bản cache cũ.
+
+**CHƯA có phản hồi từ anh Nam.** Việc đầu tiên phiên sau: hỏi user "anh Nam đã rep chưa", nếu
+rồi thì đọc nội dung rep và xử lý theo từng mục (đặc biệt mục 4 — sau khi thêm
+`imagePullPolicy: Always` và restart, hướng dẫn user F5 kiểm tra lại `/` xem còn lỗi không).
+
+### Bối cảnh kỹ thuật dẫn tới việc gửi tin nhắn trên (chi tiết sáng 08/07)
 
 **Đã làm sáng 08/07:**
 - User đã copy `nginx.conf` (commit `b611acb`) sang GitLab, tạo MR `!5` từ branch
