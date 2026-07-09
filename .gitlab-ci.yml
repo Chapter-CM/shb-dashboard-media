@@ -82,18 +82,12 @@ db_check:
   when: manual
   allow_failure: true
   script:
-    - apk add --no-cache mysql-client
-    - echo "--- SHOW DATABASES (tim ten schema) ---"
-    - mysql -h "$MYSQL_HOST" -P "${MYSQL_PORT:-3306}" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "SHOW DATABASES;"
-    - |
-      if [ -n "$MYSQL_DATABASE" ]; then
-        echo "--- Chay db/schema.mysql.sql vao $MYSQL_DATABASE ---"
-        mysql -h "$MYSQL_HOST" -P "${MYSQL_PORT:-3306}" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" < db/schema.mysql.sql
-        echo "--- SHOW TABLES sau khi chay schema ---"
-        mysql -h "$MYSQL_HOST" -P "${MYSQL_PORT:-3306}" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e "SHOW TABLES;"
-      else
-        echo "Chua co MYSQL_DATABASE trong CI/CD Variables - moi dien ten schema sau khi xac dinh o buoc SHOW DATABASES ben tren, roi chay lai job nay."
-      fi
+    # KHÔNG dùng apk (mysql-client) — runner nội bộ chặn egress ra
+    # dl-cdn.alpinelinux.org, y hệt lý do image alpine:3.19 công khai không pull
+    # được. Dùng thẳng npm install mysql2 (đã là dependency trong package.json,
+    # cùng cơ chế npm install nội bộ mà job sync_data đang chạy OK) + node script.
+    - npm install --no-save mysql2
+    - node db/db_check.js
 
 pages:
   stage: pages
