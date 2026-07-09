@@ -34,6 +34,7 @@ default:
 
 stages:
   - sync_data
+  - db_check
   - pages
   - aws-authen
   - docker_build_ecr
@@ -68,6 +69,31 @@ sync_data:
     paths:
       - public/
     expire_in: 2 hours
+
+# Job tạm để test kết nối MySQL nội bộ (anh Nam cấp 09/07) + tìm tên database +
+# chạy db/schema.mysql.sql tạo bảng. Cần khai báo trước ở Settings → CI/CD →
+# Variables (tick Mask + Protected): MYSQL_HOST, MYSQL_PORT, MYSQL_USER,
+# MYSQL_PASSWORD. Chạy tay (when: manual) — Pipelines → chọn job → nhấn Run/▶,
+# xem log ở tab Job. Sau khi xác nhận DB xong thì XOÁ job này, không để lại
+# trong .gitlab-ci.yml lâu dài (chỉ dùng để chẩn đoán 1 lần).
+db_check:
+  stage: db_check
+  image: alpine:3.19
+  when: manual
+  allow_failure: true
+  script:
+    - apk add --no-cache mysql-client
+    - echo "--- SHOW DATABASES (tim ten schema) ---"
+    - mysql -h "$MYSQL_HOST" -P "${MYSQL_PORT:-3306}" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "SHOW DATABASES;"
+    - |
+      if [ -n "$MYSQL_DATABASE" ]; then
+        echo "--- Chay db/schema.mysql.sql vao $MYSQL_DATABASE ---"
+        mysql -h "$MYSQL_HOST" -P "${MYSQL_PORT:-3306}" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" < db/schema.mysql.sql
+        echo "--- SHOW TABLES sau khi chay schema ---"
+        mysql -h "$MYSQL_HOST" -P "${MYSQL_PORT:-3306}" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e "SHOW TABLES;"
+      else
+        echo "Chua co MYSQL_DATABASE trong CI/CD Variables - moi dien ten schema sau khi xac dinh o buoc SHOW DATABASES ben tren, roi chay lai job nay."
+      fi
 
 pages:
   stage: pages
