@@ -23,20 +23,22 @@ DUY NHẤT `test-db-connection` — LƯU Ý: không tự tạo thêm branch `-2`
   bị tick Protected trong khi branch test không phải protected → user bỏ tick → **giờ script
   chạy được, kết nối được biến, nhưng bị `ETIMEDOUT` khi gọi MySQL** (job #626396).
 
-**🔥 Vướng hạ tầng cần anh Nam xử lý tiếp:** GitLab runner nội bộ **không kết nối được** tới
-`rds-sahadb.dev-saha.aws.shb.com.vn:3306` (timeout, không phải sai user/pass — script đã tới
-được bước gọi `mysql2.createConnection` nhưng treo tới hết timeout). Nghi nhiều khả năng nhất:
-**Security Group của RDS chưa mở inbound port 3306 cho dải IP/subnet của GitLab runner nội bộ**
-(runner chạy trên `runner-d63eeu3`, cùng hạ tầng AWS `dev-saha`, nhưng RDS SG có thể đang chỉ
-whitelist theo SG/IP cụ thể khác). Cần nhờ anh Nam:
-1. Kiểm tra Security Group của RDS `rds-sahadb.dev-saha.aws.shb.com.vn` có cho phép inbound
-   3306 từ SG/subnet của GitLab runner (`omnichannel`/CI runner) không.
-2. Nếu RDS nằm trong VPC riêng, xác nhận GitLab runner có route/peering tới VPC đó không.
+**🔥 Vướng hạ tầng cần anh Nam xử lý tiếp — ĐÃ CHẨN ĐOÁN CHÍNH XÁC (job #626403):**
+Nâng cấp `db/db_check.js` thêm bước tách riêng DNS vs TCP trước khi gọi `mysql2` (PR #84) —
+kết quả **xác nhận rõ ràng, không còn nghi ngờ**:
+- DNS OK: `rds-sahadb.dev-saha.aws.shb.com.vn` → `10.194.2.115`.
+- TCP tới `10.194.2.115:3306` → **TIMEOUT im lặng** (gửi SYN không có phản hồi, KHÔNG phải
+  `ECONNREFUSED`) → đúng chữ ký của **Security Group/NACL chặn silent**, loại trừ khả năng
+  DNS sai hoặc port đóng đơn thuần.
+- **Đã nhắn anh Nam kèm IP cụ thể `10.194.2.115`**, xin mở inbound 3306 từ SG/subnet của
+  GitLab runner (`runner-d63eeu3`, project `omnichannel`) vào Security Group của RDS này.
+  **CHƯA có phản hồi.**
 
 **Việc đầu tiên phiên sau**: hỏi user đã có phản hồi anh Nam về SG/network chưa; nếu rồi thì
-chạy lại job `db_check` (Pipelines → nhánh `test-db-connection` → job `db_check` → ▶) và đọc
-log mới. Nếu hết ETIMEDOUT và ra được `SHOW DATABASES`, báo user tên DB rồi điền
-`MYSQL_DATABASE` vào CI/CD Variables, chạy lại job để tự động apply `db/schema.mysql.sql`.
+chạy lại job `db_check` (Pipelines → nhánh `test-db-connection`/`test-db-connection-3` → job
+`db_check` → ▶) và đọc log mới — giờ log sẽ tự nói rõ TCP OK hay vẫn timeout. Nếu hết
+ETIMEDOUT và ra được `SHOW DATABASES`, báo user tên DB rồi điền `MYSQL_DATABASE` vào CI/CD
+Variables, chạy lại job để tự động apply `db/schema.mysql.sql`.
 Sau khi xác nhận xong, XOÁ `db/db_check.js` + job `db_check` khỏi `.gitlab-ci.yml` (chỉ dùng để
 chẩn đoán tạm, không để lại lâu dài).
 
