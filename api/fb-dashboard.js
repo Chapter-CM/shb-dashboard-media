@@ -863,6 +863,9 @@ function contentSection(d){
         +'<td class="num">'+(vw?pc(pmv(p,'viewers')/vw*100)+'%':'—')+'</td></tr>'
         +'<tr class="drill" id="dr-'+p.id+'" style="display:none"><td colspan="10"><div class="drill-in">'
         +'<div class="dd">Đăng lúc<b>'+fmtTime(p.ts)+'</b></div><div class="dd">Chủ đề<b>'+esc(p.topic)+'</b></div>'
+        +(p.engRaw!=null
+          ?'<div class="dd">Tương tác (nguồn FB, không tách được)<b>'+nf(p.engRaw)+'</b></div><div class="dd">Bình luận<b>'+nf(p.comments)+'</b></div>'
+          :'<div class="dd">Cảm xúc<b>'+nf(reactTotal(p.react))+'</b></div><div class="dd">Bình luận<b>'+nf(p.comments)+'</b></div><div class="dd">Chia sẻ<b>'+nf(p.shares)+'</b></div><div class="dd">= Tương tác<b>'+nf(r.eng)+'</b></div>')
         +'<div class="dd">Người theo dõi thực<b>'+nf(pmv(p,'net_follow'))+'</b></div>'
         +'<div class="dd">vs TB chủ đề<b>'+(r.vsAvg>=0?'+':'')+r.vsAvg+'</b></div>'
         +(isVideoPost(p)?'<div class="dd">Xem ≥3 giây<b>'+nf(pmv(p,'video_view_three_second'))+'</b></div><div class="dd">Xem ≥1 phút<b>'+nf(pmv(p,'video_view_one_min'))+'</b></div>'+(pmv(p,'video_view_avg_watch_time')?'<div class="dd">Thời gian xem TB<b>'+pc(pmv(p,'video_view_avg_watch_time')/1000)+'s</b></div>':''):'')

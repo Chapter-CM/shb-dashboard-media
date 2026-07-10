@@ -153,6 +153,10 @@ docker build ecr:
   stage: update_helm_value
   image:
     name: jfrog.shb.com.vn/omni-docker-local/argocd:v2.10.6
+  # Chỉ gọi argocd restart, không cần file public/ nào cả — khai báo rỗng để khỏi
+  # tự tải artifact của sync_data (mặc định GitLab tải hết job trước đó, từng gây
+  # "403 Forbidden ... FATAL: permission denied" khi artifact hết hạn/không có quyền).
+  dependencies: []
   before_script:
     - argocd login $ARGO_URL --username $ARGO_ADMIN_USER --password $ARGO_ADMIN_PASS --skip-test-tls --insecure --grpc-web-root-path /argocd
   script:

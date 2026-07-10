@@ -1,6 +1,105 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 09/07/2026 tối)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 10/07/2026 chiều)
 
-## 🚧 ĐANG DỞ — 09/07 tối: anh Nam đã cấp MySQL creds, đang bị ETIMEDOUT — cần mở Security Group
+## ✅ 10/07 chiều — Cả 3 tab (Facebook/Jira/Email) đã sống trên `cm-dashboard.dev-saha.aws.shb.com.vn`, hết 403
+
+**Bối cảnh:** sau khi `cm-dashboard-ingest` Healthy (mục ✅ 10/07 trưa bên dưới), kiểm tra tiếp trang
+chính `cm-dashboard.dev-saha.aws.shb.com.vn` thì vẫn dính đúng lỗi **403 Forbidden** tồn đọng từ
+07-09/07 (nghi ngờ cũ trong HANDOFF là `imagePullPolicy` — **SAI**, đã loại trừ vì policy đã là
+`Always` và pod đã restart đủ lâu).
+
+**2 bug hạ tầng thật khác đã tìm ra + sửa xong (khác hẳn với 2 bug của `cm-dashboard-ingest` buổi
+trưa — đây là app `cm-dashboard`, phần build ảnh tĩnh portal/Facebook/Email/Jira):**
+
+1. **Job `docker build ecr` trên GitLab thiếu `needs: [..., "sync_data"]`** — job build
+   `Dockerfile.dashboard` (`COPY public /usr/share/nginx/html`) không tải artifact `public/` mới
+   nhất từ job `sync_data`, nên Docker layer cache tái sử dụng y nguyên bản `public/` CŨ (thấy rõ
+   trong log: toàn bộ 5 step `Using cache`, không có dòng "Downloading artifacts for sync_data").
+   → image không có `index.html` mới → nginx 403. Bản GitHub (`shb-dashboard-media`) đã có sẵn
+   `needs: ["aws-authen-cicd", "sync_data"]` kèm comment giải thích, nhưng bản GitLab bị thiếu
+   (không đồng bộ). Fix: thêm `"sync_data"` vào `needs`.
+2. **Job `sync_data` trên GitLab thiếu hẳn đoạn cài + copy vendor JS cho Jira SPA** — bản GitHub có
+   thêm bước `npm install --no-save react@18 react-dom@18 @babel/standalone@7 prop-types@15.8.1
+   recharts@2.12.7 html2canvas@1.4.1 jspdf@2.5.1` rồi `cp` 7 file UMD vào `public/vendors/`
+   (`react.production.min.js`, `react-dom.production.min.js`, `babel.min.js`, `prop-types.min.js`,
+   `Recharts.min.js`, `html2canvas.min.js`, `jspdf.umd.min.js`) — bản GitLab không có, nên
+   `public/api/jira/index.html` (SPA React) load `/vendors/*.js` toàn 404 → `Uncaught SyntaxError`
+   → tab Jira trắng trơn hoàn toàn (Console F12 xác nhận đúng 7 file 404). Fix: đồng bộ đủ đoạn
+   `sync_data` từ GitHub sang GitLab.
+
+   ⚠️ **Ghi chú thao tác thật (bài học)**: lần sửa đầu tiên gửi user file `.gitlab-ci.yml` tải về
+   rồi chạy `copy` — Windows hỏi ghi đè (Y/N) nhưng không ai trả lời nên **copy không xảy ra**, dẫn
+   tới commit rỗng (0 insertions) tưởng đã fix nhưng thực ra chưa. Phát hiện qua `git commit` báo
+   `1 file changed, 40 insertions(+)` ở LẦN THỨ 2 (khác 0 dòng đổi ở lần đầu) + `findstr vendors`
+   xác nhận nội dung trước khi commit. **Luôn dùng `copy /Y` để tự ghi đè + verify bằng `findstr`
+   trước khi git add/commit**, đừng tin lời user "đã copy xong" suông.
+
+**Đã verify thật:**
+- `#fb` (Facebook) — có dữ liệu thật, không lỗi.
+- `#jira` — có dữ liệu thật (64 task, breakdown Squad/Dự án/Văn hoá...), hết trắng.
+- `#email` — hiện "Chưa có dữ liệu" — ĐÂY LÀ TRẠNG THÁI HỢP LỆ (chưa có event nào trong nguồn dữ
+  liệu Email, không phải lỗi code) — xem việc dở dang bên dưới.
+
+**Việc còn tồn đọng — không khẩn cấp, KHÔNG chặn dashboard chạy:**
+1. Job `update_manifest_ingest_aws_dev` (restart app `cm-dashboard-ingest`) đang fail vì tự động
+   tải artifact `sync_data` không cần thiết rồi bị `403 Forbidden ... FATAL: permission denied`
+   khi tải (job #626730). Sửa bằng cách thêm `dependencies: []` cho job này (giống pattern đã áp
+   dụng cho `db_check` trước đây) — job chỉ cần gọi `argocd app actions run ... restart`, không
+   cần file `public/` nào cả.
+2. Xác nhận dữ liệu Email khi VBA macro đã trỏ đúng endpoint (`shb-fb-dashboard.vercel.app/api/track`
+   theo `CampaignTracker.bas` v4.9 — cần xác nhận có đổi sang endpoint nội bộ SHB chưa) và có email
+   thật gửi qua Outlook để test.
+3. Việc dở dang từ buổi trưa (mục ✅ 10/07 trưa bên dưới) vẫn còn nguyên — MySQL write qua API ingest
+   chưa xác nhận 100% bằng query trực tiếp.
+
+---
+
+## ✅ 10/07 trưa — `cm-dashboard-ingest` đã HEALTHY, hết 502, ghi MySQL qua API (không cần GitLab→MySQL trực tiếp nữa)
+
+**Đổi hướng kiến trúc (theo đề xuất anh Nam qua Teams sáng 10/07):** thay vì GitLab CI kết nối
+thẳng MySQL (luồng `db_check`/ETIMEDOUT ở mục cũ bên dưới — **không cần theo tiếp nữa**), dùng
+đúng 3-tier: dashboard → gọi **API ingest nội bộ (`cm-dashboard-ingest`, port 3001→80)** → API
+tự ghi MySQL. Anh Nam đã tạo xong 2 app ArgoCD (`cm-dashboard`, `cm-dashboard-ingest`) + cấp quyền
+CI restart app ingest (hết `PermissionDenied` cũ) + cấp login ArgoCD (`cm-user`, đổi ngay pass đã
+lộ qua chat nếu chưa đổi).
+
+**2 bug hạ tầng thật đã tìm + sửa xong trong phiên này** (cả 2 đã merge vào GitLab `cm-dashboard`
+nhánh `main`, đã verify bằng pod logs + gọi endpoint thật):
+1. **`Dockerfile.ingest` thiếu `npm install`** — anh Nam từng sửa xoá hẳn bước cài dependency vì
+   tưởng `api/email-track.js`/`api/fb-ingest.js` chỉ dùng Node builtin, không cần `mysql2`. SAI:
+   `api/email-track.js` → `require('../lib/db-client')` → cần `mysql2`. Thiếu `npm install` →
+   `Error: Cannot find module 'mysql2/promise'` → pod crash-loop (27 lần restart), app kẹt ở
+   ArgoCD status "Progressing" suốt 2 tiếng. Đã khôi phục `COPY package.json` + `RUN npm install
+   --omit=dev` (MR `cm-dashboard!6`, đã merge).
+2. **Sai tên biến port** — Helm chart set env `SERVER_PORT=80` + `containerPort: 80` (name
+   `http`), nhưng `server/ingest-server.js` chỉ đọc `INGEST_PORT` (không tồn tại) → mặc định
+   `3001` → app lắng nghe sai port so với K8s route vào → **502 Bad Gateway** qua ALB Ingress dù
+   pod báo "running 1/1". Fix: đọc `process.env.SERVER_PORT || process.env.INGEST_PORT || '3001'`
+   (đã sửa cả 2 nơi: GitHub commit `5c3cf40` + GitLab MR sau đó, đã merge).
+
+**Đã verify thật (không phải đoán):**
+- `https://cm-dashboard-ingest.dev-saha.aws.shb.com.vn/healthz` → `ok`.
+- Gọi thử `/api/track?campaign=test-ingest-claude&rcpt=test@shb.com.vn&type=test` → trả về pixel
+  1×1 (200 OK), pod logs sạch không có dòng lỗi MySQL/ETIMEDOUT sau đó → khả năng cao đã ghi được
+  vào bảng `events`, nhưng **CHƯA xác nhận 100%** (code chỉ log khi lỗi, im lặng khi thành công).
+
+**Việc đầu tiên phiên sau:**
+1. Nhờ anh Nam (hoặc ai có quyền) chạy `SELECT * FROM events WHERE campaign =
+   'test-ingest-claude';` trên MySQL để xác nhận dứt điểm dòng test đã ghi vào chưa. Có rồi thì
+   coi như luồng ghi API→MySQL đã thông, đóng hẳn nhánh `db_check`/ETIMEDOUT cũ.
+2. Nếu xác nhận OK: XOÁ `db/db_check.js` + job `db_check` khỏi `.gitlab-ci.yml` (di sản chẩn đoán
+   tạm của luồng GitLab→MySQL trực tiếp, không cần nữa vì đã đổi sang gọi qua API ingest).
+3. Kiểm tra lại xem trang chính `/` (portal, `cm-dashboard` app — KHÁC app `cm-dashboard-ingest`)
+   còn lỗi 403 Forbidden như tối 07-09/07 không (mục cũ bên dưới, nghi do `imagePullPolicy`) —
+   CHƯA kiểm tra lại trong phiên này, cần F5 xác nhận.
+4. Nếu ingest hoạt động ổn định, nối dashboard Facebook/Email thật sự gọi qua API ingest này thay
+   vì Supabase (bước migration tiếp theo theo `KE_HOACH_MIGRATION.md`).
+
+---
+
+## 🚧 (LỊCH SỬ — không cần theo tiếp) 09/07 tối: anh Nam đã cấp MySQL creds, đang bị ETIMEDOUT — cần mở Security Group
+
+> ⚠️ Mục này đã LỖI THỜI — team đã đổi hướng sang gọi qua API ingest (xem mục ✅ 10/07 phía trên)
+> thay vì để GitLab CI kết nối thẳng MySQL. Giữ lại chỉ để tham khảo lịch sử chẩn đoán.
 
 **Cập nhật 09/07 tối:** Đầu mối DevOps phụ trách hạ tầng đã đổi từ anh Quang sang **anh Nam**.
 Đã gửi tin nhắn Teams gộp 4 việc (xem lịch sử bên dưới). Anh Nam đã rep 2 việc:
