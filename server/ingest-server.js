@@ -14,7 +14,7 @@ const { wrap } = require('./vercel-compat');
 const emailTrack = require('../api/email-track');
 const fbIngest = require('../api/fb-ingest');
 
-const PORT = parseInt(process.env.INGEST_PORT || '3001', 10);
+const PORT = parseInt(process.env.SERVER_PORT || process.env.INGEST_PORT || '3001', 10);
 
 const trackHandler = wrap(emailTrack);
 const ingestHandler = wrap(fbIngest);
