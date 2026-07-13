@@ -1,4 +1,50 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 13/07/2026 chiều)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 13/07/2026 tối)
+
+## 🚧 13/07 tối — Đang sửa dở giao diện Jira dashboard cho đồng bộ với Facebook/Email — TẠM DỪNG, chờ anh Nam trả lời việc DB trước
+
+**Bối cảnh:** User yêu cầu đồng bộ masthead/sidebar tab Jira với 2 tab Facebook/Email (đã có sẵn 2 hàng
+đồng bộ từ đợt 07/07). Đã duyệt 1 mockup preview (artifact) làm chuẩn thiết kế trước khi sửa code thật.
+
+**3 fix đã làm, đã render kiểm chứng bằng headless Chromium + push lên nhánh `claude/handoff-reading-qgkm3d`
+(GitHub), user đã copy tay sang GitLab (`public/api/jira/index.html`) và merge cả 3 lần, pipeline đều
+PASS:**
+1. Ẩn hẳn `jira-mast-row1` khi nhúng portal (`html.embed .jira-mast-row1{display:none!important}`) —
+   trước đó chỉ ẩn brand+switcher, để dư 1 hàng dưới masthead portal (bug thật, commit `673d25d`/`faeeca7`).
+2. Logo SHB thật làm mặc định cho `cfg.logoUrl` (trước là chuỗi rỗng → hiện chữ "CM" giả) — dùng lại
+   đúng `LOGO_URI` base64 từ `api/fb-dashboard.js` (commit `faeeca7`).
+3. Nút "Xuất PDF" đổi gradient từ tím (`C.accent`) sang đỏ-cam `#e11d2a→#fb7427` khớp thương hiệu/tab
+   Jira active, KHÔNG đổi biến `C.accent` toàn cục (biến này dùng khắp thân trang — bảng, KPI, chart —
+   đổi sẽ ảnh hưởng diện rộng ngoài phạm vi đã duyệt) (commit `1243869`).
+
+**⚠️ Bài học quan trọng rút ra giữa chừng (đọc kỹ trước khi làm tiếp):**
+- **Đừng đoán bố cục từ đọc code — phải render thật.** Lần đầu đọc JSX `jira-mast-row2` rồi kết luận
+  "đã khớp mockup" là SAI — phải dựng server local (`python3 -m http.server`) + mock `data.json` đúng
+  schema (`key/loai/doi_tuong/nhom/hang_muc/hang_muc_chuan/assignee/status/due/created/updated/work_type`)
+  + vendor UMD (`npm install --no-save react@18 react-dom@18 @babel/standalone@7 prop-types@15.8.1
+  recharts@2.12.7 html2canvas@1.4.1 jspdf@2.5.1`) + Playwright (`chromium-1194`, path
+  `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, cần `args:['--no-sandbox']`) mới thấy đúng giao
+  diện thật. Script mẫu đã dùng: `shot3.js`/`shot4.js` trong scratchpad phiên này (không còn lưu lại,
+  cần dựng lại nếu làm tiếp — pattern: `addInitScript` set `localStorage cm_weekly_<ngày>` +
+  `cm_tip_seen_v1` để tắt 2 popup onboarding chặn màn hình, và click nút "Bỏ qua" để tắt modal "Cảnh
+  báo task" cũng tự bật khi có task trễ hạn trong mock data).
+- **Lỗi console `Uncaught SyntaxError: Invalid or unexpected token` ở SPA Jira là lỗi CÓ SẴN TỪ BẢN GỐC**
+  (đã test lại bằng commit `552d8d8`, trước khi đụng gì) — không phải do các đợt sửa trên, không cần lo.
+- **`cfg` đọc từ `localStorage cm_cfg_v10` TRƯỚC, đè lên default trong code** — nếu trình duyệt test đã
+  từng mở dashboard/bấm "Tuỳ chỉnh" trước đó, các thay đổi default (như `logoUrl`) sẽ KHÔNG hiện ra dù
+  deploy đúng, phải xoá `localStorage.removeItem('cm_cfg_v10')` hoặc mở tab ẩn danh mới thấy.
+- User phản ánh "vẫn không đổi gì" ở lần F5 cuối dù đã merge cả 3 fix + pipeline pass — **CHƯA xác nhận
+  nguyên nhân** (nghi vấn: cache trình duyệt/CDN, hoặc `localStorage cm_cfg_v10` cũ trên máy user đè
+  logo mới — xem bài học ở trên). **CHƯA kiểm tra lại `imagePullPolicy`/digest ECR** cho lần deploy này
+  (xem quy trình đã làm ở mục 403 phía dưới nếu cần đối chiếu).
+
+**✅ VIỆC ĐẦU TIÊN PHIÊN SAU (theo đúng thứ tự user yêu cầu — ưu tiên DB trước, vì anh Nam đã phản hồi):**
+1. Hỏi user nội dung anh Nam đã phản hồi (về `INGEST_SECRET` cho Deployment `cm-dashboard-ingest` — xem
+   mục chẩn đoán unauthorized bên dưới) — đây là việc ưu tiên cao hơn, đang chờ xử lý tiếp.
+2. Sau khi xong việc DB, quay lại Jira UI: nhờ user mở **tab ẩn danh** F5 lại `#jira` để loại trừ
+   `localStorage` cũ trước khi kết luận fix có tác dụng hay không — đừng vội sửa thêm code nếu chưa
+   loại trừ được nguyên nhân cache/localStorage.
+
+---
 
 ## 🔎 13/07 chiều — Chẩn đoán XONG vì sao tab Email/Facebook vẫn "Chưa có dữ liệu" — CHỈ CÒN CHỜ 1 VIỆC (anh Nam)
 
