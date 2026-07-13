@@ -40,16 +40,21 @@ trưa — đây là app `cm-dashboard`, phần build ảnh tĩnh portal/Facebook
   liệu Email, không phải lỗi code) — xem việc dở dang bên dưới.
 
 **Việc còn tồn đọng — không khẩn cấp, KHÔNG chặn dashboard chạy:**
-1. Job `update_manifest_ingest_aws_dev` (restart app `cm-dashboard-ingest`) đang fail vì tự động
-   tải artifact `sync_data` không cần thiết rồi bị `403 Forbidden ... FATAL: permission denied`
-   khi tải (job #626730). Sửa bằng cách thêm `dependencies: []` cho job này (giống pattern đã áp
-   dụng cho `db_check` trước đây) — job chỉ cần gọi `argocd app actions run ... restart`, không
-   cần file `public/` nào cả.
+1. ✅ **ĐÃ XONG 13/07** — Job `update_manifest_ingest_aws_dev` từng fail vì tự động tải artifact
+   `sync_data` không cần thiết rồi bị `403 Forbidden ... FATAL: permission denied` khi tải (job
+   #626730). Đã thêm `dependencies: []` vào `.update_manifest_template` (commit `a08547b`, dùng
+   chung cho cả `update_manifest_aws_dev` và `update_manifest_ingest_aws_dev`) + đồng bộ sang
+   GitLab (`GITLAB_COPY_LIST.md`) — **đã verify PASS thật trên GitLab, job #627352**: log sạch,
+   không còn dòng tải artifact `sync_data`, không còn 403, `argocd app actions run ... restart`
+   chạy xong, "Job succeeded".
 2. Xác nhận dữ liệu Email khi VBA macro đã trỏ đúng endpoint (`shb-fb-dashboard.vercel.app/api/track`
    theo `CampaignTracker.bas` v4.9 — cần xác nhận có đổi sang endpoint nội bộ SHB chưa) và có email
    thật gửi qua Outlook để test.
 3. Việc dở dang từ buổi trưa (mục ✅ 10/07 trưa bên dưới) vẫn còn nguyên — MySQL write qua API ingest
-   chưa xác nhận 100% bằng query trực tiếp.
+   chưa xác nhận 100% bằng query trực tiếp. **Đang chờ anh Nam Trần Hoàng** thêm biến env MySQL
+   (`MYSQL_HOST/PORT/USER/PASSWORD/DATABASE`) vào cả 2 Deployment + biến `INGEST_SECRET` vào
+   Deployment `cm-dashboard-ingest` (namespace `aws-saha-ms-dev`) — nhắn qua Teams chiều/tối
+   13/07, chưa thấy anh Nam confirm xong.
 
 ---
 
