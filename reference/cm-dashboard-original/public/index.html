@@ -1358,7 +1358,7 @@ useEffect(()=>{try{localStorage.setItem("shb_presets",JSON.stringify(presets));}
     pdf.save("CM_Dashboard_"+ts+".pdf");
   }catch(e){alert("Xuất PDF lỗi: "+e.message);}
   finally{if(btn){btn.disabled=false;btn.textContent=cfg.pdfButton||"↑ Xuất PDF";}}
-}} data-pdf-btn style={{padding:"7px 14px",background:"linear-gradient(135deg,"+C.accent+","+C.accent+"CC)",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>{cfg.pdfButton}</button>
+}} data-pdf-btn style={{padding:"7px 14px",background:"linear-gradient(135deg,#e11d2a,#fb7427)",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer",boxShadow:"0 6px 16px -8px rgba(225,29,42,.7)"}}>{cfg.pdfButton}</button>
             </div>
           </div>
         </div>
