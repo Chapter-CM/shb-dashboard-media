@@ -26,9 +26,18 @@
      password login ArgoCD `cm-user/Cmshb@2026` anh Nam cấp sau đó (không phải cùng 1 hệ thống, chỉ trùng
      giá trị) — không dùng để suy luận Secret đúng/sai, chỉ để tham khảo khi anh Nam đối chiếu.
 
-**Việc đầu tiên phiên sau**: hỏi user đã có phản hồi anh Nam về lỗi `ER_ACCESS_DENIED_ERROR` chưa. Nếu
-rồi → chạy lại pipeline `sync_data` → xác nhận hết lỗi → F5 lại `#fb`/`#email` (dùng tab ẩn danh) xem dữ
-liệu thật đã lên chưa.
+6. ✅ **TÌM RA NGUYÊN NHÂN GỐC** — anh Nam tự phát hiện: lúc tạo user MySQL đã gõ **thiếu chữ "h"**:
+   ```sql
+   'cm_dasboard_user'@'%' IDENTIFIED BY 'Cmshb@2026'   -- SAI, thiếu "h" (cm_dasboard_user)
+   ```
+   trong khi code/Secret dùng đúng tên `cm_dashboard_user` (đủ chữ) → MySQL không có user khớp tên →
+   `Access denied`. Anh Nam đang chỉnh lại GRANT cho đúng tên user (nhắn "Để a chỉnh lại", chat 13/07 17:50).
+   **CHƯA có xác nhận đã chỉnh xong** — user đã nhắn "Oke a chỉnh xong báo em với ạ", đang chờ rep.
+
+**Việc đầu tiên phiên sau**: hỏi user đã có phản hồi anh Nam là đã sửa xong tên user MySQL chưa. Nếu rồi
+→ chạy lại pipeline `sync_data` → xác nhận hết lỗi `ER_ACCESS_DENIED_ERROR` → F5 lại `#fb`/`#email` (dùng
+tab ẩn danh) xem dữ liệu thật đã lên chưa. Nếu vẫn lỗi, kiểm tra thêm host pattern (`'%'` phải cho phép
+mọi IP kể cả `10.194.10.166`, khả năng thấp vì `'%'` là wildcard toàn bộ, nhưng vẫn nên xác nhận).
 
 ---
 
