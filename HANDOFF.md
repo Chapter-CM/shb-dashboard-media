@@ -1,4 +1,60 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 10/07/2026 chiều)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 13/07/2026 chiều)
+
+## 🔎 13/07 chiều — Chẩn đoán XONG vì sao tab Email/Facebook vẫn "Chưa có dữ liệu" — CHỈ CÒN CHỜ 1 VIỆC (anh Nam)
+
+**Bối cảnh:** Job tồn đọng #1 (10/07, `update_manifest_ingest_aws_dev` 403) đã xác nhận xong. User gửi
+1 email test qua Outlook (VBA `CampaignTracker.bas` v4.11 — đã tự nâng cấp, `TRACK_URL` đã đúng endpoint
+nội bộ `https://cm-dashboard.dev-saha.aws.shb.com.vn/api/track`, KHÔNG còn trỏ Vercel — nhưng bản lưu
+trên repo `email-tracker-data` mới ở v4.9/Vercel, **cần đồng bộ lại**, xem việc tồn đọng #2 bên dưới).
+Sau khi gửi test, tab `#email` vẫn hiện "Chưa có dữ liệu".
+
+**Đường đi chẩn đoán (đã đi qua + LOẠI TRỪ để tránh lặp lại ở phiên sau):**
+1. ~~Nghi ngờ `imagePullPolicy`/cache image cũ~~ — **SAI, đã loại trừ**: dòng "Cập nhật: 04:14 13-07"
+   hiển thị trên portal ban đầu tưởng là stale, nhưng thực ra `new Date().toLocaleString('vi-VN',...)`
+   trong `api/portal.js` **không set `timeZone`** nên chạy theo giờ UTC của container GitLab runner —
+   `04:14 UTC = 11:14 VN`, khớp đúng thời điểm pipeline #264851 chạy. Digest image không lệch, pod
+   `cm-dashboard-67c8c5dff5-wckr4` xác nhận `CREATED AT` khớp ngay sau pipeline. **Không phải bug cache.**
+2. **Tìm ra nguyên nhân thật trong log job `sync_data`** (pipeline #264851): dòng
+   `[fb loadData] db-client(http): unauthorized`. Đối chiếu code (`lib/db-client.js`,
+   `server/ingest-server.js` — cả 2 file này được thêm bởi **MR `!16 add-dbquery-proxy`, do chính
+   user (Dung Hoang Anh, @dungha4) merge thẳng trên GitLab 2 ngày trước, KHÔNG qua GitHub trước** —
+   phá quy trình chuẩn "sửa GitHub → test → đồng bộ tay sang GitLab" đã ghi trong HANDOFF, cần lưu ý
+   nhắc user tránh lặp lại):
+   - `lib/db-client.js` — khi có env `INGEST_API_URL` (đặt cho job `sync_data` chạy trên GitLab
+     runner, bị Security Group chặn kết nối thẳng RDS), hàm `get()` gọi
+     `{INGEST_API_URL}/dbquery?secret={INGEST_SECRET}&path=...` thay vì tự mở `mysql2` — route mới
+     `/dbquery` này chạy trên chính pod `cm-dashboard-ingest` (đang ở trong cluster, có đường mạng
+     tới RDS).
+   - `server/ingest-server.js` — route `/dbquery` (dòng ~31-45) so khớp secret:
+     ```js
+     if (!process.env.INGEST_SECRET || got !== process.env.INGEST_SECRET) {
+       return sendJson(res, 401, { error: 'unauthorized' });
+     }
+     ```
+     **Nếu Deployment `cm-dashboard-ingest` chưa có biến `INGEST_SECRET`** → `process.env.INGEST_SECRET`
+     rỗng → điều kiện luôn đúng → **route LUÔN LUÔN trả 401**, bất kể secret gửi lên đúng hay sai.
+
+**✅ XÁC NHẬN 100% NGUYÊN NHÂN GỐC — không cần đoán thêm:**
+- CI/CD Variables trên GitLab (`Settings → CI/CD → Variables`) đã có đủ `INGEST_API_URL` +
+  `INGEST_SECRET` (Protected ✓) — phần cấu hình phía CI đã ĐÚNG, đã verify bằng screenshot thật.
+- MR `!16` đã merge vào `main` — code phía app đã ĐÚNG, đã verify bằng screenshot + đọc source thật.
+- **Việc DUY NHẤT còn thiếu**: Deployment `cm-dashboard-ingest` (namespace `aws-saha-ms-dev`) chưa
+  có biến env `INGEST_SECRET` — đúng khớp tin nhắn Teams user đã gửi anh Nam Trần Hoàng thứ Sáu 17:32
+  (`INGEST_SECRET = 500a13c1-4b4a-4da0-a4c7-c4200e51b66a`), **chưa thấy anh Nam confirm đã làm xong**.
+
+**Việc đầu tiên phiên sau:**
+1. Hỏi user đã có phản hồi anh Nam về việc thêm `INGEST_SECRET` vào Deployment `cm-dashboard-ingest`
+   chưa. Nếu rồi → chạy lại pipeline `sync_data` trên `main` → xác nhận log HẾT dòng
+   `db-client(http): unauthorized` → F5 tab `#email`/`#fb` xem có dữ liệu thật chưa.
+2. Nếu còn "Chưa có dữ liệu" SAU KHI đã hết `unauthorized` → mới cần đào tiếp (VD: `MYSQL_HOST` có ở
+   Deployment `cm-dashboard-ingest` chưa — route `/dbquery` cũng check dòng
+   `if (!process.env.MYSQL_HOST) return sendJson(res, 500, {error:'Pod nay thieu MYSQL_HOST.'})`).
+3. Đồng bộ lại `CampaignTracker.bas` — xem việc tồn đọng #2 mục 10/07 chiều bên dưới (repo
+   `email-tracker-data` vẫn v4.9/Vercel, máy user đã tự nâng lên v4.11/endpoint nội bộ nhưng
+   **CHƯA commit lại nguồn** — dở dang, việc edit bị lỗi string-not-found lúc đang làm, cần làm lại
+   từ đầu bằng Write thay vì Edit).
+
+---
 
 ## ✅ 10/07 chiều — Cả 3 tab (Facebook/Jira/Email) đã sống trên `cm-dashboard.dev-saha.aws.shb.com.vn`, hết 403
 
@@ -40,16 +96,21 @@ trưa — đây là app `cm-dashboard`, phần build ảnh tĩnh portal/Facebook
   liệu Email, không phải lỗi code) — xem việc dở dang bên dưới.
 
 **Việc còn tồn đọng — không khẩn cấp, KHÔNG chặn dashboard chạy:**
-1. Job `update_manifest_ingest_aws_dev` (restart app `cm-dashboard-ingest`) đang fail vì tự động
-   tải artifact `sync_data` không cần thiết rồi bị `403 Forbidden ... FATAL: permission denied`
-   khi tải (job #626730). Sửa bằng cách thêm `dependencies: []` cho job này (giống pattern đã áp
-   dụng cho `db_check` trước đây) — job chỉ cần gọi `argocd app actions run ... restart`, không
-   cần file `public/` nào cả.
+1. ✅ **ĐÃ XONG 13/07** — Job `update_manifest_ingest_aws_dev` từng fail vì tự động tải artifact
+   `sync_data` không cần thiết rồi bị `403 Forbidden ... FATAL: permission denied` khi tải (job
+   #626730). Đã thêm `dependencies: []` vào `.update_manifest_template` (commit `a08547b`, dùng
+   chung cho cả `update_manifest_aws_dev` và `update_manifest_ingest_aws_dev`) + đồng bộ sang
+   GitLab (`GITLAB_COPY_LIST.md`) — **đã verify PASS thật trên GitLab, job #627352**: log sạch,
+   không còn dòng tải artifact `sync_data`, không còn 403, `argocd app actions run ... restart`
+   chạy xong, "Job succeeded".
 2. Xác nhận dữ liệu Email khi VBA macro đã trỏ đúng endpoint (`shb-fb-dashboard.vercel.app/api/track`
    theo `CampaignTracker.bas` v4.9 — cần xác nhận có đổi sang endpoint nội bộ SHB chưa) và có email
    thật gửi qua Outlook để test.
 3. Việc dở dang từ buổi trưa (mục ✅ 10/07 trưa bên dưới) vẫn còn nguyên — MySQL write qua API ingest
-   chưa xác nhận 100% bằng query trực tiếp.
+   chưa xác nhận 100% bằng query trực tiếp. **Đang chờ anh Nam Trần Hoàng** thêm biến env MySQL
+   (`MYSQL_HOST/PORT/USER/PASSWORD/DATABASE`) vào cả 2 Deployment + biến `INGEST_SECRET` vào
+   Deployment `cm-dashboard-ingest` (namespace `aws-saha-ms-dev`) — nhắn qua Teams chiều/tối
+   13/07, chưa thấy anh Nam confirm xong.
 
 ---
 

@@ -1,46 +1,59 @@
-# Danh sách file cần copy sang `cm-dashboard` (nhánh `merge-email-facebook`)
+# Danh sách file cần copy sang `cm-dashboard` (nhánh `main`)
 
-> Cập nhật 06/07/2026 tối — sau đợt tổng rà soát code. Toàn bộ file nguồn nằm trong
-> repo GitHub `shb-dashboard-media` (branch `claude/dashboard-log-repo-strategy-v2t8f1`).
-> Copy xong hết thì commit 1 lần rồi push.
+> Cập nhật 13/07/2026 — chỉ còn **1 file** cần đồng bộ (các lần trước đã copy xong).
+> Nguồn nằm trong repo GitHub `shb-dashboard-media`, nhánh `claude/loving-planck-y6lw57`.
 
-## 9 file cần copy (nguồn → đích trong `cm-dashboard`)
+## 1 file cần copy (nguồn → đích trong `cm-dashboard`)
 
 | # | Nguồn (repo này) | Đích (`cm-dashboard`) |
 |---|---|---|
-| 1 | `api/email-track.js` | `api/email-track.js` |
-| 2 | `api/fb-ingest.js` | `api/fb-ingest.js` |
-| 3 | `api/email-dashboard.js` | `api/email-dashboard.js` |
-| 4 | `api/fb-dashboard.js` | `api/fb-dashboard.js` |
-| 5 | `api/leader-dashboard.js` | `api/leader-dashboard.js` |
-| 6 | `lib/db-client.js` | `lib/db-client.js` |
-| 7 | `Dockerfile.ingest` | `Dockerfile.ingest` |
-| 8 | `.gitlab-ci.yml` | `.gitlab-ci.yml` |
-| 9 | `reference/cm-dashboard-original/public/index.html` | `public/api/jira/index.html` |
+| 1 | `.gitlab-ci.yml` | `.gitlab-ci.yml` |
 
-## Lệnh copy (Command Prompt, sau khi giải nén gói zip vào `Downloads\gitlab-sync`)
+## Vì sao cần copy lại
+
+Commit `a08547b` (10/07) thêm `dependencies: []` vào job template
+`.update_manifest_template` (dùng chung cho `update_manifest_aws_dev` **và**
+`update_manifest_ingest_aws_dev`) — job restart ArgoCD chỉ cần gọi
+`argocd app actions run ... restart`, không cần file `public/` nào, nên khai
+báo rỗng để khỏi tự tải artifact của `sync_data` (mặc định GitLab tải hết job
+trước đó, từng gây `403 Forbidden ... FATAL: permission denied` khi artifact
+hết hạn/thiếu quyền — chính là lỗi job #626730 nêu trong HANDOFF.md mục tồn
+đọng #1).
+
+**Chưa xác nhận file này đã có mặt bên GitLab hay chưa** — nếu bạn đã copy
+`.gitlab-ci.yml` mới nhất trong lần đồng bộ 10/07 chiều rồi thì bỏ qua, việc
+này coi như đã xong.
+
+## Lệnh copy (Command Prompt)
 
 ```
-copy %USERPROFILE%\Downloads\gitlab-sync\email-track.js %USERPROFILE%\cm-dashboard\api\email-track.js
-copy %USERPROFILE%\Downloads\gitlab-sync\fb-ingest.js %USERPROFILE%\cm-dashboard\api\fb-ingest.js
-copy %USERPROFILE%\Downloads\gitlab-sync\email-dashboard.js %USERPROFILE%\cm-dashboard\api\email-dashboard.js
-copy %USERPROFILE%\Downloads\gitlab-sync\fb-dashboard.js %USERPROFILE%\cm-dashboard\api\fb-dashboard.js
-copy %USERPROFILE%\Downloads\gitlab-sync\leader-dashboard.js %USERPROFILE%\cm-dashboard\api\leader-dashboard.js
-copy %USERPROFILE%\Downloads\gitlab-sync\db-client.js %USERPROFILE%\cm-dashboard\lib\db-client.js
-copy %USERPROFILE%\Downloads\gitlab-sync\Dockerfile.ingest %USERPROFILE%\cm-dashboard\Dockerfile.ingest
-copy %USERPROFILE%\Downloads\gitlab-sync\gitlab-ci.yml %USERPROFILE%\cm-dashboard\.gitlab-ci.yml
-copy %USERPROFILE%\Downloads\gitlab-sync\jira-index.html %USERPROFILE%\cm-dashboard\public\api\jira\index.html
+copy /Y %USERPROFILE%\Downloads\gitlab-sync\gitlab-ci.yml %USERPROFILE%\cm-dashboard\.gitlab-ci.yml
+cd %USERPROFILE%\cm-dashboard
+findstr /C:"dependencies: []" .gitlab-ci.yml
 ```
-(Gõ `Y` mỗi lần hỏi ghi đè. Lưu ý file 8 đích có dấu chấm đầu: `.gitlab-ci.yml`;
-file 9 đổi tên từ `jira-index.html` thành `index.html` ở đích.)
+(Dùng `copy /Y` để tự ghi đè, không cần trả lời Y/N tay — rồi `findstr` xác
+nhận nội dung đã đổi thật trước khi commit, tránh lặp lại lỗi "tưởng đã copy
+nhưng thực ra không" đã ghi trong HANDOFF.md.)
 
 ## Commit + push
 
 ```
-cd %USERPROFILE%\cm-dashboard
-git add -A
-git commit -m "Fix duong ghi MySQL cho ingest, guard fallback, needs sync_data, pin babel7, jira embed"
-git push origin merge-email-facebook
+git add .gitlab-ci.yml
+git commit -m "Them dependencies: [] cho job update_manifest, tranh 403 tai artifact thua"
+git push origin main
 ```
 
-Push xong kiểm tra Pipeline trên MR `!3` — phải PASS như các lần trước.
+Push xong kiểm tra Pipeline job `update_manifest_ingest_aws_dev` — phải PASS,
+hết lỗi 403 tải artifact (job cũ lỗi là #626730).
+
+---
+
+## Đã đồng bộ xong (không cần copy lại)
+
+Các file sau đã copy sang GitLab ở các lần trước (06/07–10/07), không có thay
+đổi mới kể từ đó:
+`api/email-track.js` · `api/fb-ingest.js` · `api/email-dashboard.js` ·
+`api/fb-dashboard.js` · `api/leader-dashboard.js` · `lib/db-client.js` ·
+`Dockerfile.ingest` · `reference/cm-dashboard-original/public/index.html`
+(→ `public/api/jira/index.html`) · `sync.js` (vendor pin babel@7 + needs
+sync_data trong `docker build ecr`).
