@@ -1,4 +1,36 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 13/07/2026 tối)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 13/07/2026 tối muộn)
+
+## ⏳ 13/07 tối muộn — Đang chờ anh Nam trả lời lỗi MySQL `ER_ACCESS_DENIED_ERROR` — ĐÃ QUA lỗi `unauthorized`
+
+**Tiến trình xử lý `/dbquery` proxy hôm nay (theo đúng thứ tự, KHÔNG cần lặp lại các bước đã qua):**
+1. ✅ Anh Nam xác nhận đã thêm `INGEST_SECRET` vào Deployment `cm-dashboard-ingest` (chat Teams, "a thêm r đó").
+2. ✅ Chạy lại pipeline `main` (job `sync_data`) — xác nhận **HẾT HẲN** lỗi `db-client(http): unauthorized`.
+3. ⏳ **Lỗi MỚI xuất hiện, đang chờ anh Nam** — job `sync_data` giờ báo:
+   ```
+   [fb loadData] db-client(http): ER_ACCESS_DENIED_ERROR - Access denied for user
+   'cm_dashboard_user'@'10.194.10.166' (using password: YES)
+   ```
+   → Route `/dbquery` trên pod `cm-dashboard-ingest` đã nhận đúng request (secret khớp, có `MYSQL_HOST`),
+   thực sự kết nối tới MySQL — nhưng MySQL **từ chối** user `cm_dashboard_user` khi connect từ IP
+   `10.194.10.166` (IP nội bộ của chính pod `cm-dashboard-ingest`).
+4. **Đã loại trừ**: Secret `mysql-secret` (namespace `aws-saha-ms-dev`, chứa `MYSQL_USER/PASSWORD/HOST/
+   DATABASE/PORT` qua `secretKeyRef`) **KHÔNG nằm trong resource ArgoCD app `cm-dashboard-ingest` quản lý**
+   (filter "Kinds → Secret" trong ArgoCD ra đếm 0) → không tự xem/đối chiếu giá trị thật được qua ArgoCD,
+   phải nhờ anh Nam xem trực tiếp.
+5. **Đã nhắn anh Nam** (chưa có phản hồi) — nhờ kiểm tra 2 khả năng:
+   - Secret `mysql-secret` có đang set đúng password thật của `cm_dashboard_user` không (nghi gõ nhầm lúc
+     tạo Secret thủ công — Secret KHÔNG do Helm/ArgoCD quản lý nên dễ lệch tay).
+   - User `cm_dashboard_user` trên MySQL có được GRANT quyền kết nối từ IP `10.194.10.166` không — chạy
+     `SELECT user,host FROM mysql.user WHERE user='cm_dashboard_user';` để xem host pattern hiện tại.
+   - Ghi chú: password gốc đã cấp trước đó (09/07) là `Cmshb@2026` cho `cm_dashboard_user` — TRÙNG với
+     password login ArgoCD `cm-user/Cmshb@2026` anh Nam cấp sau đó (không phải cùng 1 hệ thống, chỉ trùng
+     giá trị) — không dùng để suy luận Secret đúng/sai, chỉ để tham khảo khi anh Nam đối chiếu.
+
+**Việc đầu tiên phiên sau**: hỏi user đã có phản hồi anh Nam về lỗi `ER_ACCESS_DENIED_ERROR` chưa. Nếu
+rồi → chạy lại pipeline `sync_data` → xác nhận hết lỗi → F5 lại `#fb`/`#email` (dùng tab ẩn danh) xem dữ
+liệu thật đã lên chưa.
+
+---
 
 ## 🚧 13/07 tối — Đang sửa dở giao diện Jira dashboard cho đồng bộ với Facebook/Email — TẠM DỪNG, chờ anh Nam trả lời việc DB trước
 
