@@ -49,10 +49,12 @@ Sau khi gửi test, tab `#email` vẫn hiện "Chưa có dữ liệu".
 2. Nếu còn "Chưa có dữ liệu" SAU KHI đã hết `unauthorized` → mới cần đào tiếp (VD: `MYSQL_HOST` có ở
    Deployment `cm-dashboard-ingest` chưa — route `/dbquery` cũng check dòng
    `if (!process.env.MYSQL_HOST) return sendJson(res, 500, {error:'Pod nay thieu MYSQL_HOST.'})`).
-3. Đồng bộ lại `CampaignTracker.bas` — xem việc tồn đọng #2 mục 10/07 chiều bên dưới (repo
-   `email-tracker-data` vẫn v4.9/Vercel, máy user đã tự nâng lên v4.11/endpoint nội bộ nhưng
-   **CHƯA commit lại nguồn** — dở dang, việc edit bị lỗi string-not-found lúc đang làm, cần làm lại
-   từ đầu bằng Write thay vì Edit).
+3. ✅ **ĐÃ XONG 13/07** — Đồng bộ `CampaignTracker.bas`. **QUYẾT ĐỊNH MỚI: repo `email-tracker-data`
+   BỊ NGHỈ HẲN, user sẽ xoá repo này** (lý do: hay bị update nhầm/lệch giữa 2 repo). Nguồn chính
+   thức DUY NHẤT của macro giờ là `tools/CampaignTracker.bas` **trong chính repo
+   `shb-dashboard-media` này** — đã lưu đúng bản v4.11 (endpoint nội bộ
+   `cm-dashboard.dev-saha.aws.shb.com.vn/api/track`, fix resolve SMTP GAL/contact). Từ nay sửa
+   macro thì sửa trực tiếp file này, KHÔNG còn file `.bas` nào khác cần đồng bộ.
 
 ---
 
