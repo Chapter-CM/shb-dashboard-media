@@ -20,12 +20,12 @@ module.exports = (req, res) => {
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SHB CM Dashboard</title>
 <style>${FONT_FACE}
-:root{--bg:#0b0916;--bar:rgba(20,17,38,.92);--stroke:rgba(255,255,255,.10);--text:#f2effc;--muted:#9a95bd;--accent:#ef4444;--grad:linear-gradient(135deg,#e11d2a 0%,#fb7427 100%)}
+:root{--bg:#0b0916;--stroke:rgba(255,255,255,.10);--text:#f2effc;--muted:#9a95bd;--accent:#ef4444;--grad:linear-gradient(135deg,#e11d2a 0%,#fb7427 100%)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
 /* Logo + tab nổi (overlay) lên cùng dòng với thanh điều khiển của dashboard (vùng trái masthead trống do brand đã ẩn khi nhúng) */
-.topbar{position:absolute;top:0;left:0;right:0;z-index:5;height:63px;pointer-events:none;background:var(--bar);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--stroke)}
+.topbar{position:absolute;top:0;left:0;right:0;z-index:5;height:63px;pointer-events:none;background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);border-bottom:1px solid var(--stroke)}
 .topbar-in{max-width:1200px;margin:0 auto;height:100%;display:flex;align-items:center;gap:14px;padding:0 26px}
 .topbar-in>*{pointer-events:auto}
 .brand{display:flex;align-items:center;gap:9px}
