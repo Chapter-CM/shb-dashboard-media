@@ -1,4 +1,17 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 13/07/2026 tối muộn)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 sáng)
+
+## ⏸️ 14/07 sáng — Việc DB (`ER_NO_SUCH_TABLE`) đang CHỜ anh Nam chạy `schema.mysql.sql` — quay lại sửa UI Jira trong lúc chờ
+
+Xem chi tiết đầy đủ ở mục "⏳ 13/07 tối muộn" ngay bên dưới — KHÔNG cần lặp lại chẩn đoán, chỉ cần hỏi
+user đã có phản hồi anh Nam chưa trước khi động vào DB. Trong lúc chờ, tiếp tục dở việc sửa giao diện
+Jira dashboard (xem mục "🚧 13/07 tối — Đang sửa dở giao diện Jira..." — vẫn còn treo nghi vấn user F5
+không thấy đổi dù đã deploy đủ 3 fix, CHƯA loại trừ được do cache trình duyệt/`localStorage cm_cfg_v10`
+hay do thật sự chưa lên — **việc đầu tiên khi tiếp tục** là nhờ user test lại bằng tab ẩn danh trước khi
+sửa thêm code).
+
+---
+
+# (Lịch sử cũ bên dưới, giữ nguyên không đổi)
 
 ## ⏳ 13/07 tối muộn — Đang chờ anh Nam trả lời lỗi MySQL `ER_ACCESS_DENIED_ERROR` — ĐÃ QUA lỗi `unauthorized`
 
