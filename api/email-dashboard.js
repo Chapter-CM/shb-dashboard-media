@@ -1464,7 +1464,7 @@ function render(){
   var d=process(cl),cur=quickMetrics(cl),prev=quickMetrics(pl);
   if(!d){
     var isEmpty=!LOGS||!LOGS.length;
-    var emptyMsg=isEmpty?'Chưa có sự kiện nào trong Supabase. Kiểm tra biến môi trường SUPABASE_URL + SUPABASE_SERVICE_KEY trên Vercel, hoặc gửi email HTML đầu tiên từ Outlook.':'Gửi email HTML từ Outlook để bắt đầu đo lường.';
+    var emptyMsg=isEmpty?'Chưa có sự kiện nào trong nguồn dữ liệu. Bản nội bộ: kiểm tra kết nối MySQL của job sync_data (MYSQL_*/INGEST_*). Bản Vercel: kiểm tra EMAIL_SUPABASE_URL + EMAIL_SUPABASE_SERVICE_KEY. Hoặc gửi email HTML đầu tiên từ Outlook.':'Gửi email HTML từ Outlook để bắt đầu đo lường.';
     return masthead(_mode)+'<div class="wrap"><div style="text-align:center;padding:80px 20px"><div style="font-size:42px;color:var(--faint)">'+( isEmpty?'⚠️':'—')+'</div><h2 style="color:var(--text-2);font-weight:600;margin:14px 0 8px;font-size:18px">Chưa có dữ liệu</h2><p style="color:var(--muted)">'+emptyMsg+'</p></div></div>';
   }
   if(d.empty){

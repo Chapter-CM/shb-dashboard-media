@@ -1,13 +1,20 @@
 # Danh sách file cần copy sang `cm-dashboard` (nhánh `main`)
 
-> Cập nhật 13/07/2026 — chỉ còn **1 file** cần đồng bộ (các lần trước đã copy xong).
+> Cập nhật 14/07/2026 — **3 file** cần đồng bộ.
 > Nguồn nằm trong repo GitHub `shb-dashboard-media`, nhánh `claude/loving-planck-y6lw57`.
 
-## 1 file cần copy (nguồn → đích trong `cm-dashboard`)
+## 3 file cần copy (nguồn → đích trong `cm-dashboard`)
 
-| # | Nguồn (repo này) | Đích (`cm-dashboard`) |
-|---|---|---|
-| 1 | `.gitlab-ci.yml` | `.gitlab-ci.yml` |
+| # | Nguồn (repo này) | Đích (`cm-dashboard`) | Lý do |
+|---|---|---|---|
+| 1 | `.gitlab-ci.yml` | `.gitlab-ci.yml` | `dependencies: []` (xem mục dưới) — nếu đã copy 10/07 thì bỏ qua |
+| 2 | `api/portal.js` | `api/portal.js` | Fix UI 14/07: giờ "Cập nhật" hiện UTC thay vì giờ VN (thiếu `timeZone`) + thêm listener `hashchange` để link `#email`/`#jira` và nút Back/Forward chuyển tab được |
+| 3 | `api/email-dashboard.js` | `api/email-dashboard.js` | Fix UI 14/07: thông báo "Chưa có dữ liệu" hết trỏ nhầm sang Supabase/Vercel trên bản nội bộ (giờ ghi rõ cả 2 nguồn MySQL nội bộ / Vercel) |
+
+Sau khi copy 2 file `api/*`: job `sync_data` trên GitLab sẽ tự bake lại
+`public/index.html` + `public/api/email.html` — không cần copy HTML tay.
+Verify nhanh sau copy: `findstr "Asia/Ho_Chi_Minh" api\portal.js` và
+`findstr "hashchange" api\portal.js` phải ra kết quả.
 
 ## Vì sao cần copy lại
 

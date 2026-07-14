@@ -63,7 +63,7 @@ body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI'
     <button class="tab" id="tab-email" onclick="show('email')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</button>
     <button class="tab${DEFAULT_TAB === 'jira' ? ' on' : ''}" id="tab-jira" onclick="show('jira')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Jira</button>
   </div>
-  <span class="synctime" title="Thời điểm trang portal này được tạo — trên bản build tĩnh (GitLab) là lúc sync.js chạy; trên Vercel là lúc mở trang">Cập nhật: ${new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span>
+  <span class="synctime" title="Thời điểm trang portal này được tạo — trên bản build tĩnh (GitLab) là lúc sync.js chạy; trên Vercel là lúc mở trang">Cập nhật: ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span>
 </div></div>
 <script>
 var SRC={fb:'/api/facebook',email:'/api/email',jira:'/api/jira/'},loaded={},cur='${DEFAULT_TAB}';
@@ -82,6 +82,11 @@ function show(k){
 // mở theo hash (#email/#fb) nếu có
 var h=(location.hash||'').replace('#','');
 show(SRC[h]?h:'${DEFAULT_TAB}');
+// đổi hash khi trang đang mở (bấm link #tab, nút Back/Forward) cũng phải chuyển tab
+window.addEventListener('hashchange',function(){
+  var k=(location.hash||'').replace('#','');
+  if(SRC[k]&&k!==cur)show(k);
+});
 </script>
 </body></html>`);
 };
