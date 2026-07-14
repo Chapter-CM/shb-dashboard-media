@@ -1339,6 +1339,7 @@ function masthead(mode){
   var lbl=custom?(fmtDay(_from)+'–'+fmtDay(_to)):'Tuỳ chọn';
   var pgsw='<div class="pgsw"><a href="/api/facebook" data-tip="Facebook Dashboard"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 22v-8h2.7l.4-3H13V9c0-.9.2-1.5 1.5-1.5H16V4.9C15.7 4.9 14.8 4.8 13.7 4.8 11.4 4.8 9.9 6.2 9.9 8.7V11H7.2v3H9.9v8z"/></svg>Facebook</a><a class="on" href="/api/email" data-tip="Email Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</a></div>';
   var mhGrp='<div class="mh-grp"><button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K) — tìm kiếm tính năng">⌘K</button>'
+    +'<button id="sync-btn" class="icon-btn" onclick="syncDashboard()" data-tip="Đồng bộ dữ liệu mới (chạy lại pipeline GitLab — kéo lại cả Facebook, Email, Jira, ~5 phút)">↻</button>'
     +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Đổi giao diện sáng/tối" id="thBtn">'+(_theme==='dark'?'☼':'☾')+'</button></div>';
   return '<div class="mast"><div class="mast-row1"><div class="brand"><img class="mh-logoimg" src="'+LOGO_URI+'" alt="SHB"><span class="mh-div"></span><span class="mh-sub">CM Dashboard</span></div>'
     +pgsw
@@ -1591,6 +1592,21 @@ function buildCmds(){return [
   {t:'Chế độ · Tóm tắt lãnh đạo',a:function(){setMode('ex');}},
   {t:'Chế độ · Bảng điều hành',a:function(){setMode('op');}}
 ];}
+function syncDashboard(){
+  var btn=document.getElementById('sync-btn');
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
+  fetch('https://gitlab-nhs.shb.com.vn/api/v4/projects/446/trigger/pipeline',{
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'token=dcefb557281889dd16b293b7c8f078&ref=main'
+  }).then(function(){
+    alert('Đã gửi yêu cầu đồng bộ. Trang sẽ tự tải lại sau khoảng 5 phút (đủ thời gian build + deploy).');
+    setTimeout(function(){location.reload();},300000);
+  }).catch(function(e){
+    alert('Lỗi gửi yêu cầu đồng bộ: '+e.message);
+    if(btn){btn.disabled=false;btn.textContent='↻';}
+  });
+}
 function ensureCmdk(){if(document.getElementById('cmdk-ov'))return;var ov=document.createElement('div');ov.id='cmdk-ov';ov.className='cmdk-ov';ov.innerHTML='<div class="cmdk" onclick="event.stopPropagation()"><input class="cmdk-in" id="cmdk-in" placeholder="Gõ lệnh…" oninput="cmdFilter(this.value)" onkeydown="cmdKey(event)"><div class="cmdk-list" id="cmdk-list"></div><div class="cmdk-hint"><span>↑↓ chọn</span><span>⏎ thực hiện</span><span>esc đóng</span></div></div>';ov.addEventListener('click',closeCmd);document.body.appendChild(ov);}
 function openCmd(){ensureCmdk();_cmds=buildCmds();_cmdSel=0;cmdFilter('');document.getElementById('cmdk-ov').classList.add('show');var i=document.getElementById('cmdk-in');i.value='';setTimeout(function(){i.focus();},20);}
 function closeCmd(){var o=document.getElementById('cmdk-ov');if(o)o.classList.remove('show');}
