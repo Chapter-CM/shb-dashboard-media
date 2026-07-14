@@ -1,4 +1,38 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 trưa muộn)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 chiều)
+
+## ⚠️ 14/07 chiều — Số liệu Facebook MySQL là DỮ LIỆU RÁC/TEST, không phải data thật — đã tìm nguyên nhân + đang xử lý
+
+**Phát hiện:** user đối chiếu bản Vercel (Supabase, thật: 291.246 lượt xem, 76 bài, có chuỗi ngày thật)
+với bản nội bộ MySQL vừa lên (1.270.824 lượt xem, 38 bài, "Chưa có chuỗi theo ngày hoạt động") — 2 bộ số
+khác hẳn nhau. Kết luận: bảng `fb_group_posts` trên MySQL đang chứa vài dòng dữ liệu test/rác còn sót
+từ lúc debug kết nối trước đó, KHÔNG PHẢI dữ liệu Facebook thật — dữ liệu thật vẫn đang nằm bên Supabase
+(Vercel), CHƯA từng được đưa vào MySQL.
+
+**Quyết định (theo yêu cầu user): KHÔNG migrate dữ liệu cũ từ Supabase sang** — thay vào đó xoá sạch
+data rác trong MySQL rồi để userscript Tampermonkey (nguồn CHÍNH theo kiến trúc gốc) tự nạp lại dữ liệu
+thật từ đầu.
+
+**Tìm ra thêm 1 nguyên nhân liên quan:** `tools/shb-content-library.user.js` (userscript Content
+Library) **vẫn trỏ endpoint Vercel** (`https://shb-fb-dashboard.vercel.app/api/ingest`), y hệt lỗi đã
+gặp với `CampaignTracker.bas` trước đó (v4.9 quên đổi). Đã sửa xong (commit `92107c6`):
+- `INGEST` → `https://cm-dashboard.dev-saha.aws.shb.com.vn/api/ingest` (nội bộ).
+- `SECRET` → điền sẵn `500a13c1-4b4a-4da0-a4c7-c4200e51b66a` (trước để placeholder `PASTE_INGEST_SECRET_HERE`).
+- `@connect` đổi sang domain nội bộ (Tampermonkey chặn cross-origin nếu không khai báo đúng domain).
+Đã gửi file mới cho user cài lại vào Tampermonkey.
+
+**Việc còn lại (theo thứ tự):**
+1. ⏳ Nhờ anh Nam chạy `DELETE FROM fb_group_posts;` trên MySQL (dọn dữ liệu rác — `fb_group_post_snapshots`
+   tự xoá theo nhờ `ON DELETE CASCADE`). **CHƯA có xác nhận.**
+2. User cài lại `shb-content-library.user.js` mới vào Tampermonkey.
+3. Chạy userscript thật trên Facebook (Professional Dashboard → Content Library, khoảng ngày rộng) để
+   nạp dữ liệu thật vào MySQL.
+4. F5 `#fb`, so với bản Vercel — nếu số liệu khớp hợp lý (không cần giống hệt vì thời điểm chạy khác
+   nhau) → coi như xong.
+
+**Việc đầu tiên phiên sau**: hỏi user tiến độ bước 1 (anh Nam xoá bảng chưa) và bước 3 (đã chạy
+userscript thật chưa), rồi F5 kiểm tra kết quả.
+
+---
 
 ## 🎉 14/07 trưa muộn — Facebook ĐÃ CÓ DỮ LIỆU THẬT — luồng MySQL (`/dbquery` proxy) THÔNG SUỐT HOÀN TOÀN
 
