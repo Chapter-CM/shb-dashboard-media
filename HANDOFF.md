@@ -1,4 +1,27 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 tối muộn)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 khuya)
+
+## 🔀 14/07 khuya — Facebook (chạy userscript thật) TẠM DỪNG, chuyển sang sửa lỗi giao diện còn tồn đọng
+
+**Xác nhận rõ với user**: KHÔNG cần xoá gì trong MySQL — bảng `fb_group_posts` vốn đã trống sẵn (đã
+verify `[]` qua `/dbquery`), mock 38 bài chỉ là kết quả TÍNH TOÁN lúc render (không lưu DB) khi cả 2
+bảng rỗng — chỉ cần userscript nạp được ≥1 dòng thật là mock tự biến mất ngay, không cần thao tác dọn dẹp
+gì thêm. Việc chạy userscript thật vẫn đang chờ user xin quyền đăng nhập Facebook trên máy công ty (xem
+mục "⏸️ 14/07 tối — Nạp lại dữ liệu Facebook thật" bên dưới để không lặp lại hướng dẫn).
+
+**Chuyển hướng theo yêu cầu user**: phiên tiếp theo sẽ sửa "các lỗi giao diện còn tồn đọng" — **CHƯA rõ
+cụ thể là lỗi gì** (chưa hỏi/chưa nhận ảnh cụ thể lúc ghi mục này). Nhắc lại bài học đã rút ra trong phiên
+này (rất quan trọng, đọc kỹ trước khi sửa bất kỳ UI nào): 
+- ĐỪNG đoán bố cục/lỗi từ mô tả chung chung — luôn xin ảnh chụp cụ thể + khoanh vùng chỗ lỗi trước khi sửa.
+- Đã có 3-4 vòng đoán sai liên tiếp về UI Jira trong phiên này (row1 dư, logo, màu nút PDF, bố cục row2)
+  khiến user phàn nàn mất thời gian — ĐỪNG lặp lại, luôn xác nhận phạm vi cụ thể trước khi động code.
+- Nếu cần test/render trước khi gửi, dùng pattern đã có: `python3 -m http.server` + mock `data.json` +
+  Playwright (`chromium-1194`, path `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`,
+  `args:['--no-sandbox']`) — xem chi tiết mục "🚧 13/07 tối" ở lịch sử bên dưới.
+
+**Việc đầu tiên phiên sau**: hỏi user CHÍNH XÁC đang thấy lỗi giao diện gì (dashboard nào: Facebook/Email/
+Jira/Portal, ảnh chụp cụ thể), đừng tự suy đoán rồi sửa ngay.
+
+---
 
 ## ✅ 14/07 tối muộn — ĐÍNH CHÍNH: số liệu Facebook "38 bài" là MOCK CHỦ Ý, KHÔNG PHẢI data rác trong MySQL
 
