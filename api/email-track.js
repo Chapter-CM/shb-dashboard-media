@@ -20,7 +20,7 @@ const GIF = Buffer.from(
 // hiệu client ngắt kết nối vào function, xem KE_HOACH_MIGRATION.md mục 7b.
 // Ghi thêm event pos='dwell' với dwell_s (cột có sẵn trong schema, xem
 // db/schema.mysql.sql + db/migrate_05_email_dwell.sql).
-const DWELL_CAP_S   = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '25', 10) || 25);
+const DWELL_CAP_S   = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '60', 10) || 60);
 const DWELL_TICK_MS = 2000;
 const GIF_BODY    = GIF.slice(0, GIF.length - 1);              // GIF trừ byte trailer 0x3B
 const GIF_TRAILER = GIF.slice(GIF.length - 1);
