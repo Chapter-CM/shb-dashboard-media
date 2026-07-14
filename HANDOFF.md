@@ -1,4 +1,4 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 tối)
 
 ## 🔥 14/07 — PHÁT HIỆN NGHIÊM TRỌNG khi test thật: pixel `/api/track` CHỈ mạng NHS gọi tới được — sai giả định kế hoạch từ đầu
 
@@ -15,7 +15,13 @@
 2. Dự phòng nếu ý 1 không được duyệt: quay lại dùng endpoint Vercel public sẵn có (`/api/email-track.js`) làm trạm thu, ghi vào Supabase như cũ, đồng bộ định kỳ sang MySQL nội bộ — thêm phức tạp vận hành 2 nguồn dữ liệu song song.
 3. Không làm gì (chấp nhận chỉ đo được lượt mở trong mạng NHS) — chỉ hợp lý nếu lãnh đạo xác nhận đa số người nhận luôn dùng VPN/mạng công ty khi đọc email, cần xác nhận rõ trước khi chọn.
 
-**Việc đầu tiên phiên sau:** hỏi user đã gửi anh Nam xin duyệt Ingress public riêng cho `/api/track` chưa, nếu đã có domain public mới thì cập nhật `TRACK_URL` trong `CampaignTracker.bas` (VBA) trỏ sang domain đó (đích vẫn là ingest-server hiện tại, không đổi code `api/email-track.js`/`server/ingest-server.js`).
+**✅ ĐÃ GỬI anh Nam (14/07 tối, qua Teams)** — xin mở Ingress public riêng cho `/api/track`, đúng nội dung mục 1 ở trên. User bổ sung thêm 2 chi tiết quan trọng khi nhắn: (a) mail thường gửi tới nhiều khối khác nhau, nhiều khi người nhận không ở mạng NHS; (b) **đã thử bật VPN mở Outlook trên điện thoại — VẪN không ghi nhận được** (loại trừ luôn phương án "bảo mọi người bật VPN" — có thể do VPN split-tunnel không đẩy traffic tới đúng domain nội bộ). **CHƯA thấy anh Nam phản hồi/xác nhận đã làm.**
+
+**Việc đầu tiên phiên sau:** hỏi user đã có phản hồi anh Nam chưa. Nếu đã có domain public mới → cập nhật `TRACK_URL` trong `CampaignTracker.bas` (VBA) trỏ sang domain đó (đích vẫn là ingest-server hiện tại, không đổi code `api/email-track.js`/`server/ingest-server.js`) → gửi lại 1 email test → lặp lại kịch bản test tay Desktop/Mobile để xác nhận đã ghi nhận được từ mọi mạng.
+
+**2 fix nhỏ khác đã làm cùng ngày 14/07 (đã merge, đã deploy, KHÔNG cần làm lại):**
+- Card KPI "Đã click" → đổi tên **"Lượt click"**, đổi sang đếm tổng số lượt (trước đó đang đếm nhầm số người unique).
+- `readSec` (thời gian đọc mỗi lượt mở) đổi từ lấy giá trị lớn nhất (`Math.max`) sang **trung bình cộng** các lần mở cùng 1 người — trước đó nếu mở lại lần 2 ngắn hơn lần 1, số hiển thị không đổi, trông như "không đo được lần 2" (đã được user báo khi test tay, xác nhận đây đúng là nguyên nhân).
 
 ---
 
