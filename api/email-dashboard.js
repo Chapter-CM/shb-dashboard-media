@@ -11,10 +11,13 @@ const LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABEwAAAF1CAYAAADy
 const SUPABASE_URL = process.env.EMAIL_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
 const EVENTS_LIMIT = parseInt(process.env.EMAIL_EVENTS_LIMIT || process.env.EVENTS_LIMIT || '40000', 10);
+// Trần đo thời gian đọc (giây) — phải khớp EMAIL_DWELL_CAP_S đọc trong api/email-track.js
+// để dashboard biết ngưỡng nào là "chạm trần" (loại khỏi median, xem dwellStats() client-side).
+const DWELL_CAP_S = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '25', 10) || 25);
 
 function fetchLogs() {
   // Có MySQL nội bộ (MYSQL_HOST) thì fetchOne bên dưới tự rẽ sang db-client — chỉ chặn khi thiếu cả 2.
-  if (!dbClient.isEnabled() && (!SUPABASE_URL || !SERVICE_KEY)) return Promise.resolve([]);
+  if (!dbClient.isEnabled() && (!SUPABASE_URL || !SERVICE_KEY)) return Promise.resolve({ logs: [], dwell: [] });
   var host = SUPABASE_URL.replace(/^https?:\/\//, '');
   var sel  = 'id:event_id,pos,rcpt,campaign,subject,msg_type,initiative,target_size,dept,role,loc,link,dest,ua,timestamp:ts';
   var hdrs = { apikey: SERVICE_KEY, Authorization: 'Bearer ' + SERVICE_KEY, Accept: 'application/json' };
@@ -54,27 +57,36 @@ function fetchLogs() {
     });
   }
 
+  // dwell: thời gian đọc (giây), stream pixel giữ kết nối — xem api/email-track.js.
+  // Chỉ có dữ liệu thật khi chạy trên server nội bộ (MySQL); trên Vercel/Supabase
+  // cột này gần như luôn rỗng vì tính năng bị tắt ở đó (xem lý do trong email-track.js).
+  var selDwell = 'id:event_id,campaign,ua,dwell_s,timestamp:ts';
+  var baseDwell = '/rest/v1/events?select=' + encodeURIComponent(selDwell);
+
   return Promise.all([
-    // not.in.(sent,dwell): bỏ qua event dwell còn sót trong DB (tính năng đo
-    // thời gian đọc đã gỡ — chờ migrate hạ tầng nội bộ, xem KE_HOACH_MIGRATION.md)
+    // not.in.(sent,dwell): dwell fetch riêng ở dưới, không lẫn vào LOGS (tránh
+    // nhiễu session building — dwell row thiếu rcpt/pos hợp lệ cho topEvents).
     fetchParallel(base + '&pos=eq.sent&order=ts.asc',              5),
-    fetchParallel(base + '&pos=not.in.(sent,dwell)&order=ts.desc', 2)
+    fetchParallel(base + '&pos=not.in.(sent,dwell)&order=ts.desc', 2),
+    fetchParallel(baseDwell + '&pos=eq.dwell&order=ts.desc',       2)
   ])
-  .then(function(r) { return r[0].concat(r[1]); })
-  .catch(function()  { return []; });
+  .then(function(r) { return { logs: r[0].concat(r[1]), dwell: r[2] }; })
+  .catch(function()  { return { logs: [], dwell: [] }; });
 }
 
 module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
-  const logs = await fetchLogs().catch(() => []);
+  const fetched = await fetchLogs().catch(() => ({ logs: [], dwell: [] }));
+  const logs = fetched.logs;
   const safe = JSON.stringify(logs).replace(/<\/script>/gi, '<\\/script>');
+  const safeDwell = JSON.stringify(fetched.dwell).replace(/<\/script>/gi, '<\\/script>');
   res.send('<!DOCTYPE html><html lang="vi"><head>'
     + '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     + '<title>SHB CM Email Tracker v4.5</title>'
     + '<style>' + FONT_FACE + CSS + 'html.embed body{padding-top:63px}.embed .mast{top:63px}.embed .mast .mast-row1{display:none}</style></head>'
     + '<body><script>try{if(window.self!==window.top)document.documentElement.classList.add(\'embed\')}catch(e){document.documentElement.classList.add(\'embed\')}</script><div id="app"></div>'
-    + '<script>const LOGS=' + safe + ';const REACH_TARGET=70;const MIN_N=5;const EVENTS_LIMIT=' + EVENTS_LIMIT + ';const LOGO_URI=' + JSON.stringify(LOGO_URI) + ';' + JS + '</script></body></html>');
+    + '<script>const LOGS=' + safe + ';const DWELL=' + safeDwell + ';const DWELL_CAP_S=' + DWELL_CAP_S + ';const REACH_TARGET=70;const MIN_N=5;const EVENTS_LIMIT=' + EVENTS_LIMIT + ';const LOGO_URI=' + JSON.stringify(LOGO_URI) + ';' + JS + '</script></body></html>');
 };
 
 /* ─── CSS ──────────────────────────────────────────────────────────────────── */
@@ -956,6 +968,31 @@ function heroChart(d,ser){
     +areaChart(ser)+'</div>';
 }
 
+// ── Thời gian đọc email (dwell) ─────────────────────────────────────────
+// Nguồn: DWELL (mảng event pos='dwell' riêng, xem fetchLogs()). Chỉ khả thi
+// đo trên server nội bộ (nginx + Node ingest thường trực) — xem lý do đầy
+// đủ trong api/email-track.js + KE_HOACH_MIGRATION.md mục 7b.
+function isImageProxyUA(ua){return /GoogleImageProxy|ggpht|YahooMailProxy|proofpoint|barracuda|mimecast/i.test(ua||'');}
+function dwellStats(rows){
+  rows=(rows||[]).filter(function(r){return r.dwell_s!=null&&!isImageProxyUA(r.ua);});
+  if(!rows.length)return null;
+  var capped=rows.filter(function(r){return r.dwell_s>=DWELL_CAP_S;});
+  var real=rows.filter(function(r){return r.dwell_s<DWELL_CAP_S;}).map(function(r){return r.dwell_s;}).sort(function(a,b){return a-b;});
+  var median=real.length?(real.length%2?real[(real.length-1)/2]:Math.round((real[real.length/2-1]+real[real.length/2])/2)):null;
+  return {n:rows.length,median:median,cappedN:capped.length,cappedPct:Math.round(capped.length/rows.length*100)};
+}
+function dwellPanel(dwellRaw){
+  var st=dwellStats(dwellRaw);
+  if(!st)return '';
+  var mTxt=st.median!=null?(st.median+'s'):(st.cappedN===st.n?'≥'+DWELL_CAP_S+'s':'—');
+  return '<div class="panel" style="margin-top:16px" data-tip="Đo bằng cách giữ kết nối pixel mở email đến khi đóng — chỉ đo được trên server nội bộ, chưa khả dụng trên bản Vercel. Loại các lượt chạm trần '+DWELL_CAP_S+'s (thường do proxy tải ngầm) khỏi trung vị.">'
+    +'<div class="panel-h">Thời gian đọc email (thử nghiệm)</div>'
+    +'<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">'
+    +'<div class="kpi"><div class="kl">Thời gian đọc TB (trung vị)</div><div class="kmid"><div class="kv">'+mTxt+'</div></div><div class="ksub">'+nf(st.n)+' lượt đo được</div></div>'
+    +'<div class="kpi"><div class="kl">Chạm trần ≥'+DWELL_CAP_S+'s</div><div class="kmid"><div class="kv">'+st.cappedPct+'%</div></div><div class="ksub">'+nf(st.cappedN)+' lượt — loại khỏi trung vị</div></div>'
+    +'<div class="kpi"><div class="kl">Trạng thái đo</div><div class="kmid"><div class="kv" style="font-size:20px">'+(st.n>0?'✓ Đang thu thập':'—')+'</div></div><div class="ksub">Chỉ tính lượt mở mới sau khi bật tính năng</div></div>'
+    +'</div></div>';
+}
 function funnelPanel(d){
   var s=d.sum,base=s.hasSent?s.sentSessions:s.uniqOpeners;
   function fr(label,n,pct,color,tip){var w=base>0?Math.round(n/base*100):0;return '<div class="frow" data-tip="'+esc(tip)+'"><div class="fl">'+label+'</div><div class="fbar-w"><div class="fbar" style="width:'+Math.min(100,Math.max(w,3))+'%;background:'+color+'"></div></div><div class="fn">'+n+'</div><div class="fp">'+(pct!=null?pct+'%':'')+'</div></div>';}
@@ -1355,7 +1392,7 @@ function operational(d,cur,prev,ser){
   return masthead('op')+sub+filterStatusBar()+
     '<div class="wrap">'+filterBar(d)+
     '<section id="s-ov" style="padding-top:14px"><div class="eyebrow">Tổng quan</div>'+
-    heroRow(d,cur,prev,ser)+heroChart(d,ser)+
+    heroRow(d,cur,prev,ser)+heroChart(d,ser)+dwellPanel(DWELL)+
     campaignSection(d)+
     '<div class="row2">'+funnelPanel(d)+devicePanel(d)+'</div>'+
     (d.clickStats.has?'<div style="margin-top:16px">'+clickPanel(d)+'</div>':'')+

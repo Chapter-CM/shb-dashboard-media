@@ -1,5 +1,6 @@
-// SHB Email Tracker — track endpoint v3.5 (beacon Email)
+// SHB Email Tracker — track endpoint v3.6 (beacon Email + dwell/thời gian đọc)
 // ENV: EMAIL_SUPABASE_URL, EMAIL_SUPABASE_SERVICE_KEY (ghi vào Supabase Email — tách khỏi SUPABASE_* của Facebook)
+// hoặc MYSQL_HOST (nội bộ, xem lib/db-client.js).
 'use strict';
 const https = require('https');
 const dbClient = require('../lib/db-client');
@@ -10,6 +11,25 @@ const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPAB
 const GIF = Buffer.from(
   'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'
 );
+
+// ── Dwell (thời gian đọc) ──────────────────────────────────────────────
+// Pixel top/bottom được stream NHỎ GIỌT: client giữ kết nối chừng nào email
+// còn mở, đóng email → client hủy tải ảnh → server đo được số giây đọc
+// (kiểu Litmus). Chỉ khả thi trên server thường trực nhận kết nối TCP trực
+// tiếp (nginx + Node ingest server nội bộ) — proxy Vercel không truyền tín
+// hiệu client ngắt kết nối vào function, xem KE_HOACH_MIGRATION.md mục 7b.
+// Ghi thêm event pos='dwell' với dwell_s (cột có sẵn trong schema, xem
+// db/schema.mysql.sql + db/migrate_05_email_dwell.sql).
+const DWELL_CAP_S   = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '25', 10) || 25);
+const DWELL_TICK_MS = 2000;
+const GIF_BODY    = GIF.slice(0, GIF.length - 1);              // GIF trừ byte trailer 0x3B
+const GIF_TRAILER = GIF.slice(GIF.length - 1);
+const GIF_PAD     = Buffer.from([0x21, 0xFE, 0x01, 0x20, 0x00]); // comment block — hợp lệ trước trailer
+
+// Proxy/gateway tải ảnh hộ (không phải người đọc) → dwell vô nghĩa, bỏ đo
+function isImageProxy(ua) {
+  return /GoogleImageProxy|ggpht|YahooMailProxy|proofpoint|barracuda|mimecast/i.test(ua || '');
+}
 
 // Sanitize: remove null bytes (causes Supabase 22P05 error), clip length
 function clip(v, n) {
@@ -25,6 +45,46 @@ function fixRcpt(v) {
   if (!v) return v;
   var m = v.match(/^([\w.+\-]+?)40([\w.\-]+\.[a-z]{2,})@\2$/i);
   return m ? (m[1] + '@' + m[2]) : v;
+}
+
+function streamDwellPixel(req, res, row) {
+  const t0 = Date.now();
+  const pending = [
+    insertEvent(row).catch(e => console.error('[SHB Tracker] Insert failed:', e.message))
+  ];
+  res.writeHead(200, {
+    'Content-Type':  'image/gif',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma':        'no-cache',
+    'Expires':       '0',
+    'Access-Control-Allow-Origin': '*'
+  });
+  res.write(GIF_BODY);
+  return new Promise((resolve) => {
+    let done = false, hb = null, cap = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearInterval(hb);
+      clearTimeout(cap);
+      // Ghi dwell TRƯỚC khi kết thúc response: runtime có thể freeze process
+      // ngay sau khi response end → insert đứng sau res.end() có thể bị rơi.
+      const dwell = Math.min(DWELL_CAP_S, Math.round((Date.now() - t0) / 1000));
+      pending.push(insertEvent(Object.assign({}, row, {
+        pos: 'dwell', dwell_s: dwell, ts: new Date().toISOString()
+      })).catch(e => console.error('[SHB Tracker] Dwell insert failed:', e.message)));
+      const end = () => {
+        try { res.write(GIF_TRAILER); res.end(); } catch (e) { /* client đã ngắt */ }
+        resolve();
+      };
+      Promise.all(pending).then(end, end);
+    };
+    hb  = setInterval(() => { try { res.write(GIF_PAD); } catch (e) { finish(); } }, DWELL_TICK_MS);
+    cap = setTimeout(finish, DWELL_CAP_S * 1000);
+    res.on('close', finish);
+    res.on('error', finish);
+    req.on('close', finish);
+  });
 }
 
 function insertEvent(row) {
@@ -108,6 +168,20 @@ module.exports = async (req, res) => {
   if (row.event_id && !ID_RE.test(row.event_id)) row.event_id = null;
 
   const isBlocked = row.campaign && BLOCKED_CAMPAIGNS.includes(row.campaign);
+
+  // TOP/BOTTOM → pixel streaming đo thời gian đọc: ghi event top/bottom NGAY
+  // khi request đến (lượt mở không bị chậm), rồi giữ kết nối để đo dwell.
+  // VBA hiện chỉ nhúng pixel top nên top là nguồn đo chính; bottom giữ để
+  // tương thích email cũ còn 2 pixel.
+  // CHỈ bật khi chạy trên server nội bộ (dbClient.isEnabled() = có MYSQL_HOST,
+  // tức server/ingest-server.js thường trực nhận kết nối TCP trực tiếp).
+  // Trên Vercel (Supabase) đã kiểm chứng proxy KHÔNG truyền tín hiệu client
+  // ngắt kết nối vào function — bật streaming ở đó sẽ khiến dwell luôn "chạm
+  // trần" (dữ liệu vô nghĩa), xem KE_HOACH_MIGRATION.md mục 7b — GIỮ pixel
+  // trả về tức thì như cũ trên Vercel.
+  if ((pos === 'top' || pos === 'bottom') && row.event_id && !isBlocked && !isImageProxy(row.ua) && dbClient.isEnabled()) {
+    return streamDwellPixel(req, res, row);
+  }
 
   if (row.event_id && !isBlocked) {
     try {
