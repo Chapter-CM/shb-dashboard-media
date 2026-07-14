@@ -34,10 +34,28 @@
    `Access denied`. Anh Nam đang chỉnh lại GRANT cho đúng tên user (nhắn "Để a chỉnh lại", chat 13/07 17:50).
    **CHƯA có xác nhận đã chỉnh xong** — user đã nhắn "Oke a chỉnh xong báo em với ạ", đang chờ rep.
 
-**Việc đầu tiên phiên sau**: hỏi user đã có phản hồi anh Nam là đã sửa xong tên user MySQL chưa. Nếu rồi
-→ chạy lại pipeline `sync_data` → xác nhận hết lỗi `ER_ACCESS_DENIED_ERROR` → F5 lại `#fb`/`#email` (dùng
-tab ẩn danh) xem dữ liệu thật đã lên chưa. Nếu vẫn lỗi, kiểm tra thêm host pattern (`'%'` phải cho phép
-mọi IP kể cả `10.194.10.166`, khả năng thấp vì `'%'` là wildcard toàn bộ, nhưng vẫn nên xác nhận).
+7. ✅ **Anh Nam đã sửa xong tên user** (14/07 08:20, "check lại xem oke chưa e nhé") — chạy lại pipeline
+   #265087 → **XÁC NHẬN HẾT HẲN** lỗi `ER_ACCESS_DENIED_ERROR`. Auth + network tới MySQL giờ đã thông
+   suốt hoàn toàn (loại trừ hẳn nhánh ETIMEDOUT/Security Group cũ, xong nốt cả unauthorized + access denied).
+8. ⏳ **Lỗi MỚI (tầng cuối cùng, đơn giản hơn nhiều)** — giờ báo:
+   ```
+   [fb loadData] db-client(http): ER_NO_SUCH_TABLE - Table 'cm_dashboard.fb_posts' doesn't exist
+   ```
+   Nghĩa là kết nối + auth + chọn database đều OK, chỉ là **database `cm_dashboard` còn trống, chưa
+   chạy schema tạo bảng**. Đây đúng là việc đã treo từ lâu (mục "10/07 trưa" cũ: "Nhờ Quang chạy
+   `db/schema.mysql.sql`" — chưa ai làm tới giờ).
+   **Đã gửi file `db/schema.mysql.sql` (124 dòng, chỉ có `CREATE TABLE IF NOT EXISTS`, an toàn chạy
+   nhiều lần — tạo đủ `fb_posts/fb_snapshots/fb_page_snapshots/fb_group_posts/fb_group_post_snapshots/
+   fb_page_insights/events`) cho user chuyển anh Nam chạy trực tiếp trên database `cm_dashboard`.**
+   **CHƯA có xác nhận đã chạy xong.**
+
+**Việc đầu tiên phiên sau**: hỏi user đã có phản hồi anh Nam là đã chạy `schema.mysql.sql` xong chưa.
+Nếu rồi → chạy lại pipeline `sync_data` → xác nhận hết lỗi `ER_NO_SUCH_TABLE` → F5 lại `#fb`/`#email`
+(dùng tab ẩn danh) xem dữ liệu thật đã lên chưa (lúc này dữ liệu Facebook sẽ vẫn rỗng vì bảng mới tạo
+chưa có dòng nào — cần userscript ghi thật hoặc chờ email test cũ ghi vào `events` mới thấy số liệu,
+xem lại mục ✅ 10/07 trưa bên dưới). Nếu vẫn lỗi khác, đọc kỹ lỗi mới trước khi đoán — cả 3 lần trước
+(unauthorized → access denied → no such table) đều là lỗi khác hẳn nhau, đọc đúng message mới đỡ mất
+thời gian.
 
 ---
 
