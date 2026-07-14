@@ -1,4 +1,34 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 tối)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 tối muộn)
+
+## ✅ 14/07 tối muộn — ĐÍNH CHÍNH: số liệu Facebook "38 bài" là MOCK CHỦ Ý, KHÔNG PHẢI data rác trong MySQL
+
+**Sửa lại kết luận sai ở mục "⚠️ 14/07 chiều" bên dưới** — đã XÁC MINH THẬT (không đoán) bằng cách gọi
+thẳng route `/dbquery` từ trình duyệt (không qua tầng dashboard/mock):
+```
+https://cm-dashboard-ingest.dev-saha.aws.shb.com.vn/dbquery?secret=500a13c1-4b4a-4da0-a4c7-c4200e51b66a&path=%2Frest%2Fv1%2Ffb_group_posts%3Fselect%3Dpost_id%2Ctitle%2Ccreated_time%26limit%3D50
+```
+→ Kết quả trả về `[]` — **bảng `fb_group_posts` HOÀN TOÀN TRỐNG**, không hề có dữ liệu rác nào cả.
+
+**Nguyên nhân thật (đọc code, xác nhận chủ ý):** `api/fb-dashboard.js` dòng 205:
+```js
+if (!hasPage && !hasGroup) return genMock();  // cả hai rỗng -> demo
+```
+Khi CẢ 2 bảng (`fb_group_posts` và `fb_page_insights`) đều rỗng → code **tự động hiện mock demo** (38
+bài giả, seed cố định `20260622` → số liệu luôn giống hệt nhau mỗi lần, đây là lý do user "thấy đúng số
+này từ trước khi MySQL kết nối được" — không phải trùng hợp, mock luôn ra cùng 1 kết quả). Đây LÀ THIẾT
+KẾ CÓ CHỦ Ý (fallback để không hiện màn hình trắng), KHÔNG PHẢI lỗi/data rác cần dọn.
+
+**Sửa lại việc cần làm:**
+1. ~~Nhờ anh Nam `DELETE FROM fb_group_posts`~~ — **KHÔNG CẦN NỮA**, bảng vốn đã trống sẵn.
+2. Chỉ còn đúng 1 việc: **chạy userscript thật** để nạp ít nhất 1 dòng dữ liệu Facebook thật vào MySQL
+   → mock sẽ tự biến mất ngay. Xem hướng dẫn đầy đủ ở mục "⏸️ 14/07 tối — Nạp lại dữ liệu Facebook thật"
+   bên dưới (đang chờ user xin quyền đăng nhập Facebook trên máy công ty).
+
+**Mẹo debug hữu ích cho lần sau:** gọi thẳng `/dbquery` qua URL trình duyệt (như trên) là cách nhanh
+nhất để xem RAW data trong MySQL, bỏ qua toàn bộ tầng dashboard/mock/cache — nên dùng cách này TRƯỚC
+khi kết luận "dữ liệu rác"/"dữ liệu thật" dựa trên những gì hiện trên UI.
+
+---
 
 ## ⏸️ 14/07 tối — Nạp lại dữ liệu Facebook thật ĐANG TẠM DỪNG, chờ user xin quyền Facebook trên máy công ty
 
