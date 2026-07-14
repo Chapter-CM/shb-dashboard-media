@@ -1,4 +1,27 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 sáng)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 trưa)
+
+## ⏸️ 14/07 trưa — TẠM DỪNG hẳn việc polish UI Jira row2 — user báo mất thời gian, ưu tiên việc DB
+
+User phản hồi UI row2 (đợt polish padding/bo góc/ẩn "Đơn vị trục X") "vẫn không được", nhưng không chỉ
+rõ được cụ thể còn lệch chỗ nào dù đã hỏi lại 2 lần — cảm thấy tốn thời gian, yêu cầu DỪNG và quay lại
+việc DB vì **anh Nam đã báo đẩy xong `schema.mysql.sql`**.
+
+**QUYẾT ĐỊNH: KHÔNG tự ý sửa thêm UI Jira ở phiên sau** trừ khi user chủ động nêu lại VÀ chỉ rõ cụ thể
+điểm cần sửa (kèm ảnh khoanh vùng) — tránh lặp lại vòng đoán-sai đã xảy ra 3 lần liên tiếp trong phiên
+này. Code hiện tại (đã lên GitLab, commit `cd22767`) đã cải thiện thật (padding/bo góc đồng nhất hơn,
+ẩn khối "Đơn vị trục X" khi nhúng portal) — coi đây là điểm dừng, không phải lỗi, không cần rollback.
+
+**Việc đầu tiên phiên sau: kiểm tra kết quả anh Nam chạy `schema.mysql.sql`.**
+1. Chạy lại pipeline `sync_data` trên GitLab `main`.
+2. Đọc log — kỳ vọng hết hẳn dòng `[fb loadData] db-client(http): ER_NO_SUCH_TABLE ...`.
+3. F5 lại `#fb`/`#email` (nhớ xoá `localStorage.removeItem('cm_cfg_v10')` trước hoặc dùng máy khác/tab
+   khác không dính cache) — xem dữ liệu thật đã lên chưa. Facebook nhiều khả năng vẫn rỗng (bảng mới
+   tạo, chưa có dữ liệu userscript ghi vào) — đó là bình thường, không phải lỗi. Email cũng có thể rỗng
+   nếu chưa có email test nào ghi vào bảng `events` sau khi bảng được tạo mới (dữ liệu test cũ trước đó,
+   nếu có, đã ghi thất bại vì bảng chưa tồn tại lúc đó — có thể cần gửi lại 1 email test MỚI qua Outlook
+   sau khi bảng đã tạo xong).
+
+---
 
 ## ⏸️ 14/07 sáng — Việc DB (`ER_NO_SUCH_TABLE`) đang CHỜ anh Nam chạy `schema.mysql.sql` — quay lại sửa UI Jira trong lúc chờ
 
