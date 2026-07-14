@@ -451,9 +451,10 @@ function pill(p,n){
 function quickMetrics(logs){
   var s={};logs.forEach(function(l){var k=l.id+'||'+l.rcpt;if(!s[k])s[k]={sent:false,op:false,cl:false,cf:false,dw:[]};if(l.pos==='sent')s[k].sent=true;if(l.pos==='top')s[k].op=true;if(l.pos==='click')s[k].cl=true;if(l.pos==='read')s[k].cf=true;if(l.pos==='dwell'&&l.dwell_s!=null&&deviceOf(l.ua||'')!=='proxy')s[k].dw.push(Math.min(DWELL_CAP_S,+l.dwell_s||0));});
   var a=Object.values(s),sent=a.filter(function(x){return x.sent;}).length,op=a.filter(function(x){return x.op;}).length,cl=a.filter(function(x){return x.cl;}).length,cf=a.filter(function(x){return x.cf;}).length;
+  var clickTotal=logs.filter(function(l){return l.pos==='click';}).length; // lượt click (khác người click unique = cl)
   var dwVals=a.filter(function(x){return x.dw.length;}).map(function(x){return Math.max.apply(null,x.dw);});
   var avgRead=dwVals.length?Math.round(dwVals.reduce(function(p,c){return p+c;},0)/dwVals.length):null;
-  return{sent:sent,opens:op,clickers:cl,confirmed:cf,notOpen:sent-op,reach:sent>0?Math.round(op/sent*100):null,ctor:op>0?Math.round(cl/op*100):0,avgRead:avgRead,readN:dwVals.length};
+  return{sent:sent,opens:op,clickers:cl,clickTotal:clickTotal,confirmed:cf,notOpen:sent-op,reach:sent>0?Math.round(op/sent*100):null,ctor:op>0?Math.round(cl/op*100):0,avgRead:avgRead,readN:dwVals.length};
 }
 function windowLogs(days,offset){
   if(_from&&_to){var span=_to-_from;var hi=offset?_from:_to,lo=offset?_from-span:_from;return LOGS.filter(function(l){var t=+new Date(l.timestamp);return t>lo&&t<=hi;});}
@@ -542,8 +543,9 @@ function process(logs){
      >5s = người dùng đóng và mở lại               → +1 lượt     */
   Object.keys(sess).forEach(function(k){
     var s=sess[k];
-    // readSec = lượt đọc dài nhất của session (đóng-mở lại nhiều lần → lấy lượt lâu nhất).
-    s.readSec=s.dwells.length?Math.max.apply(null,s.dwells):null;
+    // readSec = trung bình cộng các lượt đọc của session (đóng-mở lại nhiều lần → cộng dồn,
+    // KHÔNG lấy max — lấy max sẽ làm lượt đọc ngắn hơn sau đó "biến mất" khỏi số hiển thị).
+    s.readSec=s.dwells.length?Math.round(s.dwells.reduce(function(a,b){return a+b;},0)/s.dwells.length):null;
     if(s.topEvents.length===0){s.openAt=null;s.ua='';s.openCount=0;return;}
     s.topEvents.sort(function(a,b){return a.ts<b.ts?-1:a.ts>b.ts?1:0;});
     s.openAt=s.topEvents[0].ts;
@@ -976,11 +978,11 @@ function heroRow(d,cur,prev,ser){
   var rDelta=deltaChip(cur.reach,prev.reach,true);
   var gauge='<div class="gauge-card" data-tip="Tỉ lệ mở = Người mở ÷ Người gửi (person-level), cùng công thức với thẻ Tỉ lệ mở bên cạnh. Mục tiêu '+REACH_TARGET+'%."><div class="gc-h">'+gHead+'</div><div class="gauge-wrap">'+radialGauge(gVal,REACH_TARGET)+'</div><div class="gc-sub">'+(rDelta?rDelta+' so kỳ trước · ':'')+gSub+' · '+(remain>0?'còn '+remain+'% tới mục tiêu':'đạt mục tiêu')+' · '+nCamp+' chiến dịch</div></div>';
   function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl">'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
-  // 6 KPI chuẩn email (person-level): Đã gửi · Đã mở (lượt) · Chưa mở · Đã click · CTOR · Mở TB/người
+  // 6 KPI chuẩn email: Đã gửi · Đã mở (lượt) · Thời gian đọc TB · Lượt click · CTOR · Mở TB/người
   var k1=card('Đã gửi',null,s.hasSent?nf(s.sent):'—',(s.hasSent?deltaChip(cur.sent,prev.sent,true):'')+' người · duy nhất',spark(sS,'var(--accent-2)'),'Số người nhận duy nhất có sự kiện gửi (pos=sent). 1 người nhận nhiều chiến dịch = chỉ tính 1 người.');
   var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' đã trừ mở lại &lt;5s',spark(oS,'var(--accent-2)'),'Tổng số lần email được mở, đã trừ mở-lại &lt;5s (Outlook tự reload). Đóng rồi mở lại (gap &gt;5s) = +1 lượt.');
   var k3=card('Thời gian đọc trung bình',null,s.avgRead!=null?s.avgRead+'s':'—',(s.avgRead!=null?deltaChip(cur.avgRead,prev.avgRead,true):'')+(s.readN?' · '+nf(s.readN)+' lượt đo':' · thử nghiệm, chưa có dữ liệu'),null,'Trung bình cộng thời gian giữ email mở (dwell), mỗi lượt kẹp tối đa '+DWELL_CAP_S+'s để người quên đóng email không kéo lệch số liệu. Chỉ đo được trên server nội bộ — bản Vercel chưa hỗ trợ.');
-  var k4=card('Đã click',null,nf(s.nClickers||0),deltaChip(cur.clickers,prev.clickers,true)+' người click',spark(cS,'var(--accent)'),'Số người unique đã click ít nhất 1 link.');
+  var k4=card('Lượt click',null,nf(d.clickStats.total||0),deltaChip(cur.clickTotal,prev.clickTotal,true)+' · '+nf(s.nClickers||0)+' người click',spark(cS,'var(--accent)'),'Tổng số lượt click (1 người click nhiều lần = tính nhiều lượt). Số người unique đã click: '+nf(s.nClickers||0)+'.');
   var k5=card('CTOR',null,(d.clickStats.ctor||0)+'%',deltaChip(cur.ctor,prev.ctor,true)+' click ÷ mở',spark(cS,'var(--accent-2)'),'Click-to-Open Rate = Người click ÷ Người mở.');
   var k6=card('Mở TB/người',null,s.avgOpensPerReader!=null?s.avgOpensPerReader:'—',s.uniqOpeners+' người đã mở',spark(oS,'var(--accent-2)'),'Số lượt mở trung bình trên mỗi người đã mở ít nhất 1 lần = Tổng lượt mở ÷ Người mở.');
   return '<div class="hero-row">'+gauge+'<div class="kpi-grid six">'+k1+k2+k3+k4+k5+k6+'</div></div>';
