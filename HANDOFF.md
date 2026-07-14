@@ -1,4 +1,23 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 13/07/2026 chiều)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026)
+
+## 🔥 14/07 — PHÁT HIỆN NGHIÊM TRỌNG khi test thật: pixel `/api/track` CHỈ mạng NHS gọi tới được — sai giả định kế hoạch từ đầu
+
+**Bối cảnh:** Test tay tính năng đo thời gian đọc (dwell) trên Outlook Desktop/Mobile thật (theo email gửi qua VBA). Phát hiện:
+1. Outlook Desktop trong mạng NHS: đo được, đúng cơ chế.
+2. Outlook Mobile (4G/WiFi ngoài) + **cả WiFi SHB thường (không phải mạng NHS)**: **KHÔNG ghi nhận bất kỳ sự kiện nào** — không chỉ dwell, mà cả lượt mở/click cơ bản cũng mất, vì tất cả beacon đều gọi chung `/api/track` trên domain nội bộ `cm-dashboard.dev-saha.aws.shb.com.vn` (Ingress ALB nội bộ, không có DNS/route công khai).
+
+**Nguyên nhân gốc — sai giả định kế hoạch, không phải bug code:** `KE_HOACH_MIGRATION.md` dòng ghi (mục 6): *"Beacon Email (Outlook) và POST userscript (browser admin) đều phát từ trong mạng SHB tới domain nội bộ — đã xác nhận khả thi."* Giả định này chỉ đúng cho **userscript Facebook** (luôn chạy trên máy admin trong mạng công ty) — **SAI cho beacon Email**: người nhận email đọc ở bất cứ đâu (nhà, 4G, WiFi khách, thậm chí WiFi SHB thường không thuộc VLAN nội bộ NHS), không đảm bảo luôn ở đúng mạng NHS. Đây là lỗ hổng có từ lúc lập kế hoạch (03-06/07), chỉ lộ ra khi test thật bằng thiết bị ngoài mạng NHS lần đầu (14/07).
+
+**Mức độ ảnh hưởng:** Không phải edge case nhỏ — có khả năng **đa số người nhận email thật** (làm việc từ xa, dùng điện thoại cá nhân, WiFi khách...) sẽ KHÔNG được đo lượt mở/click/reach chính xác, chỉ những ai đang ở đúng mạng NHS lúc mở email mới được ghi nhận. Cần coi đây là việc ưu tiên cao trước khi công bố số liệu Email dashboard nội bộ là đáng tin cậy.
+
+**3 hướng khắc phục (đã bàn với user, chọn hướng 1):**
+1. ✅ **ĐÃ CHỌN — Mở public 1 Ingress/DNS riêng CHỈ cho `/api/track`** (không đụng dashboard/`/api/ingest`/DB) — đúng pattern các nền tảng email tracking thật (Litmus/Mailchimp) luôn dùng domain public cho pixel. Phạm vi hẹp (1 GET endpoint, không trả dữ liệu nhạy cảm, chỉ ghi 1 dòng event) nên dễ được duyệt bảo mật hơn mở cả cluster. **Cần DevOps (anh Nam) tạo Ingress mới, `scheme: internet-facing`, trỏ cùng Service `cm-dashboard-ingest` (namespace `aws-saha-ms-dev`), gắn DNS public riêng** (khác hẳn domain nội bộ `dev-saha.aws.shb.com.vn` hiện tại — xem nội dung tin nhắn đã soạn gửi anh Nam trong chat phiên 14/07).
+2. Dự phòng nếu ý 1 không được duyệt: quay lại dùng endpoint Vercel public sẵn có (`/api/email-track.js`) làm trạm thu, ghi vào Supabase như cũ, đồng bộ định kỳ sang MySQL nội bộ — thêm phức tạp vận hành 2 nguồn dữ liệu song song.
+3. Không làm gì (chấp nhận chỉ đo được lượt mở trong mạng NHS) — chỉ hợp lý nếu lãnh đạo xác nhận đa số người nhận luôn dùng VPN/mạng công ty khi đọc email, cần xác nhận rõ trước khi chọn.
+
+**Việc đầu tiên phiên sau:** hỏi user đã gửi anh Nam xin duyệt Ingress public riêng cho `/api/track` chưa, nếu đã có domain public mới thì cập nhật `TRACK_URL` trong `CampaignTracker.bas` (VBA) trỏ sang domain đó (đích vẫn là ingest-server hiện tại, không đổi code `api/email-track.js`/`server/ingest-server.js`).
+
+---
 
 ## 🔎 13/07 chiều — Chẩn đoán XONG vì sao tab Email/Facebook vẫn "Chưa có dữ liệu" — CHỈ CÒN CHỜ 1 VIỆC (anh Nam)
 
