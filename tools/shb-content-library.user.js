@@ -8,7 +8,7 @@
 // @match        https://business.facebook.com/*
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
-// @connect      shb-fb-dashboard.vercel.app
+// @connect      cm-dashboard.dev-saha.aws.shb.com.vn
 // @run-at       document-start
 // ==/UserScript==
 
@@ -16,8 +16,9 @@
   'use strict';
 
   // ── CẤU HÌNH (chỉ nằm trên máy admin, KHÔNG commit secret thật) ──────────
-  var INGEST = 'https://shb-fb-dashboard.vercel.app/api/ingest';
-  var SECRET = 'PASTE_INGEST_SECRET_HERE';   // dán INGEST_SECRET của Vercel vào đây
+  // Đổi 14/07/2026: endpoint nội bộ SHB (trước là Vercel, xem lịch sử HANDOFF.md).
+  var INGEST = 'https://cm-dashboard.dev-saha.aws.shb.com.vn/api/ingest';
+  var SECRET = '500a13c1-4b4a-4da0-a4c7-c4200e51b66a';   // INGEST_SECRET noi bo SHB
   var GROUP_ID = '503009407721580';          // SHB Một Nhà
   var AUTO_SCROLL = true;                     // tự cuộn để lazy-load hết bài trong dải ngày đang chọn
   var DEBUG = true;
