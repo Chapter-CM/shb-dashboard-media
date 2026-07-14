@@ -1,4 +1,53 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 chiều)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 tối)
+
+## ⏸️ 14/07 tối — Nạp lại dữ liệu Facebook thật ĐANG TẠM DỪNG, chờ user xin quyền Facebook trên máy công ty
+
+**Tiến trình đã thử trong phiên này (đầy đủ để không lặp lại):**
+1. Máy công ty chặn cài extension mới (Tampermonkey) qua Group Policy ("Extension installation is
+   blocked by policy", mã extension `dhdgffkkebhmkfjojejmpbldmpobfkfo`).
+2. → Tạo bản thay thế **`tools/shb-content-library.console.js`** (chạy tay qua dán vào DevTools Console,
+   không cần Tampermonkey — thay `GM_xmlhttpRequest` bằng `fetch` thường, thay `unsafeWindow` bằng
+   `window` — server `/api/ingest` đã có sẵn `Access-Control-Allow-Origin: *` nên fetch cross-origin từ
+   Console vẫn gọi được, không bị CORS chặn).
+3. User thử trên **máy cá nhân** (đã cài được Tampermonkey ở đó, dùng bản `tools/shb-content-library.user.js`
+   — đã sửa sẵn endpoint nội bộ SHB + điền `INGEST_SECRET` thật):
+   - Lúc đầu bị banner "Please enable the 'Allow User Scripts' extension setting" (Tampermonkey MV3
+     mới) → bật ở `chrome://extensions` → Tampermonkey → Details → "Allow User Scripts" → xong, hết banner.
+   - Script CHẠY ĐÚNG, bắt được dữ liệu thật (`gửi 5 bài`, `gửi 3 bài`...) — nhưng **mọi request gửi
+     `/api/ingest` đều lỗi `status: 408, statusText: 'Failed to fetch'`**.
+   - **NGUYÊN NHÂN: máy cá nhân KHÔNG có VPN/mạng nội bộ SHB** — endpoint
+     `cm-dashboard.dev-saha.aws.shb.com.vn` là domain NỘI BỘ, không có mạng nội bộ thì không gọi được,
+     không liên quan gì tới code/script (đã xác nhận đúng nguyên nhân, không phải đoán).
+4. **Quyết định user**: dừng dùng máy cá nhân + Tampermonkey. Sẽ **xin quyền đăng nhập Facebook (tài
+   khoản admin Group "SHB Một Nhà") trên máy công ty** (có sẵn mạng nội bộ) rồi dùng bản **Console**
+   (`.console.js`, không cần cài extension) để chạy.
+5. ⚠️ **Bài học quan trọng cho phiên sau**: bản Console/Tampermonkey trên máy cá nhân đã xác nhận
+   **auto-scroll KHÔNG tự chạy như mong đợi** — user phải **tự cuộn tay** trang Content Library để
+   lazy-load hết bài trước khi script bắt được (đừng chỉ dựa vào `AUTO_SCROLL=true` trong code, dặn
+   user cuộn tay luôn).
+
+**Việc đầu tiên phiên sau**: hỏi user đã xin được quyền đăng nhập Facebook trên máy công ty chưa. Nếu
+rồi, hướng dẫn lại đúng quy trình:
+1. Nhờ anh Nam `DELETE FROM fb_group_posts;` trước (dọn dữ liệu rác, XEM chi tiết mục "⚠️ 14/07 chiều"
+   bên dưới nếu chưa làm) — nếu đã làm rồi thì bỏ qua bước này.
+2. Đăng nhập Facebook trên máy công ty → `facebook.com/professional_dashboard/content/content_library/`
+   → chọn khoảng ngày rộng → F12 Console → dán `tools/shb-content-library.console.js` → Enter → **tự
+   cuộn tay** hết danh sách bài → theo dõi log `gửi ... bài` + `ingest 200` (200 = thành công thật, khác
+   với lỗi 408 gặp phải trên máy cá nhân).
+3. F5 lại `#fb`, so với bản Vercel (`shb-fb-dashboard.vercel.app/#fb`) để đối chiếu số liệu hợp lý.
+
+---
+
+## 🔀 14/07 tối — CHUYỂN HƯỚNG: user yêu cầu tạm dừng Facebook, quay sang kiểm tra dashboard Email
+
+Theo yêu cầu user, phiên tiếp theo (nếu tiếp tục ngay) nên bắt đầu bằng việc **kiểm tra dashboard Email**
+(`#email`) thay vì tiếp tục Facebook — xem lại mục "⚠️ Số liệu Facebook MySQL là dữ liệu rác" (14/07
+chiều) để nhớ bối cảnh: bảng `events` (email) cũng vừa được tạo mới qua `schema.mysql.sql`, có thể cũng
+đang trống hoặc còn dữ liệu test cũ. Cần: gửi 1 email test MỚI qua Outlook (macro `SendCampaign` trong
+`tools/CampaignTracker.bas` v4.11, đã trỏ đúng endpoint nội bộ) SAU KHI bảng đã tồn tại, rồi F5 `#email`
+kiểm tra.
+
+---
 
 ## ⚠️ 14/07 chiều — Số liệu Facebook MySQL là DỮ LIỆU RÁC/TEST, không phải data thật — đã tìm nguyên nhân + đang xử lý
 
