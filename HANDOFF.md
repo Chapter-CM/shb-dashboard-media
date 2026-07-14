@@ -1,4 +1,30 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 trưa)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 trưa muộn)
+
+## 🎉 14/07 trưa muộn — Facebook ĐÃ CÓ DỮ LIỆU THẬT — luồng MySQL (`/dbquery` proxy) THÔNG SUỐT HOÀN TOÀN
+
+Anh Nam báo "done" (đã chạy `schema.mysql.sql`) → chạy lại pipeline #265105 → log `sync_data`
+**KHÔNG còn dòng lỗi `[fb loadData] db-client(http): ...` nào cả** (trước đó luôn có: unauthorized →
+access denied → no such table, giờ hết sạch cả 3). F5 `#fb` (đúng bản mới, "Cập nhật: 02:33 14-07")
+→ **hiện dữ liệu thật**: 1.270.824 lượt xem, 130.718 tương tác, ER 10.3%, 38 bài. Xác nhận toàn bộ
+chuỗi `sync_data` (GitLab runner) → `/dbquery` proxy (`cm-dashboard-ingest`) → MySQL nội bộ
+(`rds-sahadb.dev-saha.aws.shb.com.vn`, database `cm_dashboard`) đã hoạt động đúng, xong hẳn nhánh
+"ETIMEDOUT → Security Group → unauthorized → access denied → no such table" kéo dài từ 08-14/07.
+
+`#email` vẫn "Chưa có dữ liệu" — **DỰ KIẾN, không phải lỗi**: bảng `events` vừa tạo còn trống (email
+test cũ gửi TRƯỚC khi bảng tồn tại nên ghi thất bại/mất). Đã nhờ user gửi 1 email test MỚI qua Outlook
+(macro `SendCampaign` trong `tools/CampaignTracker.bas` v4.11) để kiểm tra nốt nhánh ghi email — CHƯA
+có kết quả.
+
+**Việc đầu tiên phiên sau**: hỏi user đã gửi email test mới + F5 `#email` chưa, kết quả ra sao.
+- Nếu có dữ liệu → **COI NHƯ XONG TOÀN BỘ MIGRATION MYSQL**, có thể đóng hẳn nhánh Supabase/ETIMEDOUT cũ,
+  cập nhật `KE_HOACH_MIGRATION.md` đánh dấu Giai đoạn 1 hoàn tất.
+- Nếu vẫn "Chưa có dữ liệu" sau khi gửi test → đọc kỹ log `sync_data` mới nhất tìm lỗi cụ thể (đừng
+  đoán, xem đúng message — kinh nghiệm phiên này: mỗi lần chạy lại đều lộ ra lỗi MỚI khác hẳn lỗi cũ,
+  không suy luận từ lỗi cũ được).
+- Việc UI Jira (polish row2) đang TẠM DỪNG HẲN theo yêu cầu user — xem mục "⏸️ 14/07 trưa" bên dưới,
+  KHÔNG tự ý động vào nữa trừ khi user chủ động nêu lại kèm ảnh chỉ rõ.
+
+---
 
 ## ⏸️ 14/07 trưa — TẠM DỪNG hẳn việc polish UI Jira row2 — user báo mất thời gian, ưu tiên việc DB
 
