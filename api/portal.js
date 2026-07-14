@@ -25,7 +25,7 @@ module.exports = (req, res) => {
 html,body{height:100%}
 body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
 /* Logo + tab nổi (overlay) lên cùng dòng với thanh điều khiển của dashboard (vùng trái masthead trống do brand đã ẩn khi nhúng) */
-.topbar{position:absolute;top:0;left:0;right:0;z-index:5;height:63px;pointer-events:none}
+.topbar{position:absolute;top:0;left:0;right:0;z-index:5;height:63px;pointer-events:none;background:var(--bar);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--stroke)}
 .topbar-in{max-width:1200px;margin:0 auto;height:100%;display:flex;align-items:center;gap:14px;padding:0 26px}
 .topbar-in>*{pointer-events:auto}
 .brand{display:flex;align-items:center;gap:9px}
