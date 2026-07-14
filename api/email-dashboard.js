@@ -13,7 +13,7 @@ const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPAB
 const EVENTS_LIMIT = parseInt(process.env.EMAIL_EVENTS_LIMIT || process.env.EVENTS_LIMIT || '40000', 10);
 // Trần đo thời gian đọc (giây) — phải khớp EMAIL_DWELL_CAP_S đọc trong api/email-track.js
 // để dashboard biết ngưỡng nào là "chạm trần" (loại khỏi median, xem dwellStats() client-side).
-const DWELL_CAP_S = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '25', 10) || 25);
+const DWELL_CAP_S = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '60', 10) || 60);
 
 function fetchLogs() {
   // Có MySQL nội bộ (MYSQL_HOST) thì fetchOne bên dưới tự rẽ sang db-client — chỉ chặn khi thiếu cả 2.
@@ -973,23 +973,26 @@ function heroChart(d,ser){
 // đo trên server nội bộ (nginx + Node ingest thường trực) — xem lý do đầy
 // đủ trong api/email-track.js + KE_HOACH_MIGRATION.md mục 7b.
 function isImageProxyUA(ua){return /GoogleImageProxy|ggpht|YahooMailProxy|proofpoint|barracuda|mimecast/i.test(ua||'');}
+// Trung bình cộng thường (tổng ÷ số lượt) — không phải trung vị. Mỗi lượt đã
+// được server tự kẹp tối đa DWELL_CAP_S giây (xem api/email-track.js), nên
+// người quên đóng email/để mở hàng giờ vẫn chỉ tính đúng DWELL_CAP_S giây,
+// không kéo lệch trung bình vô hạn.
 function dwellStats(rows){
   rows=(rows||[]).filter(function(r){return r.dwell_s!=null&&!isImageProxyUA(r.ua);});
   if(!rows.length)return null;
-  var capped=rows.filter(function(r){return r.dwell_s>=DWELL_CAP_S;});
-  var real=rows.filter(function(r){return r.dwell_s<DWELL_CAP_S;}).map(function(r){return r.dwell_s;}).sort(function(a,b){return a-b;});
-  var median=real.length?(real.length%2?real[(real.length-1)/2]:Math.round((real[real.length/2-1]+real[real.length/2])/2)):null;
-  return {n:rows.length,median:median,cappedN:capped.length,cappedPct:Math.round(capped.length/rows.length*100)};
+  var cappedN=rows.filter(function(r){return r.dwell_s>=DWELL_CAP_S;}).length;
+  var sum=rows.reduce(function(a,r){return a+Math.min(DWELL_CAP_S,r.dwell_s);},0);
+  var avg=Math.round(sum/rows.length);
+  return {n:rows.length,avg:avg,cappedN:cappedN,cappedPct:Math.round(cappedN/rows.length*100)};
 }
 function dwellPanel(dwellRaw){
   var st=dwellStats(dwellRaw);
   if(!st)return '';
-  var mTxt=st.median!=null?(st.median+'s'):(st.cappedN===st.n?'≥'+DWELL_CAP_S+'s':'—');
-  return '<div class="panel" style="margin-top:16px" data-tip="Đo bằng cách giữ kết nối pixel mở email đến khi đóng — chỉ đo được trên server nội bộ, chưa khả dụng trên bản Vercel. Loại các lượt chạm trần '+DWELL_CAP_S+'s (thường do proxy tải ngầm) khỏi trung vị.">'
+  return '<div class="panel" style="margin-top:16px" data-tip="Đo bằng cách giữ kết nối pixel mở email đến khi đóng — chỉ đo được trên server nội bộ, chưa khả dụng trên bản Vercel. Mỗi lượt kẹp tối đa '+DWELL_CAP_S+'s (người quên đóng email không kéo lệch trung bình).">'
     +'<div class="panel-h">Thời gian đọc email (thử nghiệm)</div>'
     +'<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">'
-    +'<div class="kpi"><div class="kl">Thời gian đọc TB (trung vị)</div><div class="kmid"><div class="kv">'+mTxt+'</div></div><div class="ksub">'+nf(st.n)+' lượt đo được</div></div>'
-    +'<div class="kpi"><div class="kl">Chạm trần ≥'+DWELL_CAP_S+'s</div><div class="kmid"><div class="kv">'+st.cappedPct+'%</div></div><div class="ksub">'+nf(st.cappedN)+' lượt — loại khỏi trung vị</div></div>'
+    +'<div class="kpi"><div class="kl">Thời gian đọc trung bình</div><div class="kmid"><div class="kv">'+st.avg+'s</div></div><div class="ksub">'+nf(st.n)+' lượt đo được</div></div>'
+    +'<div class="kpi"><div class="kl">Chạm trần ≥'+DWELL_CAP_S+'s</div><div class="kmid"><div class="kv">'+st.cappedPct+'%</div></div><div class="ksub">'+nf(st.cappedN)+' lượt — tính đúng '+DWELL_CAP_S+'s vào trung bình</div></div>'
     +'<div class="kpi"><div class="kl">Trạng thái đo</div><div class="kmid"><div class="kv" style="font-size:20px">'+(st.n>0?'✓ Đang thu thập':'—')+'</div></div><div class="ksub">Chỉ tính lượt mở mới sau khi bật tính năng</div></div>'
     +'</div></div>';
 }
