@@ -3,11 +3,21 @@
 ## ⏸️ 14/07 sáng — Việc DB (`ER_NO_SUCH_TABLE`) đang CHỜ anh Nam chạy `schema.mysql.sql` — quay lại sửa UI Jira trong lúc chờ
 
 Xem chi tiết đầy đủ ở mục "⏳ 13/07 tối muộn" ngay bên dưới — KHÔNG cần lặp lại chẩn đoán, chỉ cần hỏi
-user đã có phản hồi anh Nam chưa trước khi động vào DB. Trong lúc chờ, tiếp tục dở việc sửa giao diện
-Jira dashboard (xem mục "🚧 13/07 tối — Đang sửa dở giao diện Jira..." — vẫn còn treo nghi vấn user F5
-không thấy đổi dù đã deploy đủ 3 fix, CHƯA loại trừ được do cache trình duyệt/`localStorage cm_cfg_v10`
-hay do thật sự chưa lên — **việc đầu tiên khi tiếp tục** là nhờ user test lại bằng tab ẩn danh trước khi
-sửa thêm code).
+user đã có phản hồi anh Nam chưa trước khi động vào DB.
+
+**✅ ĐÃ ĐÓNG mục "🚧 13/07 tối — Jira UI" bên dưới — cả 3 fix đã xác nhận hoạt động đúng trên live.**
+Nghi vấn "F5 vẫn không đổi" ĐÃ giải quyết: đúng là do `localStorage cm_cfg_v10` cache cũ trên trình
+duyệt test (máy công ty chặn tab ẩn danh, đã xử lý bằng
+`localStorage.removeItem('cm_cfg_v10'); location.reload();` qua Console F12) — không phải do code
+sai/chưa deploy. Sau khi xoá cache: logo SHB thật hiện đúng, nút Xuất PDF đỏ-cam đúng, masthead chỉ
+còn 1 hàng. **Không cần sửa thêm gì cho 3 việc này nữa.**
+
+**Việc tiếp theo cho UI Jira (nếu làm tiếp trong lúc chờ anh Nam)**: polish thêm bố cục/style
+`jira-mast-row2` (chip lọc, lịch, dropdown, nút hành động) cho đồng bộ pixel-perfect hơn với mockup đã
+duyệt (hiện đã đúng CHỨC NĂNG và tương đối gần, chỉ còn khác biệt nhỏ về padding/border-radius/độ cao
+nút giữa các phần tử — xem ảnh render thật trong lịch sử chat, không phải lỗi, chỉ là polish thêm nếu
+user muốn). Đây là việc KHÔNG khẩn cấp, chỉ làm nếu user chủ động yêu cầu tiếp — 3 fix quan trọng đã
+xong và đã verify.
 
 ---
 
