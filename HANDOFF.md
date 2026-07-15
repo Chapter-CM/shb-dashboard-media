@@ -1,4 +1,41 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026 tối)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026 tối muộn)
+
+## ✅ 15/07 tối muộn — Route ĐÃ THÔNG (anh Nam fix xong 404), phát hiện + fix XUNG ĐỘT MỚI: API Gateway timeout 29s vs dwell cap 60s — ĐÃ VÁ, CHỜ DEPLOY + VERIFY
+
+**Anh Nam đã sửa xong 404** (route `/api/track` giờ tới được backend, trả "binary" theo lời anh Nam).
+Test lại bằng DevTools (`pos=test&campaign=verify15h&eid=verify0001`) → không còn 404, nhưng ra lỗi
+MỚI: **`504 Gateway Timeout`**, `X-Amzn-Errortype: InternalServerErrorException`,
+`{"message":"Endpoint request timed out"}`.
+
+**Nguyên nhân (đã xác định chắc chắn, không cần đoán):** request rơi vào nhánh đo **dwell** (thời gian
+đọc email) trong `api/email-track.js` — code cố tình **giữ kết nối mở tới `EMAIL_DWELL_CAP_S`** (mặc
+định 60s, vừa được nâng lên 60 ở phiên trước 14/07) cho MỌI request `pos=top`/`pos=bottom` (đúng loại
+pixel email thật VBA đang nhúng). Nhưng **AWS API Gateway có trần cứng ~29s cho mỗi lần gọi backend,
+KHÔNG THỂ tăng** — nên Gateway tự cắt kết nối ở giây ~29, trả 504 cho client, dù server vẫn đang chạy
+bình thường phía sau. Điều này ảnh hưởng **TOÀN BỘ pixel mở email thật** đi qua domain public mới, không
+riêng gì request test — nghĩa là nếu không vá, mọi lượt mở email (Outlook Desktop lẫn Mobile) đều sẽ
+lỗi 504 sau khi domain đổi sang public, dù routing đã thông.
+
+**Đã vá (`api/email-track.js`, đã push GitHub):** hạ trần `DWELL_CAP_S` xuống tối đa **25 giây** (dưới
+ngưỡng 29s của API Gateway), clamp cứng trong code (`Math.min(25, ...)`) chứ không chỉ dựa vào biến
+môi trường — an toàn dù sau này ai lỡ đặt `EMAIL_DWELL_CAP_S` cao hơn. Đánh đổi: thời gian đọc đo được
+tối đa còn 25s thay vì 60s (người đọc lâu hơn 25s sẽ bị chặn ở mức 25s) — chấp nhận được vì mục tiêu
+chính là khôi phục ghi nhận cơ bản (mở/click) trước, dwell chỉ là tính năng phụ.
+
+**CHƯA verify bằng traffic thật** — cần đồng bộ code này sang GitLab (`api/email-track.js`, quy trình
+cũ: tải file → copy đè → git add/commit/push → tạo MR → merge) rồi mới test lại.
+
+**Việc đầu tiên phiên sau:**
+1. Hỏi user đã đồng bộ + deploy file `api/email-track.js` mới sang GitLab chưa.
+2. Sau khi deploy xong, gọi lại `https://service.dev-saha.aws.shb.com.vn/public-api/api/track?pos=test&campaign=verify2&eid=verify0002`
+   bằng DevTools — kỳ vọng lần này KHÔNG còn 504, trả về nhanh (~25s tối đa nếu đúng nhánh dwell, hoặc
+   ngay lập tức nếu code coi `pos=test` không hợp lệ và fallback pixel tức thì — xem lại logic VALID
+   set trong code nếu cần đối chiếu) với `Content-Type: image/gif`.
+3. Query `/dbquery` (domain nội bộ cũ) xem `campaign=verify2` đã có row chưa — xác nhận ghi MySQL OK.
+4. Nếu OK hết → gửi lại email thật qua VBA v4.12, test 2 mạng (NHS + ngoài mạng, xem mục 14/07 tối bên
+   dưới) — đây là bước cuối cùng để đóng hẳn toàn bộ saga domain public/API Gateway.
+
+---
 
 ## 🔧 15/07 tối — Integration API Gateway ĐÃ NỐI đúng URL, nhưng đích (`cm-dashboard-ingest` domain) tự trả 404 cho `/api/track` — đã nhắn anh Nam lần 2, ĐANG CHỜ
 

@@ -20,7 +20,14 @@ const GIF = Buffer.from(
 // hiệu client ngắt kết nối vào function, xem KE_HOACH_MIGRATION.md mục 7b.
 // Ghi thêm event pos='dwell' với dwell_s (cột có sẵn trong schema, xem
 // db/schema.mysql.sql + db/migrate_05_email_dwell.sql).
-const DWELL_CAP_S   = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '60', 10) || 60);
+// TRẦN CỨNG 25s: từ khi /api/track đi qua AWS API Gateway (domain public
+// service.dev-saha...), Gateway tự ngắt sau ~29s (giới hạn cứng AWS, không
+// tăng được) rồi trả 504 cho CLIENT dù server vẫn đang chạy — nếu để
+// EMAIL_DWELL_CAP_S=60 như trước (khi còn gọi Ingress nội bộ trực tiếp,
+// không qua Gateway) thì MỌI pixel top/bottom sẽ luôn bị cắt ngang thành lỗi
+// 504 trước khi kịp trả lời. Clamp cứng ở đây (không chỉ dựa vào env) để an
+// toàn dù ai đó lỡ đặt biến môi trường cao hơn.
+const DWELL_CAP_S   = Math.min(25, Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '25', 10) || 25));
 const DWELL_TICK_MS = 2000;
 const GIF_BODY    = GIF.slice(0, GIF.length - 1);              // GIF trừ byte trailer 0x3B
 const GIF_TRAILER = GIF.slice(GIF.length - 1);
