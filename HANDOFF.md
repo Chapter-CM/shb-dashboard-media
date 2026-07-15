@@ -1,6 +1,45 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026 khuya)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026 khuya muộn)
 
-## ✅ 15/07 khuya — TOÀN BỘ SAGA "domain public" ĐÃ XONG code: route thông + ghi MySQL OK + dwell chỉ đo khi an toàn — CHỜ ĐỒNG BỘ GITLAB + TEST EMAIL THẬT
+## ✅ 15/07 khuya muộn — Test thật xác nhận dwell qua Gateway LUÔN ra đúng trần giả (không sửa được) — USER QUYẾT ĐỊNH BỎ HẲN KPI "Thời gian đọc" khỏi dashboard
+
+**Test bằng email thật sau khi vá `isViaApiGateway`**: dwell vẫn LUÔN ra đúng 25s dù đóng email ngay lập
+tức — xác nhận dứt điểm (đã hỏi lại "có cách nào khác không, đã thử hết chưa" trước khi kết luận):
+CloudFront/API Gateway không có cách nào truyền tín hiệu ngắt kết nối về origin, đây là giới hạn thật
+của hạ tầng AWS (giống hệt lý do Vercel bị gỡ dwell trước đây, `KE_HOACH_MIGRATION.md` mục 7b) — không
+có mẹo nào vượt qua nếu không chạy được JS trong email (Outlook chặn JS + CSS animation hoàn toàn).
+Phương án duy nhất còn lại để giữ dwell chính xác (nhúng song song 2 pixel — 1 nội bộ NHS, 1 public) đã
+được đề xuất nhưng **user chọn KHÔNG làm**, chọn phương án đơn giản: bỏ hẳn KPI này.
+
+**Đã làm — bỏ HẲN KPI "Thời gian đọc trung bình" khỏi dashboard (`api/email-dashboard.js`, đã push
+GitHub, đã verify bằng render server-side + headless Chromium, không lỗi JS):**
+- Bỏ hằng số `DWELL_CAP_S`, bỏ fetch pos=dwell riêng trong `fetchLogs()`, bỏ toàn bộ tính toán
+  `dwells`/`readSec`/`avgRead`/`readN` ở mọi cấp (session/person/campaign/initiative/summary).
+- Khôi phục KPI card thứ 3 về lại **"Chưa mở"** (đúng bản trước khi có dwell) thay vì "Thời gian đọc
+  trung bình". Giữ nguyên card "Lượt click" (fix riêng biệt từ phiên trước, không liên quan dwell).
+- Bỏ cột "Đọc TB" khỏi cả 3 bảng: Người nhận, Chiến dịch, Squad/Dự án — khôi phục `cols`/`th`/`td`/
+  `sortVal` về đúng số cột cũ (5/7/8 tương ứng).
+- Đã verify: render mock 6 sự kiện qua headless Chromium — dashboard hiện đúng 6 KPI cũ (Đã gửi · Đã
+  mở · **Chưa mở** · **Lượt click** · CTOR · Mở TB/người), không còn "Thời gian đọc"/"Đọc TB" ở đâu,
+  không lỗi JS console.
+
+**Lưu ý quan trọng — KHÔNG XOÁ code ghi dwell ở tầng server**: `api/email-track.js` (route `/api/track`,
+đã vá `isViaApiGateway` phiên trước) VẪN giữ nguyên — vẫn ghi event `pos=dwell` vào DB khi request
+KHÔNG qua API Gateway (gọi thẳng nội bộ mạng NHS). Chỉ bỏ HIỂN THỊ trên dashboard, không tắt tính năng
+đo ở tầng ghi dữ liệu — nếu sau này đổi ý muốn hiện lại, dữ liệu dwell từ mạng NHS vẫn có sẵn trong DB,
+chỉ cần khôi phục lại phần UI đã bỏ (xem diff commit này để đối chiếu).
+
+**CHƯA đồng bộ sang GitLab** — cần copy `api/email-dashboard.js` mới nhất sang `cm-dashboard` như quy
+trình cũ.
+
+**Việc đầu tiên phiên sau:**
+1. Hỏi user đã đồng bộ + deploy `api/email-dashboard.js` (bản đã bỏ KPI dwell) sang GitLab chưa.
+2. F5 dashboard `#email` xác nhận không còn thấy "Thời gian đọc trung bình"/"Đọc TB" ở KPI lẫn 3 bảng.
+3. Nếu vẫn cần verify tiếp saga domain public/API Gateway (mở/click từ mạng ngoài NHS) — xem mục
+   "✅ 15/07 khuya" ngay dưới đây, phần đó vẫn còn giá trị tham khảo cho việc test mở/click cơ bản.
+
+---
+
+## (LỊCH SỬ) 15/07 khuya — TOÀN BỘ SAGA "domain public" ĐÃ XONG code: route thông + ghi MySQL OK + dwell chỉ đo khi an toàn
 
 **Đã verify bằng traffic thật (không phải đoán):** anh Nam fix xong 404 (route `/api/track` đã nối
 đúng Service `cm-dashboard-ingest`) + bản vá `DWELL_CAP_S=25` deploy xong → test qua DevTools

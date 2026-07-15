@@ -11,9 +11,6 @@ const LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABEwAAAF1CAYAAADy
 const SUPABASE_URL = process.env.EMAIL_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
 const EVENTS_LIMIT = parseInt(process.env.EMAIL_EVENTS_LIMIT || process.env.EVENTS_LIMIT || '40000', 10);
-// Trần đo thời gian đọc (giây) — phải khớp EMAIL_DWELL_CAP_S đọc trong api/email-track.js
-// để dashboard biết ngưỡng nào là "chạm trần" (loại khỏi median, xem dwellStats() client-side).
-const DWELL_CAP_S = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '60', 10) || 60);
 
 function fetchLogs() {
   // Có MySQL nội bộ (MYSQL_HOST) thì fetchOne bên dưới tự rẽ sang db-client — chỉ chặn khi thiếu cả 2.
@@ -57,20 +54,13 @@ function fetchLogs() {
     });
   }
 
-  // dwell: thời gian đọc (giây), stream pixel giữ kết nối — xem api/email-track.js.
-  // Chỉ có dữ liệu thật khi chạy trên server nội bộ (MySQL); trên Vercel/Supabase
-  // cột này gần như luôn rỗng vì tính năng bị tắt ở đó (xem lý do trong email-track.js).
-  // Merge THẲNG vào cùng mảng logs (giống hệt sent/top/click/read) — session building
-  // ở process() tự khớp theo event_id+rcpt, không cần join riêng.
-  var selDwell = sel + ',dwell_s';
-  var baseDwell = '/rest/v1/events?select=' + encodeURIComponent(selDwell);
-
   return Promise.all([
+    // not.in.(sent,dwell): bỏ qua event dwell còn sót trong DB (tính năng đo
+    // thời gian đọc đã gỡ — chờ migrate hạ tầng nội bộ, xem KE_HOACH_MIGRATION.md)
     fetchParallel(base + '&pos=eq.sent&order=ts.asc',              5),
-    fetchParallel(base + '&pos=not.in.(sent,dwell)&order=ts.desc', 2),
-    fetchParallel(baseDwell + '&pos=eq.dwell&order=ts.desc',       2)
+    fetchParallel(base + '&pos=not.in.(sent,dwell)&order=ts.desc', 2)
   ])
-  .then(function(r) { return r[0].concat(r[1]).concat(r[2]); })
+  .then(function(r) { return r[0].concat(r[1]); })
   .catch(function()  { return []; });
 }
 
@@ -84,7 +74,7 @@ module.exports = async (req, res) => {
     + '<title>SHB CM Email Tracker v4.5</title>'
     + '<style>' + FONT_FACE + CSS + 'html.embed body{padding-top:63px}.embed .mast{top:63px}.embed .mast .mast-row1{display:none}</style></head>'
     + '<body><script>try{if(window.self!==window.top)document.documentElement.classList.add(\'embed\')}catch(e){document.documentElement.classList.add(\'embed\')}</script><div id="app"></div>'
-    + '<script>const LOGS=' + safe + ';const DWELL_CAP_S=' + DWELL_CAP_S + ';const REACH_TARGET=70;const MIN_N=5;const EVENTS_LIMIT=' + EVENTS_LIMIT + ';const LOGO_URI=' + JSON.stringify(LOGO_URI) + ';' + JS + '</script></body></html>');
+    + '<script>const LOGS=' + safe + ';const REACH_TARGET=70;const MIN_N=5;const EVENTS_LIMIT=' + EVENTS_LIMIT + ';const LOGO_URI=' + JSON.stringify(LOGO_URI) + ';' + JS + '</script></body></html>');
 };
 
 /* ─── CSS ──────────────────────────────────────────────────────────────────── */
@@ -449,12 +439,10 @@ function pill(p,n){
   return '<span class="pill p-'+tone(p)+'">'+p+'%</span>';
 }
 function quickMetrics(logs){
-  var s={};logs.forEach(function(l){var k=l.id+'||'+l.rcpt;if(!s[k])s[k]={sent:false,op:false,cl:false,cf:false,dw:[]};if(l.pos==='sent')s[k].sent=true;if(l.pos==='top')s[k].op=true;if(l.pos==='click')s[k].cl=true;if(l.pos==='read')s[k].cf=true;if(l.pos==='dwell'&&l.dwell_s!=null&&deviceOf(l.ua||'')!=='proxy')s[k].dw.push(Math.min(DWELL_CAP_S,+l.dwell_s||0));});
+  var s={};logs.forEach(function(l){var k=l.id+'||'+l.rcpt;if(!s[k])s[k]={sent:false,op:false,cl:false,cf:false};if(l.pos==='sent')s[k].sent=true;if(l.pos==='top')s[k].op=true;if(l.pos==='click')s[k].cl=true;if(l.pos==='read')s[k].cf=true;});
   var a=Object.values(s),sent=a.filter(function(x){return x.sent;}).length,op=a.filter(function(x){return x.op;}).length,cl=a.filter(function(x){return x.cl;}).length,cf=a.filter(function(x){return x.cf;}).length;
   var clickTotal=logs.filter(function(l){return l.pos==='click';}).length; // lượt click (khác người click unique = cl)
-  var dwVals=a.filter(function(x){return x.dw.length;}).map(function(x){return Math.max.apply(null,x.dw);});
-  var avgRead=dwVals.length?Math.round(dwVals.reduce(function(p,c){return p+c;},0)/dwVals.length):null;
-  return{sent:sent,opens:op,clickers:cl,clickTotal:clickTotal,confirmed:cf,notOpen:sent-op,reach:sent>0?Math.round(op/sent*100):null,ctor:op>0?Math.round(cl/op*100):0,avgRead:avgRead,readN:dwVals.length};
+  return{sent:sent,opens:op,clickers:cl,clickTotal:clickTotal,confirmed:cf,notOpen:sent-op,reach:sent>0?Math.round(op/sent*100):null,ctor:op>0?Math.round(cl/op*100):0};
 }
 function windowLogs(days,offset){
   if(_from&&_to){var span=_to-_from;var hi=offset?_from:_to,lo=offset?_from-span:_from;return LOGS.filter(function(l){var t=+new Date(l.timestamp);return t>lo&&t<=hi;});}
@@ -508,7 +496,7 @@ function process(logs){
     var k=l.id+'||'+l.rcpt,cm=l.campaign||'unknown';
     if(!sess[k])sess[k]={id:l.id,rcpt:l.rcpt,campaign:cm,
       dept:'',role:'',loc:'',msg_type:'',initiative:'',subject:'',
-      ua:'',uas:[],topEvents:[],openDevices:[],dwells:[],
+      ua:'',uas:[],topEvents:[],openDevices:[],
       sent:false,opened:false,clicked:false,confirmed:false,
       sentAt:null,openAt:null,first:l.timestamp,openCount:0,clicks:[],target_size:null};
     var s=sess[k];
@@ -531,10 +519,6 @@ function process(logs){
     }
     if(l.pos==='click'){s.clicked=true;s.clicks.push({link:l.link||'',dest:l.dest||'',ts:l.timestamp});}
     if(l.pos==='read'){s.confirmed=true;if(!s.opened)s.opened=true;} // read confirm = xác nhận đọc trên mobile
-    // dwell = số giây pixel giữ kết nối ≈ thời gian đọc (xem api/email-track.js);
-    // proxy/gateway tải hộ (không phải người đọc) → bỏ qua. Server đã kẹp tối đa
-    // DWELL_CAP_S nhưng vẫn Math.min phòng thủ ở đây.
-    if(l.pos==='dwell'&&l.dwell_s!=null&&deviceOf(l.ua||'')!=='proxy'){s.dwells.push(Math.min(DWELL_CAP_S,+l.dwell_s||0));}
     if(l.timestamp<s.first)s.first=l.timestamp;
   }
 
@@ -543,9 +527,6 @@ function process(logs){
      >5s = người dùng đóng và mở lại               → +1 lượt     */
   Object.keys(sess).forEach(function(k){
     var s=sess[k];
-    // readSec = trung bình cộng các lượt đọc của session (đóng-mở lại nhiều lần → cộng dồn,
-    // KHÔNG lấy max — lấy max sẽ làm lượt đọc ngắn hơn sau đó "biến mất" khỏi số hiển thị).
-    s.readSec=s.dwells.length?Math.round(s.dwells.reduce(function(a,b){return a+b;},0)/s.dwells.length):null;
     if(s.topEvents.length===0){s.openAt=null;s.ua='';s.openCount=0;return;}
     s.topEvents.sort(function(a,b){return a.ts<b.ts?-1:a.ts>b.ts?1:0;});
     s.openAt=s.topEvents[0].ts;
@@ -598,7 +579,7 @@ function process(logs){
   arr.forEach(function(s){
     var r=s.rcpt;
     if(!personMap[r])personMap[r]={rcpt:r,dept:'',role:'',loc:'',
-      sent:false,opened:false,openCount:0,clicked:false,clickCount:0,confirmed:false,devices:{},lastOpen:null,dwells:[]};
+      sent:false,opened:false,openCount:0,clicked:false,clickCount:0,confirmed:false,devices:{},lastOpen:null};
     var p=personMap[r];
     if(s.dept&&!p.dept)p.dept=s.dept;
     if(s.role&&!p.role)p.role=s.role;
@@ -616,14 +597,9 @@ function process(logs){
     if(s.clicks&&s.clicks.length)p.clickCount+=s.clicks.length;
     // Collect UNIQUE device types for this person (across all their email opens)
     s.uas.forEach(function(ua){var d=deviceOf(ua);if(d)p.devices[d]=true;});
-    if(s.readSec!=null)p.dwells.push(s.readSec);
   });
 
   var persons=Object.values(personMap);
-  persons.forEach(function(p){
-    p.avgRead=p.dwells.length?Math.round(p.dwells.reduce(function(a,b){return a+b;},0)/p.dwells.length):null;
-    p.readN=p.dwells.length;
-  });
   var hasSeg=persons.some(function(p){return p.dept||p.role||p.loc;});
 
   // Người được gửi: nếu có sent events → đếm người có sent event, cộng thêm người đã mở nhưng
@@ -677,7 +653,7 @@ function process(logs){
     var cm=s.campaign;
     if(!camp[cm])camp[cm]={name:cm,subject:s.subject,initiative:s.initiative,msg_type:s.msg_type,target_size:s.target_size||null,
       rcptSent:new Set(),rcptOpen:new Set(),rcptClicked:new Set(),rcptConfirmed:new Set(),
-      openEvents:0,clicks:0,delays:[],dwells:[],proxy:0,human:0,last:s.first};
+      openEvents:0,clicks:0,delays:[],proxy:0,human:0,last:s.first};
     var c=camp[cm];
     if(s.sent||(!hasSent&&s.opened))c.rcptSent.add(s.rcpt);
     if(s.opened){
@@ -689,7 +665,6 @@ function process(logs){
     if(s.confirmed)c.rcptConfirmed.add(s.rcpt);
     if(s.clicks.length)c.clicks+=s.clicks.length;
     if(s.sentAt&&s.openAt){var dl=new Date(s.openAt)-new Date(s.sentAt);if(dl>=0&&dl<2.6e8)c.delays.push(dl);}
-    if(s.readSec!=null)c.dwells.push(s.readSec);
     if(s.first>c.last)c.last=s.first;
     if(s.target_size&&!c.target_size)c.target_size=s.target_size;
   });
@@ -723,7 +698,6 @@ function process(logs){
     // Reach kiểm chứng = người mở THẬT (không phải proxy) / tổng người được gửi
     var vReach=nS>0?Math.round(c.human/(nS||1)*100):null;
     var avgDl=c.delays.length?Math.round(c.delays.reduce(function(a,b){return a+b;},0)/c.delays.length/60000):null;
-    var avgRead=c.dwells.length?Math.round(c.dwells.reduce(function(a,b){return a+b;},0)/c.dwells.length):null;
     return{name:c.name,subject:c.subject,initiative:c.initiative,msg_type:c.msg_type,target_size:c.target_size||null,
       sent:nS,opens:nO,openEvents:c.openEvents,notOpen:nS-nO,notOpenRate:nS>0?Math.round((nS-nO)/nS*100):null,clicks:c.clicks,clickers:nC,confirmed:c.rcptConfirmed.size,
       reach:nS>0?Math.round(nO/nS*100):null,
@@ -731,7 +705,6 @@ function process(logs){
       ctor:nO>0?Math.round(nC/nO*100):0,
       clickRate:nS>0?Math.round(nC/nS*100):null,
       avgOpenCount:nO>0?Math.round(c.openEvents/nO*10)/10:null,
-      avgRead:avgRead,readN:c.dwells.length,
       avgOpenMin:avgDl,proxy:c.proxy,last:c.last};
   }).sort(function(a,b){return b.last.localeCompare(a.last);});
   (function(){
@@ -783,19 +756,17 @@ function process(logs){
   var iniMap={};
   arr.forEach(function(s){
     var key=s.initiative||'';if(!key)return;
-    if(!iniMap[key])iniMap[key]={name:key,rcptSent:new Set(),rcptOpen:new Set(),totalSessions:0,openEvents:0,camps:new Set(),dwells:[],last:s.first};
+    if(!iniMap[key])iniMap[key]={name:key,rcptSent:new Set(),rcptOpen:new Set(),totalSessions:0,openEvents:0,camps:new Set(),last:s.first};
     var I=iniMap[key];
     I.camps.add(s.campaign);
     I.totalSessions++; // 1 session = 1 email = 1 lượt gửi
     if(s.sent||(!hasSent&&s.opened))I.rcptSent.add(s.rcpt);
     if(s.opened){I.rcptOpen.add(s.rcpt);I.openEvents+=s.openCount;}
-    if(s.readSec!=null)I.dwells.push(s.readSec);
     if(s.first>I.last)I.last=s.first;
   });
   var initiatives=Object.values(iniMap).map(function(I){
     return{name:I.name,camps:I.camps.size,sent:I.rcptSent.size,sentSessions:I.totalSessions,opens:I.rcptOpen.size,openEvents:I.openEvents,
       reach:I.rcptSent.size>0?Math.round(I.rcptOpen.size/I.rcptSent.size*100):null,
-      avgRead:I.dwells.length?Math.round(I.dwells.reduce(function(a,b){return a+b;},0)/I.dwells.length):null,readN:I.dwells.length,
       last:I.last};
   }).sort(function(a,b){return b.last.localeCompare(a.last);});
 
@@ -815,11 +786,6 @@ function process(logs){
     proxyPct:nOpened?Math.round(nProxyOnly/nOpened*100):0,
     missingDept:missingDept,missingDeptPct:nOpened?Math.round(missingDept/nOpened*100):0,
     uniqRcpt:persons.length,uniqCamp:Object.keys(camp).length};
-
-  /* ══ 14b. THỜI GIAN ĐỌC (dwell, session-level) — trung bình cộng, mỗi lượt
-     đã kẹp tối đa DWELL_CAP_S giây. Chỉ đo được trên server nội bộ. ══════ */
-  var dwellAll=[];arr.forEach(function(s){if(s.readSec!=null)dwellAll.push(s.readSec);});
-  var avgReadAll=dwellAll.length?Math.round(dwellAll.reduce(function(a,b){return a+b;},0)/dwellAll.length):null;
 
   /* ══ 15. SUMMARY METRICS (person-level, không bao giờ > 100%) ═══════
      sent        = số người được gửi email (unique rcpt có sent event)
@@ -853,9 +819,7 @@ function process(logs){
     events:      logs.length,
     bestHour:    hour.indexOf(Math.max.apply(null,hour)),
     uniqRcpt:    persons.length,
-    coverage:    persons.length>0?Math.round(nOpened/persons.length*100):null,
-    avgRead:     avgReadAll,
-    readN:       dwellAll.length
+    coverage:    persons.length>0?Math.round(nOpened/persons.length*100):null
   };
 
   return{sum:sum,campaigns:campaigns,segments:segments,tiers:tiers,
@@ -978,10 +942,10 @@ function heroRow(d,cur,prev,ser){
   var rDelta=deltaChip(cur.reach,prev.reach,true);
   var gauge='<div class="gauge-card" data-tip="Tỉ lệ mở = Người mở ÷ Người gửi (person-level), cùng công thức với thẻ Tỉ lệ mở bên cạnh. Mục tiêu '+REACH_TARGET+'%."><div class="gc-h">'+gHead+'</div><div class="gauge-wrap">'+radialGauge(gVal,REACH_TARGET)+'</div><div class="gc-sub">'+(rDelta?rDelta+' so kỳ trước · ':'')+gSub+' · '+(remain>0?'còn '+remain+'% tới mục tiêu':'đạt mục tiêu')+' · '+nCamp+' chiến dịch</div></div>';
   function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl">'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
-  // 6 KPI chuẩn email: Đã gửi · Đã mở (lượt) · Thời gian đọc TB · Lượt click · CTOR · Mở TB/người
+  // 6 KPI chuẩn email (person-level): Đã gửi · Đã mở (lượt) · Chưa mở · Lượt click · CTOR · Mở TB/người
   var k1=card('Đã gửi',null,s.hasSent?nf(s.sent):'—',(s.hasSent?deltaChip(cur.sent,prev.sent,true):'')+' người · duy nhất',spark(sS,'var(--accent-2)'),'Số người nhận duy nhất có sự kiện gửi (pos=sent). 1 người nhận nhiều chiến dịch = chỉ tính 1 người.');
   var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' đã trừ mở lại &lt;5s',spark(oS,'var(--accent-2)'),'Tổng số lần email được mở, đã trừ mở-lại &lt;5s (Outlook tự reload). Đóng rồi mở lại (gap &gt;5s) = +1 lượt.');
-  var k3=card('Thời gian đọc trung bình',null,s.avgRead!=null?s.avgRead+'s':'—',(s.avgRead!=null?deltaChip(cur.avgRead,prev.avgRead,true):'')+(s.readN?' · '+nf(s.readN)+' lượt đo':' · thử nghiệm, chưa có dữ liệu'),null,'Trung bình cộng thời gian giữ email mở (dwell), mỗi lượt kẹp tối đa '+DWELL_CAP_S+'s để người quên đóng email không kéo lệch số liệu. Chỉ đo được trên server nội bộ — bản Vercel chưa hỗ trợ.');
+  var k3=card('Chưa mở',null,s.hasSent?nf(s.notOpenCount||0):'—',(s.hasSent?deltaChip(cur.notOpen,prev.notOpen,false):'')+(s.notOpenRate!=null?' · '+s.notOpenRate+'% người gửi':''),spark(sS,'var(--risk)'),'Số người được gửi email nhưng chưa mở lần nào. Cần follow-up trực tiếp.');
   var k4=card('Lượt click',null,nf(d.clickStats.total||0),deltaChip(cur.clickTotal,prev.clickTotal,true)+' · '+nf(s.nClickers||0)+' người click',spark(cS,'var(--accent)'),'Tổng số lượt click (1 người click nhiều lần = tính nhiều lượt). Số người unique đã click: '+nf(s.nClickers||0)+'.');
   var k5=card('CTOR',null,(d.clickStats.ctor||0)+'%',deltaChip(cur.ctor,prev.ctor,true)+' click ÷ mở',spark(cS,'var(--accent-2)'),'Click-to-Open Rate = Người click ÷ Người mở.');
   var k6=card('Mở TB/người',null,s.avgOpensPerReader!=null?s.avgOpensPerReader:'—',s.uniqOpeners+' người đã mở',spark(oS,'var(--accent-2)'),'Số lượt mở trung bình trên mỗi người đã mở ít nhất 1 lần = Tổng lượt mở ÷ Người mở.');
@@ -1049,8 +1013,7 @@ function recRow(p){
     +'<td>'+esc(fmtSeg(p.dept||p.role))+'</td>'
     +'<td class="num">'+(p.opened?p.openCount:0)+'</td>'
     +'<td class="num" style="font-size:11px">'+(p.lastOpen?fmtTime(p.lastOpen):'—')+'</td>'
-    +'<td class="num">'+(p.clicked?p.clickCount:0)+'</td>'
-    +'<td class="num" data-tip="'+(p.avgRead!=null?'Trung bình cộng từ '+p.readN+' lượt đo (dwell, thử nghiệm)':'Chưa có lượt đo dwell nào')+'">'+(p.avgRead!=null?p.avgRead+'s':'—')+'</td></tr>';
+    +'<td class="num">'+(p.clicked?p.clickCount:0)+'</td></tr>';
 }
 function recipientSection(d){
   var people=d.people||[];
@@ -1059,7 +1022,7 @@ function recipientSection(d){
   var notClickN=people.filter(function(p){return p.opened&&!p.clicked;}).length;
   var rows=_recTab==='no'?people.filter(function(p){return !p.opened;}):_recTab==='cl'?people.filter(function(p){return p.opened&&!p.clicked;}):people;
   window.__rec=rows;
-  regTable({id:'rec',rows:rows,render:recRow,pageSize:20,cols:6,placeholder:'Tìm người nhận / email…',search:function(p,q){return normMail(p.rcpt).indexOf(q.replace(/[-.]/g,''))>-1||norm(fmtRcpt(p.rcpt)).indexOf(q)>-1;},sortVal:function(p,k){return k==='name'?norm(fmtRcpt(p.rcpt)):k==='dept'?norm(fmtSeg(p.dept||p.role)||''):k==='open'?(p.opened?p.openCount:0):k==='last'?(p.lastOpen||0):k==='click'?(p.clicked?p.clickCount:0):k==='avgRead'?(p.avgRead||0):0;}});
+  regTable({id:'rec',rows:rows,render:recRow,pageSize:20,cols:5,placeholder:'Tìm người nhận / email…',search:function(p,q){return normMail(p.rcpt).indexOf(q.replace(/[-.]/g,''))>-1||norm(fmtRcpt(p.rcpt)).indexOf(q)>-1;},sortVal:function(p,k){return k==='name'?norm(fmtRcpt(p.rcpt)):k==='dept'?norm(fmtSeg(p.dept||p.role)||''):k==='open'?(p.opened?p.openCount:0):k==='last'?(p.lastOpen||0):k==='click'?(p.clicked?p.clickCount:0):0;}});
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('rec','Tìm người nhận / email…')
     +'<div class="seg"><button class="'+(_recTab==='all'?'on':'')+'" onclick="setRecTab(\'all\')">Tất cả <span class="pill p-neutral" style="font-size:10px">'+people.length+'</span></button>'
@@ -1068,7 +1031,7 @@ function recipientSection(d){
   return '<section id="s-rec"><div class="eyebrow">Người nhận — trạng thái mở &amp; click '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h">Person-level <button class="csv" onclick="exportRecipients()">Xuất CSV</button></div>'
     +tabs
-    +'<div class="tw"><table><thead><tr>'+th('rec','name','Người nhận','pin','Tên/email người nhận')+th('rec','dept','Phòng ban','','Phòng ban / vai trò')+th('rec','open','Lần mở','num','Số lần người này mở email')+th('rec','last','Mở gần nhất','num','Thời điểm mở gần nhất')+th('rec','click','Click','num','Số lần click')+th('rec','avgRead','Đọc TB','num','Thời gian đọc trung bình (dwell, thử nghiệm) — mỗi lượt kẹp tối đa '+DWELL_CAP_S+'s')+'</tr></thead><tbody id="tb-rec"></tbody></table></div>'
+    +'<div class="tw"><table><thead><tr>'+th('rec','name','Người nhận','pin','Tên/email người nhận')+th('rec','dept','Phòng ban','','Phòng ban / vai trò')+th('rec','open','Lần mở','num','Số lần người này mở email')+th('rec','last','Mở gần nhất','num','Thời điểm mở gần nhất')+th('rec','click','Click','num','Số lần click')+'</tr></thead><tbody id="tb-rec"></tbody></table></div>'
     +'<div class="clegend"><span><span class="tdot hot"></span>Đã mở &amp; click</span><span><span class="tdot warm"></span>Đã mở, chưa click</span><span><span class="tdot cold"></span>Chưa mở</span></div>'
     +'<div class="pager" id="pg-rec"></div></div></section>';
 }
@@ -1139,8 +1102,7 @@ function campRow(c){
     +'<td class="num" data-tip="'+nf(c.openEvents)+' lượt mở từ '+nf(c.opens)+' người"><b>'+nf(c.openEvents)+'</b></td>'
     +'<td class="num" data-tip="'+(N(c.sent)?'Mẫu nhỏ N='+c.sent+' — % không đủ đại diện thống kê':(c.notOpen||0)+' người được gửi nhưng chưa mở')+'"><span class="erc"><b>'+(r!=null?r+'%':'—')+'</b><span class="erbar2"><i style="width:'+rw+'%"></i></span></span></td>'
     +'<td class="num">'+nf(c.clickers||0)+'</td>'
-    +'<td class="num">'+(c.ctor>0?c.ctor+'%':'—')+'</td>'
-    +'<td class="num" data-tip="'+(c.avgRead!=null?'Trung bình cộng từ '+c.readN+' lượt đo (dwell, thử nghiệm) — mỗi lượt kẹp tối đa '+DWELL_CAP_S+'s':'Chưa có lượt đo dwell nào')+'">'+(c.avgRead!=null?c.avgRead+'s':'—')+'</td></tr>';
+    +'<td class="num">'+(c.ctor>0?c.ctor+'%':'—')+'</td></tr>';
 }
 function N(n){return n!=null&&n<MIN_N;}
 var _campTab='all';
@@ -1150,7 +1112,7 @@ function campaignSection(d){
   var F=_filter||{};
   var goalN=d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}).length;
   var rows=_campTab==='goal'?d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}):d.campaigns;
-  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:8,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.openEvents||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):k==='avgRead'?(c.avgRead||0):0;}});
+  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:7,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.openEvents||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):0;}});
   var clearBtn=(F.campaign&&F.campaign.length)?'<button class="csv" onclick="clearFilter(\'campaign\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc chiến dịch</button>':'';
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('camp','Tìm chiến dịch…')
@@ -1168,7 +1130,6 @@ function campaignSection(d){
     +th('camp','reach','Tỉ lệ mở','num','Tỉ lệ mở = Người mở ÷ Người gửi (person-level, đã loại proxy)')
     +th('camp','clickers','Đã click','num','Số người unique đã click ≥1 link')
     +th('camp','ctor','CTOR','num','CTOR = Click-to-Open Rate = Người click ÷ Người mở')
-    +th('camp','avgRead','Đọc TB','num','Thời gian đọc trung bình (dwell, thử nghiệm) — mỗi lượt kẹp tối đa '+DWELL_CAP_S+'s')
     +'</tr></thead><tbody id="tb-camp"></tbody></table></div>'
     +'<div class="clegend"><span><span class="tdot hot"></span>Đạt mục tiêu '+REACH_TARGET+'%</span><span><span class="tdot warm"></span>Trung bình</span><span><span class="tdot cold"></span>Thấp — cần cải thiện tiêu đề/thời điểm</span></div>'
     +'<div class="pager" id="pg-camp"></div></div>'
@@ -1263,13 +1224,12 @@ function iniRow(I){
     +'<td class="num" data-tip="Người mở unique"><b>'+I.opens+'</b></td>'
     +'<td class="num" data-tip="Tổng lượt mở">'+I.openEvents+'</td>'
     +'<td class="num">'+pill(I.reach,I.sent)+'</td>'
-    +'<td class="num" data-tip="'+(I.avgRead!=null?'Trung bình cộng từ '+I.readN+' lượt đo (dwell, thử nghiệm)':'Chưa có lượt đo dwell nào')+'">'+(I.avgRead!=null?I.avgRead+'s':'—')+'</td>'
     +'<td class="num" style="font-size:11px;color:var(--faint);font-weight:400">'+fmtTime(I.last)+'</td></tr>';
 }
 function initiativeSection(d){
   if(!d.hasInitiative)return '';
   var F=_filter||{};
-  regTable({id:'ini',rows:d.initiatives,render:iniRow,pageSize:15,cols:9,placeholder:'Tìm Squad/Dự án…',search:function(I,q){return norm(fmtCamp(I.name)).indexOf(q)>-1||norm(I.name).indexOf(q)>-1;}});
+  regTable({id:'ini',rows:d.initiatives,render:iniRow,pageSize:15,cols:8,placeholder:'Tìm Squad/Dự án…',search:function(I,q){return norm(fmtCamp(I.name)).indexOf(q)>-1||norm(I.name).indexOf(q)>-1;}});
   var clearBtn=(F.initiative&&F.initiative.length)?'<button class="csv" onclick="clearFilter(\'initiative\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'';
   return '<section id="s-ini"><div class="eyebrow">Squad/Dự án · awareness tích luỹ '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h">Theo dõi theo sáng kiến '+clearBtn+'</div>'
@@ -1282,7 +1242,6 @@ function initiativeSection(d){
     +'<th class="num" data-tip="Người mở = số người duy nhất đã mở (cộng dồn các đợt). 1 người nhận nhiều đợt được tính nhiều lần.">Người mở</th>'
     +'<th class="num" data-tip="Lượt mở = tổng số lần email được mở, kể cả mở lại nhiều lần">Lượt mở</th>'
     +'<th class="num" data-tip="Reach = Người mở ÷ Người gửi">Reach</th>'
-    +'<th class="num" data-tip="Thời gian đọc trung bình (dwell, thử nghiệm) — mỗi lượt kẹp tối đa '+DWELL_CAP_S+'s">Đọc TB</th>'
     +'<th data-tip="Thời gian gửi đợt gần nhất">Thời gian gửi</th></tr></thead><tbody id="tb-ini"></tbody></table></div>'
     +'<div class="pager" id="pg-ini"></div></div>'
     +'<div class="so">→ Gom nhiều đợt email của cùng dự án để theo dõi mức độ <b>awareness tích luỹ</b>. Bấm dòng để lọc / bấm lại để bỏ lọc.</div></section>';
