@@ -1036,6 +1036,7 @@ function masthead(mode){
   var mBtn='<a class="mode-btn" href="/api/leader" target="_top" data-tip="Tóm tắt lãnh đạo — tổng hợp cả Facebook &amp; Email">Tóm tắt lãnh đạo</a>';
   var pgsw='<div class="pgsw"><a class="on" href="/api/facebook" data-tip="Facebook Dashboard"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 22v-8h2.7l.4-3H13V9c0-.9.2-1.5 1.5-1.5H16V4.9C15.7 4.9 14.8 4.8 13.7 4.8 11.4 4.8 9.9 6.2 9.9 8.7V11H7.2v3H9.9v8z"/></svg>Facebook</a><a href="/api/email" data-tip="Email Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</a></div>';
   var mhGrp='<div class="mh-grp"><button class="icon-btn" onclick="openCmd()" data-tip="Lệnh nhanh (Ctrl/⌘+K)">⌘K</button>'
+    +'<button id="sync-btn" class="icon-btn" onclick="syncDashboard()" data-tip="Đồng bộ dữ liệu mới (chạy lại pipeline GitLab, ~5 phút)">↻</button>'
     +'<button class="icon-btn" onclick="toggleTheme()" data-tip="Sáng/Tối">'+(_theme==='dark'?'☼':'☾')+'</button></div>';
   return '<div class="mast"><div class="mast-row1"><div class="brand"><img class="mh-logoimg" src="'+LOGO_URI+'" alt="SHB"><span class="mh-div"></span><span class="mh-sub">CM Dashboard</span></div>'
     +pgsw
@@ -1140,6 +1141,21 @@ function paint(){
 function flt(days){_days=days;_from=null;_to=null;paint();}
 function setMode(m){_mode=m;paint();window.scrollTo(0,0);}
 function toggleTheme(){_theme=_theme==='dark'?'light':'dark';try{localStorage.setItem('shb-fb-theme',_theme);}catch(e){}paint();}
+function syncDashboard(){
+  var btn=document.getElementById('sync-btn');
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
+  fetch('https://gitlab-nhs.shb.com.vn/api/v4/projects/446/trigger/pipeline',{
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'token=dcefb557281889dd16b293b7c8f078&ref=main'
+  }).then(function(){
+    alert('Đã gửi yêu cầu đồng bộ. Trang sẽ tự tải lại sau khoảng 5 phút (đủ thời gian build + deploy).');
+    setTimeout(function(){location.reload();},300000);
+  }).catch(function(e){
+    alert('Lỗi gửi yêu cầu đồng bộ: '+e.message);
+    if(btn){btn.disabled=false;btn.textContent='↻';}
+  });
+}
 function toggleDensity(){_density=_density==='compact'?'comfortable':'compact';try{localStorage.setItem('shb-fb-density',_density);}catch(e){}applyDensity();}
 function exportCSV(id){var cfg=_TBL[id];if(!cfg)return;var rows=cfg.rows;var csv='Bai viet,Loai,Views,Reactions,Comments,Shares,ER\n';rows.forEach(function(r){var p=r.p;csv+='"'+p.msg.replace(/"/g,'')+'","'+p.type+'",'+p.views+','+reactTotal(p.react)+','+p.comments+','+p.shares+','+r.er+'\n';});var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='fb-posts-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 

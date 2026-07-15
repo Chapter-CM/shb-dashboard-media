@@ -1,4 +1,317 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 13/07/2026 chiều)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 khuya)
+
+## 🔀 14/07 khuya — Facebook (chạy userscript thật) TẠM DỪNG, chuyển sang sửa lỗi giao diện còn tồn đọng
+
+**Xác nhận rõ với user**: KHÔNG cần xoá gì trong MySQL — bảng `fb_group_posts` vốn đã trống sẵn (đã
+verify `[]` qua `/dbquery`), mock 38 bài chỉ là kết quả TÍNH TOÁN lúc render (không lưu DB) khi cả 2
+bảng rỗng — chỉ cần userscript nạp được ≥1 dòng thật là mock tự biến mất ngay, không cần thao tác dọn dẹp
+gì thêm. Việc chạy userscript thật vẫn đang chờ user xin quyền đăng nhập Facebook trên máy công ty (xem
+mục "⏸️ 14/07 tối — Nạp lại dữ liệu Facebook thật" bên dưới để không lặp lại hướng dẫn).
+
+**Chuyển hướng theo yêu cầu user**: phiên tiếp theo sẽ sửa "các lỗi giao diện còn tồn đọng" — **CHƯA rõ
+cụ thể là lỗi gì** (chưa hỏi/chưa nhận ảnh cụ thể lúc ghi mục này). Nhắc lại bài học đã rút ra trong phiên
+này (rất quan trọng, đọc kỹ trước khi sửa bất kỳ UI nào): 
+- ĐỪNG đoán bố cục/lỗi từ mô tả chung chung — luôn xin ảnh chụp cụ thể + khoanh vùng chỗ lỗi trước khi sửa.
+- Đã có 3-4 vòng đoán sai liên tiếp về UI Jira trong phiên này (row1 dư, logo, màu nút PDF, bố cục row2)
+  khiến user phàn nàn mất thời gian — ĐỪNG lặp lại, luôn xác nhận phạm vi cụ thể trước khi động code.
+- Nếu cần test/render trước khi gửi, dùng pattern đã có: `python3 -m http.server` + mock `data.json` +
+  Playwright (`chromium-1194`, path `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`,
+  `args:['--no-sandbox']`) — xem chi tiết mục "🚧 13/07 tối" ở lịch sử bên dưới.
+
+**Việc đầu tiên phiên sau**: hỏi user CHÍNH XÁC đang thấy lỗi giao diện gì (dashboard nào: Facebook/Email/
+Jira/Portal, ảnh chụp cụ thể), đừng tự suy đoán rồi sửa ngay.
+
+---
+
+## ✅ 14/07 tối muộn — ĐÍNH CHÍNH: số liệu Facebook "38 bài" là MOCK CHỦ Ý, KHÔNG PHẢI data rác trong MySQL
+
+**Sửa lại kết luận sai ở mục "⚠️ 14/07 chiều" bên dưới** — đã XÁC MINH THẬT (không đoán) bằng cách gọi
+thẳng route `/dbquery` từ trình duyệt (không qua tầng dashboard/mock):
+```
+https://cm-dashboard-ingest.dev-saha.aws.shb.com.vn/dbquery?secret=500a13c1-4b4a-4da0-a4c7-c4200e51b66a&path=%2Frest%2Fv1%2Ffb_group_posts%3Fselect%3Dpost_id%2Ctitle%2Ccreated_time%26limit%3D50
+```
+→ Kết quả trả về `[]` — **bảng `fb_group_posts` HOÀN TOÀN TRỐNG**, không hề có dữ liệu rác nào cả.
+
+**Nguyên nhân thật (đọc code, xác nhận chủ ý):** `api/fb-dashboard.js` dòng 205:
+```js
+if (!hasPage && !hasGroup) return genMock();  // cả hai rỗng -> demo
+```
+Khi CẢ 2 bảng (`fb_group_posts` và `fb_page_insights`) đều rỗng → code **tự động hiện mock demo** (38
+bài giả, seed cố định `20260622` → số liệu luôn giống hệt nhau mỗi lần, đây là lý do user "thấy đúng số
+này từ trước khi MySQL kết nối được" — không phải trùng hợp, mock luôn ra cùng 1 kết quả). Đây LÀ THIẾT
+KẾ CÓ CHỦ Ý (fallback để không hiện màn hình trắng), KHÔNG PHẢI lỗi/data rác cần dọn.
+
+**Sửa lại việc cần làm:**
+1. ~~Nhờ anh Nam `DELETE FROM fb_group_posts`~~ — **KHÔNG CẦN NỮA**, bảng vốn đã trống sẵn.
+2. Chỉ còn đúng 1 việc: **chạy userscript thật** để nạp ít nhất 1 dòng dữ liệu Facebook thật vào MySQL
+   → mock sẽ tự biến mất ngay. Xem hướng dẫn đầy đủ ở mục "⏸️ 14/07 tối — Nạp lại dữ liệu Facebook thật"
+   bên dưới (đang chờ user xin quyền đăng nhập Facebook trên máy công ty).
+
+**Mẹo debug hữu ích cho lần sau:** gọi thẳng `/dbquery` qua URL trình duyệt (như trên) là cách nhanh
+nhất để xem RAW data trong MySQL, bỏ qua toàn bộ tầng dashboard/mock/cache — nên dùng cách này TRƯỚC
+khi kết luận "dữ liệu rác"/"dữ liệu thật" dựa trên những gì hiện trên UI.
+
+---
+
+## ⏸️ 14/07 tối — Nạp lại dữ liệu Facebook thật ĐANG TẠM DỪNG, chờ user xin quyền Facebook trên máy công ty
+
+**Tiến trình đã thử trong phiên này (đầy đủ để không lặp lại):**
+1. Máy công ty chặn cài extension mới (Tampermonkey) qua Group Policy ("Extension installation is
+   blocked by policy", mã extension `dhdgffkkebhmkfjojejmpbldmpobfkfo`).
+2. → Tạo bản thay thế **`tools/shb-content-library.console.js`** (chạy tay qua dán vào DevTools Console,
+   không cần Tampermonkey — thay `GM_xmlhttpRequest` bằng `fetch` thường, thay `unsafeWindow` bằng
+   `window` — server `/api/ingest` đã có sẵn `Access-Control-Allow-Origin: *` nên fetch cross-origin từ
+   Console vẫn gọi được, không bị CORS chặn).
+3. User thử trên **máy cá nhân** (đã cài được Tampermonkey ở đó, dùng bản `tools/shb-content-library.user.js`
+   — đã sửa sẵn endpoint nội bộ SHB + điền `INGEST_SECRET` thật):
+   - Lúc đầu bị banner "Please enable the 'Allow User Scripts' extension setting" (Tampermonkey MV3
+     mới) → bật ở `chrome://extensions` → Tampermonkey → Details → "Allow User Scripts" → xong, hết banner.
+   - Script CHẠY ĐÚNG, bắt được dữ liệu thật (`gửi 5 bài`, `gửi 3 bài`...) — nhưng **mọi request gửi
+     `/api/ingest` đều lỗi `status: 408, statusText: 'Failed to fetch'`**.
+   - **NGUYÊN NHÂN: máy cá nhân KHÔNG có VPN/mạng nội bộ SHB** — endpoint
+     `cm-dashboard.dev-saha.aws.shb.com.vn` là domain NỘI BỘ, không có mạng nội bộ thì không gọi được,
+     không liên quan gì tới code/script (đã xác nhận đúng nguyên nhân, không phải đoán).
+4. **Quyết định user**: dừng dùng máy cá nhân + Tampermonkey. Sẽ **xin quyền đăng nhập Facebook (tài
+   khoản admin Group "SHB Một Nhà") trên máy công ty** (có sẵn mạng nội bộ) rồi dùng bản **Console**
+   (`.console.js`, không cần cài extension) để chạy.
+5. ⚠️ **Bài học quan trọng cho phiên sau**: bản Console/Tampermonkey trên máy cá nhân đã xác nhận
+   **auto-scroll KHÔNG tự chạy như mong đợi** — user phải **tự cuộn tay** trang Content Library để
+   lazy-load hết bài trước khi script bắt được (đừng chỉ dựa vào `AUTO_SCROLL=true` trong code, dặn
+   user cuộn tay luôn).
+
+**Việc đầu tiên phiên sau**: hỏi user đã xin được quyền đăng nhập Facebook trên máy công ty chưa. Nếu
+rồi, hướng dẫn lại đúng quy trình:
+1. Nhờ anh Nam `DELETE FROM fb_group_posts;` trước (dọn dữ liệu rác, XEM chi tiết mục "⚠️ 14/07 chiều"
+   bên dưới nếu chưa làm) — nếu đã làm rồi thì bỏ qua bước này.
+2. Đăng nhập Facebook trên máy công ty → `facebook.com/professional_dashboard/content/content_library/`
+   → chọn khoảng ngày rộng → F12 Console → dán `tools/shb-content-library.console.js` → Enter → **tự
+   cuộn tay** hết danh sách bài → theo dõi log `gửi ... bài` + `ingest 200` (200 = thành công thật, khác
+   với lỗi 408 gặp phải trên máy cá nhân).
+3. F5 lại `#fb`, so với bản Vercel (`shb-fb-dashboard.vercel.app/#fb`) để đối chiếu số liệu hợp lý.
+
+---
+
+## 🔀 14/07 tối — CHUYỂN HƯỚNG: user yêu cầu tạm dừng Facebook, quay sang kiểm tra dashboard Email
+
+Theo yêu cầu user, phiên tiếp theo (nếu tiếp tục ngay) nên bắt đầu bằng việc **kiểm tra dashboard Email**
+(`#email`) thay vì tiếp tục Facebook — xem lại mục "⚠️ Số liệu Facebook MySQL là dữ liệu rác" (14/07
+chiều) để nhớ bối cảnh: bảng `events` (email) cũng vừa được tạo mới qua `schema.mysql.sql`, có thể cũng
+đang trống hoặc còn dữ liệu test cũ. Cần: gửi 1 email test MỚI qua Outlook (macro `SendCampaign` trong
+`tools/CampaignTracker.bas` v4.11, đã trỏ đúng endpoint nội bộ) SAU KHI bảng đã tồn tại, rồi F5 `#email`
+kiểm tra.
+
+---
+
+## ⚠️ 14/07 chiều — Số liệu Facebook MySQL là DỮ LIỆU RÁC/TEST, không phải data thật — đã tìm nguyên nhân + đang xử lý
+
+**Phát hiện:** user đối chiếu bản Vercel (Supabase, thật: 291.246 lượt xem, 76 bài, có chuỗi ngày thật)
+với bản nội bộ MySQL vừa lên (1.270.824 lượt xem, 38 bài, "Chưa có chuỗi theo ngày hoạt động") — 2 bộ số
+khác hẳn nhau. Kết luận: bảng `fb_group_posts` trên MySQL đang chứa vài dòng dữ liệu test/rác còn sót
+từ lúc debug kết nối trước đó, KHÔNG PHẢI dữ liệu Facebook thật — dữ liệu thật vẫn đang nằm bên Supabase
+(Vercel), CHƯA từng được đưa vào MySQL.
+
+**Quyết định (theo yêu cầu user): KHÔNG migrate dữ liệu cũ từ Supabase sang** — thay vào đó xoá sạch
+data rác trong MySQL rồi để userscript Tampermonkey (nguồn CHÍNH theo kiến trúc gốc) tự nạp lại dữ liệu
+thật từ đầu.
+
+**Tìm ra thêm 1 nguyên nhân liên quan:** `tools/shb-content-library.user.js` (userscript Content
+Library) **vẫn trỏ endpoint Vercel** (`https://shb-fb-dashboard.vercel.app/api/ingest`), y hệt lỗi đã
+gặp với `CampaignTracker.bas` trước đó (v4.9 quên đổi). Đã sửa xong (commit `92107c6`):
+- `INGEST` → `https://cm-dashboard.dev-saha.aws.shb.com.vn/api/ingest` (nội bộ).
+- `SECRET` → điền sẵn `500a13c1-4b4a-4da0-a4c7-c4200e51b66a` (trước để placeholder `PASTE_INGEST_SECRET_HERE`).
+- `@connect` đổi sang domain nội bộ (Tampermonkey chặn cross-origin nếu không khai báo đúng domain).
+Đã gửi file mới cho user cài lại vào Tampermonkey.
+
+**Việc còn lại (theo thứ tự):**
+1. ⏳ Nhờ anh Nam chạy `DELETE FROM fb_group_posts;` trên MySQL (dọn dữ liệu rác — `fb_group_post_snapshots`
+   tự xoá theo nhờ `ON DELETE CASCADE`). **CHƯA có xác nhận.**
+2. User cài lại `shb-content-library.user.js` mới vào Tampermonkey.
+3. Chạy userscript thật trên Facebook (Professional Dashboard → Content Library, khoảng ngày rộng) để
+   nạp dữ liệu thật vào MySQL.
+4. F5 `#fb`, so với bản Vercel — nếu số liệu khớp hợp lý (không cần giống hệt vì thời điểm chạy khác
+   nhau) → coi như xong.
+
+**Việc đầu tiên phiên sau**: hỏi user tiến độ bước 1 (anh Nam xoá bảng chưa) và bước 3 (đã chạy
+userscript thật chưa), rồi F5 kiểm tra kết quả.
+
+---
+
+## 🎉 14/07 trưa muộn — Facebook ĐÃ CÓ DỮ LIỆU THẬT — luồng MySQL (`/dbquery` proxy) THÔNG SUỐT HOÀN TOÀN
+
+Anh Nam báo "done" (đã chạy `schema.mysql.sql`) → chạy lại pipeline #265105 → log `sync_data`
+**KHÔNG còn dòng lỗi `[fb loadData] db-client(http): ...` nào cả** (trước đó luôn có: unauthorized →
+access denied → no such table, giờ hết sạch cả 3). F5 `#fb` (đúng bản mới, "Cập nhật: 02:33 14-07")
+→ **hiện dữ liệu thật**: 1.270.824 lượt xem, 130.718 tương tác, ER 10.3%, 38 bài. Xác nhận toàn bộ
+chuỗi `sync_data` (GitLab runner) → `/dbquery` proxy (`cm-dashboard-ingest`) → MySQL nội bộ
+(`rds-sahadb.dev-saha.aws.shb.com.vn`, database `cm_dashboard`) đã hoạt động đúng, xong hẳn nhánh
+"ETIMEDOUT → Security Group → unauthorized → access denied → no such table" kéo dài từ 08-14/07.
+
+`#email` vẫn "Chưa có dữ liệu" — **DỰ KIẾN, không phải lỗi**: bảng `events` vừa tạo còn trống (email
+test cũ gửi TRƯỚC khi bảng tồn tại nên ghi thất bại/mất). Đã nhờ user gửi 1 email test MỚI qua Outlook
+(macro `SendCampaign` trong `tools/CampaignTracker.bas` v4.11) để kiểm tra nốt nhánh ghi email — CHƯA
+có kết quả.
+
+**Việc đầu tiên phiên sau**: hỏi user đã gửi email test mới + F5 `#email` chưa, kết quả ra sao.
+- Nếu có dữ liệu → **COI NHƯ XONG TOÀN BỘ MIGRATION MYSQL**, có thể đóng hẳn nhánh Supabase/ETIMEDOUT cũ,
+  cập nhật `KE_HOACH_MIGRATION.md` đánh dấu Giai đoạn 1 hoàn tất.
+- Nếu vẫn "Chưa có dữ liệu" sau khi gửi test → đọc kỹ log `sync_data` mới nhất tìm lỗi cụ thể (đừng
+  đoán, xem đúng message — kinh nghiệm phiên này: mỗi lần chạy lại đều lộ ra lỗi MỚI khác hẳn lỗi cũ,
+  không suy luận từ lỗi cũ được).
+- Việc UI Jira (polish row2) đang TẠM DỪNG HẲN theo yêu cầu user — xem mục "⏸️ 14/07 trưa" bên dưới,
+  KHÔNG tự ý động vào nữa trừ khi user chủ động nêu lại kèm ảnh chỉ rõ.
+
+---
+
+## ⏸️ 14/07 trưa — TẠM DỪNG hẳn việc polish UI Jira row2 — user báo mất thời gian, ưu tiên việc DB
+
+User phản hồi UI row2 (đợt polish padding/bo góc/ẩn "Đơn vị trục X") "vẫn không được", nhưng không chỉ
+rõ được cụ thể còn lệch chỗ nào dù đã hỏi lại 2 lần — cảm thấy tốn thời gian, yêu cầu DỪNG và quay lại
+việc DB vì **anh Nam đã báo đẩy xong `schema.mysql.sql`**.
+
+**QUYẾT ĐỊNH: KHÔNG tự ý sửa thêm UI Jira ở phiên sau** trừ khi user chủ động nêu lại VÀ chỉ rõ cụ thể
+điểm cần sửa (kèm ảnh khoanh vùng) — tránh lặp lại vòng đoán-sai đã xảy ra 3 lần liên tiếp trong phiên
+này. Code hiện tại (đã lên GitLab, commit `cd22767`) đã cải thiện thật (padding/bo góc đồng nhất hơn,
+ẩn khối "Đơn vị trục X" khi nhúng portal) — coi đây là điểm dừng, không phải lỗi, không cần rollback.
+
+**Việc đầu tiên phiên sau: kiểm tra kết quả anh Nam chạy `schema.mysql.sql`.**
+1. Chạy lại pipeline `sync_data` trên GitLab `main`.
+2. Đọc log — kỳ vọng hết hẳn dòng `[fb loadData] db-client(http): ER_NO_SUCH_TABLE ...`.
+3. F5 lại `#fb`/`#email` (nhớ xoá `localStorage.removeItem('cm_cfg_v10')` trước hoặc dùng máy khác/tab
+   khác không dính cache) — xem dữ liệu thật đã lên chưa. Facebook nhiều khả năng vẫn rỗng (bảng mới
+   tạo, chưa có dữ liệu userscript ghi vào) — đó là bình thường, không phải lỗi. Email cũng có thể rỗng
+   nếu chưa có email test nào ghi vào bảng `events` sau khi bảng được tạo mới (dữ liệu test cũ trước đó,
+   nếu có, đã ghi thất bại vì bảng chưa tồn tại lúc đó — có thể cần gửi lại 1 email test MỚI qua Outlook
+   sau khi bảng đã tạo xong).
+
+---
+
+## ⏸️ 14/07 sáng — Việc DB (`ER_NO_SUCH_TABLE`) đang CHỜ anh Nam chạy `schema.mysql.sql` — quay lại sửa UI Jira trong lúc chờ
+
+Xem chi tiết đầy đủ ở mục "⏳ 13/07 tối muộn" ngay bên dưới — KHÔNG cần lặp lại chẩn đoán, chỉ cần hỏi
+user đã có phản hồi anh Nam chưa trước khi động vào DB.
+
+**✅ ĐÃ ĐÓNG mục "🚧 13/07 tối — Jira UI" bên dưới — cả 3 fix đã xác nhận hoạt động đúng trên live.**
+Nghi vấn "F5 vẫn không đổi" ĐÃ giải quyết: đúng là do `localStorage cm_cfg_v10` cache cũ trên trình
+duyệt test (máy công ty chặn tab ẩn danh, đã xử lý bằng
+`localStorage.removeItem('cm_cfg_v10'); location.reload();` qua Console F12) — không phải do code
+sai/chưa deploy. Sau khi xoá cache: logo SHB thật hiện đúng, nút Xuất PDF đỏ-cam đúng, masthead chỉ
+còn 1 hàng. **Không cần sửa thêm gì cho 3 việc này nữa.**
+
+**Việc tiếp theo cho UI Jira (nếu làm tiếp trong lúc chờ anh Nam)**: polish thêm bố cục/style
+`jira-mast-row2` (chip lọc, lịch, dropdown, nút hành động) cho đồng bộ pixel-perfect hơn với mockup đã
+duyệt (hiện đã đúng CHỨC NĂNG và tương đối gần, chỉ còn khác biệt nhỏ về padding/border-radius/độ cao
+nút giữa các phần tử — xem ảnh render thật trong lịch sử chat, không phải lỗi, chỉ là polish thêm nếu
+user muốn). Đây là việc KHÔNG khẩn cấp, chỉ làm nếu user chủ động yêu cầu tiếp — 3 fix quan trọng đã
+xong và đã verify.
+
+---
+
+# (Lịch sử cũ bên dưới, giữ nguyên không đổi)
+
+## ⏳ 13/07 tối muộn — Đang chờ anh Nam trả lời lỗi MySQL `ER_ACCESS_DENIED_ERROR` — ĐÃ QUA lỗi `unauthorized`
+
+**Tiến trình xử lý `/dbquery` proxy hôm nay (theo đúng thứ tự, KHÔNG cần lặp lại các bước đã qua):**
+1. ✅ Anh Nam xác nhận đã thêm `INGEST_SECRET` vào Deployment `cm-dashboard-ingest` (chat Teams, "a thêm r đó").
+2. ✅ Chạy lại pipeline `main` (job `sync_data`) — xác nhận **HẾT HẲN** lỗi `db-client(http): unauthorized`.
+3. ⏳ **Lỗi MỚI xuất hiện, đang chờ anh Nam** — job `sync_data` giờ báo:
+   ```
+   [fb loadData] db-client(http): ER_ACCESS_DENIED_ERROR - Access denied for user
+   'cm_dashboard_user'@'10.194.10.166' (using password: YES)
+   ```
+   → Route `/dbquery` trên pod `cm-dashboard-ingest` đã nhận đúng request (secret khớp, có `MYSQL_HOST`),
+   thực sự kết nối tới MySQL — nhưng MySQL **từ chối** user `cm_dashboard_user` khi connect từ IP
+   `10.194.10.166` (IP nội bộ của chính pod `cm-dashboard-ingest`).
+4. **Đã loại trừ**: Secret `mysql-secret` (namespace `aws-saha-ms-dev`, chứa `MYSQL_USER/PASSWORD/HOST/
+   DATABASE/PORT` qua `secretKeyRef`) **KHÔNG nằm trong resource ArgoCD app `cm-dashboard-ingest` quản lý**
+   (filter "Kinds → Secret" trong ArgoCD ra đếm 0) → không tự xem/đối chiếu giá trị thật được qua ArgoCD,
+   phải nhờ anh Nam xem trực tiếp.
+5. **Đã nhắn anh Nam** (chưa có phản hồi) — nhờ kiểm tra 2 khả năng:
+   - Secret `mysql-secret` có đang set đúng password thật của `cm_dashboard_user` không (nghi gõ nhầm lúc
+     tạo Secret thủ công — Secret KHÔNG do Helm/ArgoCD quản lý nên dễ lệch tay).
+   - User `cm_dashboard_user` trên MySQL có được GRANT quyền kết nối từ IP `10.194.10.166` không — chạy
+     `SELECT user,host FROM mysql.user WHERE user='cm_dashboard_user';` để xem host pattern hiện tại.
+   - Ghi chú: password gốc đã cấp trước đó (09/07) là `Cmshb@2026` cho `cm_dashboard_user` — TRÙNG với
+     password login ArgoCD `cm-user/Cmshb@2026` anh Nam cấp sau đó (không phải cùng 1 hệ thống, chỉ trùng
+     giá trị) — không dùng để suy luận Secret đúng/sai, chỉ để tham khảo khi anh Nam đối chiếu.
+
+6. ✅ **TÌM RA NGUYÊN NHÂN GỐC** — anh Nam tự phát hiện: lúc tạo user MySQL đã gõ **thiếu chữ "h"**:
+   ```sql
+   'cm_dasboard_user'@'%' IDENTIFIED BY 'Cmshb@2026'   -- SAI, thiếu "h" (cm_dasboard_user)
+   ```
+   trong khi code/Secret dùng đúng tên `cm_dashboard_user` (đủ chữ) → MySQL không có user khớp tên →
+   `Access denied`. Anh Nam đang chỉnh lại GRANT cho đúng tên user (nhắn "Để a chỉnh lại", chat 13/07 17:50).
+   **CHƯA có xác nhận đã chỉnh xong** — user đã nhắn "Oke a chỉnh xong báo em với ạ", đang chờ rep.
+
+7. ✅ **Anh Nam đã sửa xong tên user** (14/07 08:20, "check lại xem oke chưa e nhé") — chạy lại pipeline
+   #265087 → **XÁC NHẬN HẾT HẲN** lỗi `ER_ACCESS_DENIED_ERROR`. Auth + network tới MySQL giờ đã thông
+   suốt hoàn toàn (loại trừ hẳn nhánh ETIMEDOUT/Security Group cũ, xong nốt cả unauthorized + access denied).
+8. ⏳ **Lỗi MỚI (tầng cuối cùng, đơn giản hơn nhiều)** — giờ báo:
+   ```
+   [fb loadData] db-client(http): ER_NO_SUCH_TABLE - Table 'cm_dashboard.fb_posts' doesn't exist
+   ```
+   Nghĩa là kết nối + auth + chọn database đều OK, chỉ là **database `cm_dashboard` còn trống, chưa
+   chạy schema tạo bảng**. Đây đúng là việc đã treo từ lâu (mục "10/07 trưa" cũ: "Nhờ Quang chạy
+   `db/schema.mysql.sql`" — chưa ai làm tới giờ).
+   **Đã gửi file `db/schema.mysql.sql` (124 dòng, chỉ có `CREATE TABLE IF NOT EXISTS`, an toàn chạy
+   nhiều lần — tạo đủ `fb_posts/fb_snapshots/fb_page_snapshots/fb_group_posts/fb_group_post_snapshots/
+   fb_page_insights/events`) cho user chuyển anh Nam chạy trực tiếp trên database `cm_dashboard`.**
+   **CHƯA có xác nhận đã chạy xong.**
+
+**Việc đầu tiên phiên sau**: hỏi user đã có phản hồi anh Nam là đã chạy `schema.mysql.sql` xong chưa.
+Nếu rồi → chạy lại pipeline `sync_data` → xác nhận hết lỗi `ER_NO_SUCH_TABLE` → F5 lại `#fb`/`#email`
+(dùng tab ẩn danh) xem dữ liệu thật đã lên chưa (lúc này dữ liệu Facebook sẽ vẫn rỗng vì bảng mới tạo
+chưa có dòng nào — cần userscript ghi thật hoặc chờ email test cũ ghi vào `events` mới thấy số liệu,
+xem lại mục ✅ 10/07 trưa bên dưới). Nếu vẫn lỗi khác, đọc kỹ lỗi mới trước khi đoán — cả 3 lần trước
+(unauthorized → access denied → no such table) đều là lỗi khác hẳn nhau, đọc đúng message mới đỡ mất
+thời gian.
+
+---
+
+## 🚧 13/07 tối — Đang sửa dở giao diện Jira dashboard cho đồng bộ với Facebook/Email — TẠM DỪNG, chờ anh Nam trả lời việc DB trước
+
+**Bối cảnh:** User yêu cầu đồng bộ masthead/sidebar tab Jira với 2 tab Facebook/Email (đã có sẵn 2 hàng
+đồng bộ từ đợt 07/07). Đã duyệt 1 mockup preview (artifact) làm chuẩn thiết kế trước khi sửa code thật.
+
+**3 fix đã làm, đã render kiểm chứng bằng headless Chromium + push lên nhánh `claude/handoff-reading-qgkm3d`
+(GitHub), user đã copy tay sang GitLab (`public/api/jira/index.html`) và merge cả 3 lần, pipeline đều
+PASS:**
+1. Ẩn hẳn `jira-mast-row1` khi nhúng portal (`html.embed .jira-mast-row1{display:none!important}`) —
+   trước đó chỉ ẩn brand+switcher, để dư 1 hàng dưới masthead portal (bug thật, commit `673d25d`/`faeeca7`).
+2. Logo SHB thật làm mặc định cho `cfg.logoUrl` (trước là chuỗi rỗng → hiện chữ "CM" giả) — dùng lại
+   đúng `LOGO_URI` base64 từ `api/fb-dashboard.js` (commit `faeeca7`).
+3. Nút "Xuất PDF" đổi gradient từ tím (`C.accent`) sang đỏ-cam `#e11d2a→#fb7427` khớp thương hiệu/tab
+   Jira active, KHÔNG đổi biến `C.accent` toàn cục (biến này dùng khắp thân trang — bảng, KPI, chart —
+   đổi sẽ ảnh hưởng diện rộng ngoài phạm vi đã duyệt) (commit `1243869`).
+
+**⚠️ Bài học quan trọng rút ra giữa chừng (đọc kỹ trước khi làm tiếp):**
+- **Đừng đoán bố cục từ đọc code — phải render thật.** Lần đầu đọc JSX `jira-mast-row2` rồi kết luận
+  "đã khớp mockup" là SAI — phải dựng server local (`python3 -m http.server`) + mock `data.json` đúng
+  schema (`key/loai/doi_tuong/nhom/hang_muc/hang_muc_chuan/assignee/status/due/created/updated/work_type`)
+  + vendor UMD (`npm install --no-save react@18 react-dom@18 @babel/standalone@7 prop-types@15.8.1
+  recharts@2.12.7 html2canvas@1.4.1 jspdf@2.5.1`) + Playwright (`chromium-1194`, path
+  `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, cần `args:['--no-sandbox']`) mới thấy đúng giao
+  diện thật. Script mẫu đã dùng: `shot3.js`/`shot4.js` trong scratchpad phiên này (không còn lưu lại,
+  cần dựng lại nếu làm tiếp — pattern: `addInitScript` set `localStorage cm_weekly_<ngày>` +
+  `cm_tip_seen_v1` để tắt 2 popup onboarding chặn màn hình, và click nút "Bỏ qua" để tắt modal "Cảnh
+  báo task" cũng tự bật khi có task trễ hạn trong mock data).
+- **Lỗi console `Uncaught SyntaxError: Invalid or unexpected token` ở SPA Jira là lỗi CÓ SẴN TỪ BẢN GỐC**
+  (đã test lại bằng commit `552d8d8`, trước khi đụng gì) — không phải do các đợt sửa trên, không cần lo.
+- **`cfg` đọc từ `localStorage cm_cfg_v10` TRƯỚC, đè lên default trong code** — nếu trình duyệt test đã
+  từng mở dashboard/bấm "Tuỳ chỉnh" trước đó, các thay đổi default (như `logoUrl`) sẽ KHÔNG hiện ra dù
+  deploy đúng, phải xoá `localStorage.removeItem('cm_cfg_v10')` hoặc mở tab ẩn danh mới thấy.
+- User phản ánh "vẫn không đổi gì" ở lần F5 cuối dù đã merge cả 3 fix + pipeline pass — **CHƯA xác nhận
+  nguyên nhân** (nghi vấn: cache trình duyệt/CDN, hoặc `localStorage cm_cfg_v10` cũ trên máy user đè
+  logo mới — xem bài học ở trên). **CHƯA kiểm tra lại `imagePullPolicy`/digest ECR** cho lần deploy này
+  (xem quy trình đã làm ở mục 403 phía dưới nếu cần đối chiếu).
+
+**✅ VIỆC ĐẦU TIÊN PHIÊN SAU (theo đúng thứ tự user yêu cầu — ưu tiên DB trước, vì anh Nam đã phản hồi):**
+1. Hỏi user nội dung anh Nam đã phản hồi (về `INGEST_SECRET` cho Deployment `cm-dashboard-ingest` — xem
+   mục chẩn đoán unauthorized bên dưới) — đây là việc ưu tiên cao hơn, đang chờ xử lý tiếp.
+2. Sau khi xong việc DB, quay lại Jira UI: nhờ user mở **tab ẩn danh** F5 lại `#jira` để loại trừ
+   `localStorage` cũ trước khi kết luận fix có tác dụng hay không — đừng vội sửa thêm code nếu chưa
+   loại trừ được nguyên nhân cache/localStorage.
+
+---
 
 ## 🔎 13/07 chiều — Chẩn đoán XONG vì sao tab Email/Facebook vẫn "Chưa có dữ liệu" — CHỈ CÒN CHỜ 1 VIỆC (anh Nam)
 
@@ -49,10 +362,12 @@ Sau khi gửi test, tab `#email` vẫn hiện "Chưa có dữ liệu".
 2. Nếu còn "Chưa có dữ liệu" SAU KHI đã hết `unauthorized` → mới cần đào tiếp (VD: `MYSQL_HOST` có ở
    Deployment `cm-dashboard-ingest` chưa — route `/dbquery` cũng check dòng
    `if (!process.env.MYSQL_HOST) return sendJson(res, 500, {error:'Pod nay thieu MYSQL_HOST.'})`).
-3. Đồng bộ lại `CampaignTracker.bas` — xem việc tồn đọng #2 mục 10/07 chiều bên dưới (repo
-   `email-tracker-data` vẫn v4.9/Vercel, máy user đã tự nâng lên v4.11/endpoint nội bộ nhưng
-   **CHƯA commit lại nguồn** — dở dang, việc edit bị lỗi string-not-found lúc đang làm, cần làm lại
-   từ đầu bằng Write thay vì Edit).
+3. ✅ **ĐÃ XONG 13/07** — Đồng bộ `CampaignTracker.bas`. **QUYẾT ĐỊNH MỚI: repo `email-tracker-data`
+   BỊ NGHỈ HẲN, user sẽ xoá repo này** (lý do: hay bị update nhầm/lệch giữa 2 repo). Nguồn chính
+   thức DUY NHẤT của macro giờ là `tools/CampaignTracker.bas` **trong chính repo
+   `shb-dashboard-media` này** — đã lưu đúng bản v4.11 (endpoint nội bộ
+   `cm-dashboard.dev-saha.aws.shb.com.vn/api/track`, fix resolve SMTP GAL/contact). Từ nay sửa
+   macro thì sửa trực tiếp file này, KHÔNG còn file `.bas` nào khác cần đồng bộ.
 
 ---
 

@@ -1547,6 +1547,21 @@ function paint(){
 function flt(days){_from=null;_to=null;_days=days;paint();}
 function setMode(m){_mode=m;paint();window.scrollTo(0,0);}
 function toggleTheme(){_theme=_theme==='dark'?'light':'dark';try{localStorage.setItem('shb-et-theme',_theme);}catch(e){}paint();}
+function syncDashboard(){
+  var btn=document.getElementById('sync-btn');
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
+  fetch('https://gitlab-nhs.shb.com.vn/api/v4/projects/446/trigger/pipeline',{
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'token=dcefb557281889dd16b293b7c8f078&ref=main'
+  }).then(function(){
+    alert('Đã gửi yêu cầu đồng bộ. Trang sẽ tự tải lại sau khoảng 5 phút (đủ thời gian build + deploy).');
+    setTimeout(function(){location.reload();},300000);
+  }).catch(function(e){
+    alert('Lỗi gửi yêu cầu đồng bộ: '+e.message);
+    if(btn){btn.disabled=false;btn.textContent='↻';}
+  });
+}
 function toggleDensity(){_density=_density==='compact'?'comfortable':'compact';try{localStorage.setItem('shb-et-density',_density);}catch(e){}applyDensity();}
 function segView(attr,el){document.querySelectorAll('.seg-tg button').forEach(function(b){b.classList.remove('on');});el.classList.add('on');document.getElementById('segbox').innerHTML=segBars(window.__seg[attr],attr);}
 function exportFU(){var rows=window.__fu||[];if(!rows.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac,Chien Dich,Thoi Gian Mo\n';rows.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+fmtCamp(r.campaign)+'","'+fmtTime(r.first)+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mo-chua-click-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}

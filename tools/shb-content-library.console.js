@@ -1,16 +1,9 @@
-// ==UserScript==
-// @name         SHB Content Library → Supabase
-// @namespace    shb-fb-dashboard
-// @version      3.6.0
-// @description  Bắt response Professional Dashboard Content Library (bài Group "SHB Một Nhà") và đẩy sang /api/ingest. Groups API công khai đã bị Meta gỡ 22/04/2024 nên đây là nguồn dữ liệu duy nhất.
-// @author       SHB CM
-// @match        https://www.facebook.com/*
-// @match        https://business.facebook.com/*
-// @grant        GM_xmlhttpRequest
-// @grant        unsafeWindow
-// @connect      cm-dashboard.dev-saha.aws.shb.com.vn
-// @run-at       document-start
-// ==/UserScript==
+// ================================================================
+// BẢN CHẠY TAY QUA CONSOLE (không cần Tampermonkey) — dán nguyên file
+// này vào DevTools Console (F12) trên trang facebook.com rồi Enter.
+// Phải làm lại mỗi lần mở tab mới (KHÔNG tự động/không lưu như bản
+// Tampermonkey gốc: tools/shb-content-library.user.js).
+// ================================================================
 
 (function () {
   'use strict';
@@ -23,9 +16,8 @@
   var AUTO_SCROLL = true;                     // tự cuộn để lazy-load hết bài trong dải ngày đang chọn
   var DEBUG = true;
 
-  // Hook trên window THẬT của trang (unsafeWindow) — KHÔNG phải sandbox của Tampermonkey.
-  // Đây là điểm mấu chốt: response data đến qua XHR của trang; hook window sandbox sẽ trượt.
-  var W = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
+  // Chạy trong console -> đã là window thật của trang, không cần unsafeWindow.
+  var W = window;
 
   function log() { if (DEBUG) try { console.log.apply(console, ['[SHB-CL]'].concat([].slice.call(arguments))); } catch (e) {} }
 
@@ -95,13 +87,12 @@
     });
     if (!rows.length) return;
     log('gửi', rows.length, 'bài', rows);
-    GM_xmlhttpRequest({
-      method: 'POST', url: INGEST,
+    fetch(INGEST, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-ingest-secret': SECRET },
-      data: JSON.stringify(rows),
-      onload: function (r) { log('ingest', r.status, r.responseText); },
-      onerror: function (e) { log('ingest LỖI', e); }
-    });
+      body: JSON.stringify(rows)
+    }).then(function (r) { return r.text().then(function (t) { log('ingest', r.status, t); }); })
+      .catch(function (e) { log('ingest LỖI', e); });
   }
 
   // Tìm prodash_content_library ở các vị trí có thể: data.node.* hoặc data.*
@@ -144,13 +135,12 @@
     if (sig === pageLastSent) return; pageLastSent = sig;
     log('PAGE metrics:', acc.metrics, '| series:', Object.keys(acc.series));
     Object.keys(acc.series).forEach(function (k) { log('  series[' + k + ']:', JSON.stringify(acc.series[k]).slice(0, 400)); });
-    GM_xmlhttpRequest({
-      method: 'POST', url: INGEST,
+    fetch(INGEST, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-ingest-secret': SECRET },
-      data: JSON.stringify({ kind: 'page', date_range: rangeFromUrl(), metrics: acc.metrics, series: acc.series }),
-      onload: function (r) { log('page ingest', r.status, r.responseText); },
-      onerror: function (e) { log('page ingest LỖI', e); }
-    });
+      body: JSON.stringify({ kind: 'page', date_range: rangeFromUrl(), metrics: acc.metrics, series: acc.series })
+    }).then(function (r) { return r.text().then(function (t) { log('page ingest', r.status, t); }); })
+      .catch(function (e) { log('page ingest LỖI', e); });
   }
 
   function tryParse(text) {
@@ -239,5 +229,5 @@
   } catch (e) {}
   if (/professional_dashboard/.test(location.pathname)) tourTick();
 
-  log('userscript v3.6 đã nạp — bóc full chỉ số per-post + page-level. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
+  log('Bản console đã chạy — bóc full chỉ số per-post + page-level. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
 })();
