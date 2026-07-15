@@ -45,9 +45,13 @@ function dbQueryHandler(req, res) {
 }
 
 const server = http.createServer((req, res) => {
+  // So khop bang endsWith (khong phai ===) vi Ingress public moi (service.dev-saha...
+  // /public-api/api/track) co the KHONG strip prefix truoc khi chuyen toi pod nay -
+  // nhan duoc "/public-api/api/track" thay vi "/api/track". Chi ap dung cho 2 route
+  // cong khai (track/ingest); /dbquery + /healthz van doi hoi khop tuyet doi (noi bo).
   const path = req.url.split('?')[0];
-  if (path === '/api/track' || path === '/api/email-track') return trackHandler(req, res);
-  if (path === '/api/ingest' || path === '/api/fb-ingest') return ingestHandler(req, res);
+  if (path === '/api/track' || path === '/api/email-track' || path.endsWith('/api/track')) return trackHandler(req, res);
+  if (path === '/api/ingest' || path === '/api/fb-ingest' || path.endsWith('/api/ingest')) return ingestHandler(req, res);
   if (path === '/dbquery') return dbQueryHandler(req, res);
   if (path === '/healthz') { res.writeHead(200); return res.end('ok'); }
   res.writeHead(404);

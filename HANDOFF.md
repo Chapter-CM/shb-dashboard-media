@@ -1,29 +1,36 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026 chiều)
 
-## ✅ 15/07 — Anh Nam đã DONE Ingress public cho `/api/track` — đã cập nhật VBA sang v4.12, đang chờ user gửi email test
+## 🔧 15/07 chiều — Domain public MỚI làm MẤT LUÔN cả ghi nhận trên mạng NHS — đã vá `ingest-server.js`, CHỜ VERIFY LẠI
 
-**Bối cảnh:** Tiếp nối mục "🔥 14/07 tối — PHÁT HIỆN NGHIÊM TRỌNG" bên dưới (pixel `/api/track` chỉ mạng
-NHS gọi tới được). Anh Nam Trần Hoàng đã rep qua Teams: `done`, kèm domain public mới
-`service.dev-saha.aws.shb.com.vn/public-api/api/track`.
+**Bối cảnh:** Anh Nam done Ingress public `service.dev-saha.aws.shb.com.vn/public-api/api/track` (xem
+mục 15/07 trưa bên dưới). Đã cập nhật VBA v4.12 trỏ URL mới, user cài + gửi test + F5 lại `#email`.
+**Kết quả TỆ HƠN cả trước khi sửa**: KHÔNG ghi nhận được GÌ CẢ, kể cả mở bằng Outlook Desktop trên
+đúng mạng NHS (trước đó ít nhất domain cũ còn ghi nhận được ở mạng NHS).
 
-**Đã làm:**
-- Cập nhật `tools/CampaignTracker.bas` lên **v4.12** — `TRACK_URL` đổi sang
-  `https://service.dev-saha.aws.shb.com.vn/public-api/api/track` (Ingress internet-facing riêng, chỉ
-  route đúng path `/api/track` sang Service `cm-dashboard-ingest`, không đụng dashboard/`/api/ingest`/DB).
-  Đích ghi dữ liệu (`ingest-server.js`/MySQL) không đổi.
-- ⚠️ **CHƯA verify bằng chạy thật** — cần user cài lại macro v4.12 vào Outlook, gửi 1 email test, rồi lặp
-  lại đúng kịch bản đã phát hiện lỗi hôm 14/07: mở bằng Outlook Desktop (mạng NHS) **và** Outlook
-  Mobile/4G/WiFi thường/VPN (ngoài mạng NHS) — xác nhận CẢ 2 đều ghi nhận được lượt mở/click, không chỉ
-  mạng NHS như domain cũ.
+**Chẩn đoán (đọc code, chưa verify bằng log thật vì không truy cập được cluster):**
+`server/ingest-server.js` (dòng ~48 cũ) so khớp path *tuyệt đối*: `path === '/api/track'`. Nghi vấn
+cao nhất: Ingress mới của anh Nam route theo path `/public-api/api/track` nhưng **KHÔNG cấu hình
+rewrite-target để strip prefix** trước khi chuyển tiếp tới Service `cm-dashboard-ingest` — nghĩa là
+pod nhận được path đầy đủ `/public-api/api/track`, không khớp `=== '/api/track'` → rơi vào nhánh 404
+"not found" của server → **mọi request đều bị chặn ở tầng ứng dụng**, bất kể mạng nào gọi tới (khác
+với lỗi hôm 14/07 là do ALB nội bộ không có route công khai — lần này route được nhưng code từ chối).
+
+**Đã vá (chưa verify bằng traffic thật):** đổi điều kiện so khớp từ `===` sang `path.endsWith(...)`
+cho 2 route công khai (`/api/track`, `/api/ingest`) — chấp nhận cả path có prefix bất kỳ đứng trước,
+không phụ thuộc vào việc Ingress có strip prefix đúng hay không. `/dbquery` + `/healthz` (chỉ dùng nội
+bộ CI) vẫn giữ so khớp tuyệt đối như cũ, không nới lỏng để tránh mở rộng bề mặt tấn công không cần thiết.
 
 **Việc đầu tiên phiên sau:**
-1. Hỏi user đã cài macro v4.12 + gửi test chưa, kết quả ra sao.
-2. Nếu domain public mới bị chặn/lỗi (ví dụ Ingress mới chưa attach đúng TLS/cert, hoặc path
-   `/public-api/api/track` map sai) → gọi thử trực tiếp URL bằng trình duyệt/curl xem trả về gì (ảnh 1×1
-   pixel, hay lỗi 404/502) trước khi nghi ngờ code VBA.
-3. Nếu OK ở cả 2 mạng → coi như xong hẳn nhánh "chỉ mạng NHS gọi được", đóng mục "🔥 14/07 tối" bên dưới.
-4. Nếu vẫn lỗi → có thể do Ingress mới trỏ khác port/Service so với Ingress nội bộ cũ — hỏi anh Nam xác
-   nhận lại chi tiết cấu hình (port 80, namespace `aws-saha-ms-dev`, đúng Service `cm-dashboard-ingest`).
+1. Hỏi user đã deploy bản vá này chưa (cần chờ pipeline GitLab build lại `cm-dashboard-ingest` — commit
+   GitHub sẵn, cần đồng bộ tay sang GitLab như quy trình cũ) — gửi lại 1 email test sau khi deploy xong.
+2. Nếu VẪN không ghi nhận sau khi vá: gọi thẳng URL bằng trình duyệt
+   `https://service.dev-saha.aws.shb.com.vn/public-api/api/track?pos=test` xem trả về gì (ảnh pixel
+   1×1 = OK tới được pod; "not found"/404 = vẫn sai route/path; timeout/502 = Ingress chưa trỏ đúng
+   Service/port) — đừng đoán tiếp, xem response thật trước.
+3. Nếu pixel OK nhưng dashboard vẫn không lên số → mới nghi tới tầng ghi MySQL (giống hệt luồng chẩn
+   đoán `INGEST_SECRET`/`MYSQL_HOST` đã làm ở mục 13/07 bên dưới, xem lại nếu cần đối chiếu cách debug).
+4. Việc test 2 mạng (NHS + ngoài mạng, xem mục 14/07 tối) vẫn treo, chỉ làm sau khi xác nhận lại được
+   ghi nhận bình thường trên mạng NHS trước đã — đừng nhảy thẳng qua test đa mạng khi cái cơ bản đang hỏng.
 
 ---
 
