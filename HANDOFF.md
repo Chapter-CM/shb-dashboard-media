@@ -28,12 +28,19 @@ KHÔNG qua API Gateway (gọi thẳng nội bộ mạng NHS). Chỉ bỏ HIỂN 
 đo ở tầng ghi dữ liệu — nếu sau này đổi ý muốn hiện lại, dữ liệu dwell từ mạng NHS vẫn có sẵn trong DB,
 chỉ cần khôi phục lại phần UI đã bỏ (xem diff commit này để đối chiếu).
 
-**CHƯA đồng bộ sang GitLab** — cần copy `api/email-dashboard.js` mới nhất sang `cm-dashboard` như quy
-trình cũ.
+**⚠️ CHƯA đồng bộ sang GitLab — 2 FILE, không phải 1:**
+1. `api/email-track.js` — bản TRÊN GitLab hiện tại (nếu user đã đồng bộ bản trước) mới chỉ có
+   `DWELL_CAP_S=25` hardcap, **CHƯA có `isViaApiGateway`** (bản vá thứ 2, xem mục "🔧 15/07 tối" bên
+   dưới) — bắt buộc đồng bộ lại bản MỚI NHẤT (đã gửi user tối 15/07, có cả 2 lần vá gộp chung).
+2. `api/email-dashboard.js` — bỏ KPI dwell, chưa đồng bộ lần nào.
+`server/ingest-server.js` (fix `endsWith`) đã đồng bộ + verify pipeline pass từ trước, KHÔNG cần làm lại.
 
 **Việc đầu tiên phiên sau:**
-1. Hỏi user đã đồng bộ + deploy `api/email-dashboard.js` (bản đã bỏ KPI dwell) sang GitLab chưa.
-2. F5 dashboard `#email` xác nhận không còn thấy "Thời gian đọc trung bình"/"Đọc TB" ở KPI lẫn 3 bảng.
+1. Hỏi user đã đồng bộ + deploy CẢ 2 file (`api/email-track.js` bản mới nhất + `api/email-dashboard.js`)
+   sang GitLab chưa — dùng đúng lệnh CMD đã gửi cuối phiên 15/07 (đẩy gộp 1 branch `sync-final-session`).
+2. F5 dashboard `#email` xác nhận: (a) không còn thấy "Thời gian đọc trung bình"/"Đọc TB" ở KPI lẫn 3
+   bảng; (b) gửi thử 1 email test, mở trong mạng NHS, xác nhận mở/click vẫn ghi nhận bình thường (route
+   qua domain public vẫn phải hoạt động, chỉ là không hiện dwell nữa).
 3. Nếu vẫn cần verify tiếp saga domain public/API Gateway (mở/click từ mạng ngoài NHS) — xem mục
    "✅ 15/07 khuya" ngay dưới đây, phần đó vẫn còn giá trị tham khảo cho việc test mở/click cơ bản.
 
