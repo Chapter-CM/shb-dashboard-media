@@ -1,36 +1,44 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026 chiều)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026 chiều muộn)
 
-## 🔧 15/07 chiều — Domain public MỚI làm MẤT LUÔN cả ghi nhận trên mạng NHS — đã vá `ingest-server.js`, CHỜ VERIFY LẠI
+## ✅ 15/07 chiều muộn — CHẨN ĐOÁN CHÍNH XÁC 100%: route API Gateway CHƯA NỐI sang backend — đã nhắn anh Nam, ĐANG CHỜ
 
-**Bối cảnh:** Anh Nam done Ingress public `service.dev-saha.aws.shb.com.vn/public-api/api/track` (xem
-mục 15/07 trưa bên dưới). Đã cập nhật VBA v4.12 trỏ URL mới, user cài + gửi test + F5 lại `#email`.
-**Kết quả TỆ HƠN cả trước khi sửa**: KHÔNG ghi nhận được GÌ CẢ, kể cả mở bằng Outlook Desktop trên
-đúng mạng NHS (trước đó ít nhất domain cũ còn ghi nhận được ở mạng NHS).
+**Đã vá `server/ingest-server.js`** (so khớp path bằng `endsWith` thay vì `===`, đề phòng Ingress không
+strip prefix) — **fix này ĐÚNG nhưng KHÔNG PHẢI nguyên nhân chính**, đã deploy lên GitLab (pipeline pass),
+không cần làm lại.
 
-**Chẩn đoán (đọc code, chưa verify bằng log thật vì không truy cập được cluster):**
-`server/ingest-server.js` (dòng ~48 cũ) so khớp path *tuyệt đối*: `path === '/api/track'`. Nghi vấn
-cao nhất: Ingress mới của anh Nam route theo path `/public-api/api/track` nhưng **KHÔNG cấu hình
-rewrite-target để strip prefix** trước khi chuyển tiếp tới Service `cm-dashboard-ingest` — nghĩa là
-pod nhận được path đầy đủ `/public-api/api/track`, không khớp `=== '/api/track'` → rơi vào nhánh 404
-"not found" của server → **mọi request đều bị chặn ở tầng ứng dụng**, bất kể mạng nào gọi tới (khác
-với lỗi hôm 14/07 là do ALB nội bộ không có route công khai — lần này route được nhưng code từ chối).
+**Nguyên nhân THẬT đã xác nhận bằng bằng chứng cụ thể (không còn nghi vấn):**
+Domain public mới (`service.dev-saha.aws.shb.com.vn/public-api/api/track`) đi qua **CloudFront + AWS
+API Gateway** (khác hẳn kiến trúc Ingress K8s của domain nội bộ cũ). Gọi thử route này trả **200** rất
+nhanh nhưng xem **Response Headers** bằng DevTools thì lộ rõ:
+- `Content-Type: application/json`, `Content-Length: 0` (body rỗng) — trong khi code thật của chúng ta
+  luôn trả `Content-Type: image/gif` kèm body ảnh + các header `Cache-Control`/`Access-Control-Allow-Origin`.
+- Có header `X-Amz-Apigw-Id`, `X-Amzn-RequestId`, `Via: ...cloudfront.net (CloudFront)`.
 
-**Đã vá (chưa verify bằng traffic thật):** đổi điều kiện so khớp từ `===` sang `path.endsWith(...)`
-cho 2 route công khai (`/api/track`, `/api/ingest`) — chấp nhận cả path có prefix bất kỳ đứng trước,
-không phụ thuộc vào việc Ingress có strip prefix đúng hay không. `/dbquery` + `/healthz` (chỉ dùng nội
-bộ CI) vẫn giữ so khớp tuyệt đối như cũ, không nới lỏng để tránh mở rộng bề mặt tấn công không cần thiết.
+→ **Route `/public-api/api/track` trên API Gateway CHƯA được gắn Integration sang Service
+`cm-dashboard-ingest`** — request dừng lại ngay ở API Gateway, KHÔNG BAO GIỜ chạm tới pod/code Node
+của mình. Không phải lỗi code, không phải lỗi VBA/Outlook, không phải lỗi env MySQL — đây thuần túy
+là thiếu 1 bước cấu hình phía AWS API Gateway. Đã loại trừ hết các khả năng khác trước khi kết luận:
+- ✅ Kết nối từ máy user (cả Chrome lẫn VBA `MSXML2.XMLHTTP.6.0` qua Immediate Window test) đều tới
+  được domain, không bị proxy/firewall công ty chặn.
+- ✅ `/dbquery` qua domain nội bộ cũ xác nhận **không có row nào được ghi** (`campaign=vbatest` → `[]`).
+- ✅ Path khác trên cùng domain (`/public-api/healthz`) trả lỗi gốc của API Gateway
+  (`{"message":"Missing Authentication Token"}`) — xác nhận đây đúng là API Gateway, mỗi route quản lý
+  integration riêng, không phải reverse proxy pass-through toàn bộ.
+
+**Đã nhắn anh Nam (15/07 chiều muộn, qua Teams)** — nội dung: route `/public-api/api/track` đang trả
+200 rỗng, nghi chưa nối Integration sang `cm-dashboard-ingest` (port 80, namespace `aws-saha-ms-dev`),
+nhờ anh check phần Integration của route trong API Gateway. **CHƯA thấy anh Nam phản hồi.**
 
 **Việc đầu tiên phiên sau:**
-1. Hỏi user đã deploy bản vá này chưa (cần chờ pipeline GitLab build lại `cm-dashboard-ingest` — commit
-   GitHub sẵn, cần đồng bộ tay sang GitLab như quy trình cũ) — gửi lại 1 email test sau khi deploy xong.
-2. Nếu VẪN không ghi nhận sau khi vá: gọi thẳng URL bằng trình duyệt
-   `https://service.dev-saha.aws.shb.com.vn/public-api/api/track?pos=test` xem trả về gì (ảnh pixel
-   1×1 = OK tới được pod; "not found"/404 = vẫn sai route/path; timeout/502 = Ingress chưa trỏ đúng
-   Service/port) — đừng đoán tiếp, xem response thật trước.
-3. Nếu pixel OK nhưng dashboard vẫn không lên số → mới nghi tới tầng ghi MySQL (giống hệt luồng chẩn
-   đoán `INGEST_SECRET`/`MYSQL_HOST` đã làm ở mục 13/07 bên dưới, xem lại nếu cần đối chiếu cách debug).
-4. Việc test 2 mạng (NHS + ngoài mạng, xem mục 14/07 tối) vẫn treo, chỉ làm sau khi xác nhận lại được
-   ghi nhận bình thường trên mạng NHS trước đã — đừng nhảy thẳng qua test đa mạng khi cái cơ bản đang hỏng.
+1. Hỏi user đã có phản hồi anh Nam chưa.
+2. Sau khi anh Nam confirm đã nối Integration xong → gọi lại
+   `https://service.dev-saha.aws.shb.com.vn/public-api/api/track?pos=test&campaign=debugtest&eid=xxx`
+   bằng DevTools Network, xem Response Headers lần này có đúng `Content-Type: image/gif` chưa (bằng
+   chứng request đã thực sự chạm tới code) — đừng chỉ nhìn Status 200 vì route rỗng cũng trả 200.
+3. Nếu header đã đúng `image/gif` → query lại `/dbquery` (domain nội bộ cũ) xem `campaign=debugtest`
+   đã có row chưa, để xác nhận ghi MySQL cũng thông luôn (không chỉ route đã nối).
+4. Nếu ghi MySQL cũng OK → mới gửi lại email thật qua VBA v4.12, test 2 mạng (NHS + ngoài mạng, xem
+   mục 14/07 tối bên dưới) — đừng nhảy thẳng qua bước này khi route còn chưa xác nhận thông.
 
 ---
 
