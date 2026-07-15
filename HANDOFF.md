@@ -1,6 +1,52 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026 tối muộn)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026 khuya)
 
-## ✅ 15/07 tối muộn — Route ĐÃ THÔNG (anh Nam fix xong 404), phát hiện + fix XUNG ĐỘT MỚI: API Gateway timeout 29s vs dwell cap 60s — ĐÃ VÁ, CHỜ DEPLOY + VERIFY
+## ✅ 15/07 khuya — TOÀN BỘ SAGA "domain public" ĐÃ XONG code: route thông + ghi MySQL OK + dwell chỉ đo khi an toàn — CHỜ ĐỒNG BỘ GITLAB + TEST EMAIL THẬT
+
+**Đã verify bằng traffic thật (không phải đoán):** anh Nam fix xong 404 (route `/api/track` đã nối
+đúng Service `cm-dashboard-ingest`) + bản vá `DWELL_CAP_S=25` deploy xong → test qua DevTools
+(`pos=test&campaign=verify2&eid=verify0002`) ra đúng `200 OK`, `Content-Type: image/gif` (đúng header
+code thật, không còn mock/404/504) → query `/dbquery` xác nhận **đã ghi vào MySQL thật** (`pos=top` lúc
+09:39:17, `pos=dwell` lúc 09:39:42 — cách nhau đúng 25s, khớp trần mới).
+
+**Phát hiện tiếp (khi test bằng email thật)**: số "thời gian đọc" LUÔN hiện đúng **25s** dù đóng email
+ngay lập tức — **cùng gốc rễ hạn chế đã ghi ở mục Vercel trước đây** (`KE_HOACH_MIGRATION.md` mục 7b):
+CloudFront + API Gateway không truyền tín hiệu "client đã ngắt kết nối" về origin, server cứ giữ tới
+khi chạm trần mới thôi, không có cách nào lấy được số dwell thật qua đường public domain — đây là giới
+hạn kiến trúc, không phải bug, và không có mẹo nào vượt qua nếu không chạy được JS trong email (Outlook
+chặn JS hoàn toàn).
+
+**Đã chọn hướng xử lý (user chọn, đơn giản)**: TẮT HẲN đo dwell cho traffic đi qua API Gateway, CHỈ giữ
+đếm lượt mở/click (đủ để đạt mục tiêu chính — ghi nhận được từ mọi mạng, dwell vốn chỉ là tính năng
+phụ). Đã sửa `api/email-track.js` (đã push GitHub):
+- Thêm `isViaApiGateway(req)` — nhận diện qua header `x-amzn-apigateway-api-id` hoặc `User-Agent`
+  chứa `AmazonAPIGateway` (thấy rõ trong log Test của anh Nam trước đó: `User-Agent=
+  AmazonAPIGateway_8urbm6xv2m`) — không cần biết trước domain, tự nhận diện đúng theo request thật.
+- Nếu request đi qua Gateway → **bỏ qua streaming dwell hoàn toàn**, trả pixel tức thì (không còn nguy
+  cơ 504, không còn số dwell giả) — vẫn ghi đúng event "đã mở" bình thường.
+- Nếu KHÔNG qua Gateway (gọi thẳng nội bộ mạng NHS, domain cũ) → **khôi phục lại đo dwell chính xác như
+  trước**, trần đưa về lại 60s (không cần giữ 25s nữa vì API Gateway không còn tham gia nhánh này).
+
+**CHƯA verify bằng traffic thật (file vừa sửa xong)** — cần đồng bộ `api/email-track.js` sang GitLab
+(quy trình cũ: tải file → copy đè → git add/commit/push → tạo MR → merge) rồi test lại bằng email thật.
+
+**Việc đầu tiên phiên sau:**
+1. Hỏi user đã đồng bộ + deploy `api/email-track.js` (bản mới nhất, có `isViaApiGateway`) sang GitLab
+   chưa.
+2. Sau khi deploy xong: gửi 1 email test qua VBA v4.12, mở trên Outlook Desktop (mạng NHS) — kỳ vọng
+   dwell đo được số giây thật (không còn cố định 25s), vì giờ domain nội bộ vẫn dùng nhánh cũ.
+   (Lưu ý: hiện VBA v4.12 đang trỏ `TRACK_URL` sang domain PUBLIC mới — nghĩa là traffic LUÔN đi qua
+   API Gateway dù đang ở mạng NHS hay không, nên dwell mạng NHS qua domain public SẼ KHÔNG đo được nữa,
+   chỉ đếm mở/click. Đây là đánh đổi user đã chọn, không phải bug — nếu muốn dwell chính xác trở lại
+   cho riêng mạng NHS thì cần quay lại phương án "nhúng song song 2 pixel" đã bàn nhưng chưa chọn.)
+3. Mở thêm trên mạng ngoài NHS (nếu tiện) để xác nhận mở/click vẫn ghi được từ mọi mạng — đây là mục
+   tiêu chính của toàn bộ việc đổi domain, nay đã xong.
+4. F5 dashboard `#email` xác nhận số liệu lên đúng, đóng hẳn saga "domain public/API Gateway" nếu ổn.
+
+---
+
+## (LỊCH SỬ) 15/07 tối muộn — Route ĐÃ THÔNG (anh Nam fix xong 404), phát hiện + fix XUNG ĐỘT: API Gateway timeout 29s vs dwell cap 60s
+
+> Đã verify + vá tiếp ở mục mới nhất phía trên — giữ lại đây chỉ để tham khảo lịch sử chẩn đoán.
 
 **Anh Nam đã sửa xong 404** (route `/api/track` giờ tới được backend, trả "binary" theo lời anh Nam).
 Test lại bằng DevTools (`pos=test&campaign=verify15h&eid=verify0001`) → không còn 404, nhưng ra lỗi
@@ -12,28 +58,11 @@ MỚI: **`504 Gateway Timeout`**, `X-Amzn-Errortype: InternalServerErrorExceptio
 định 60s, vừa được nâng lên 60 ở phiên trước 14/07) cho MỌI request `pos=top`/`pos=bottom` (đúng loại
 pixel email thật VBA đang nhúng). Nhưng **AWS API Gateway có trần cứng ~29s cho mỗi lần gọi backend,
 KHÔNG THỂ tăng** — nên Gateway tự cắt kết nối ở giây ~29, trả 504 cho client, dù server vẫn đang chạy
-bình thường phía sau. Điều này ảnh hưởng **TOÀN BỘ pixel mở email thật** đi qua domain public mới, không
-riêng gì request test — nghĩa là nếu không vá, mọi lượt mở email (Outlook Desktop lẫn Mobile) đều sẽ
-lỗi 504 sau khi domain đổi sang public, dù routing đã thông.
+bình thường phía sau.
 
-**Đã vá (`api/email-track.js`, đã push GitHub):** hạ trần `DWELL_CAP_S` xuống tối đa **25 giây** (dưới
-ngưỡng 29s của API Gateway), clamp cứng trong code (`Math.min(25, ...)`) chứ không chỉ dựa vào biến
-môi trường — an toàn dù sau này ai lỡ đặt `EMAIL_DWELL_CAP_S` cao hơn. Đánh đổi: thời gian đọc đo được
-tối đa còn 25s thay vì 60s (người đọc lâu hơn 25s sẽ bị chặn ở mức 25s) — chấp nhận được vì mục tiêu
-chính là khôi phục ghi nhận cơ bản (mở/click) trước, dwell chỉ là tính năng phụ.
-
-**CHƯA verify bằng traffic thật** — cần đồng bộ code này sang GitLab (`api/email-track.js`, quy trình
-cũ: tải file → copy đè → git add/commit/push → tạo MR → merge) rồi mới test lại.
-
-**Việc đầu tiên phiên sau:**
-1. Hỏi user đã đồng bộ + deploy file `api/email-track.js` mới sang GitLab chưa.
-2. Sau khi deploy xong, gọi lại `https://service.dev-saha.aws.shb.com.vn/public-api/api/track?pos=test&campaign=verify2&eid=verify0002`
-   bằng DevTools — kỳ vọng lần này KHÔNG còn 504, trả về nhanh (~25s tối đa nếu đúng nhánh dwell, hoặc
-   ngay lập tức nếu code coi `pos=test` không hợp lệ và fallback pixel tức thì — xem lại logic VALID
-   set trong code nếu cần đối chiếu) với `Content-Type: image/gif`.
-3. Query `/dbquery` (domain nội bộ cũ) xem `campaign=verify2` đã có row chưa — xác nhận ghi MySQL OK.
-4. Nếu OK hết → gửi lại email thật qua VBA v4.12, test 2 mạng (NHS + ngoài mạng, xem mục 14/07 tối bên
-   dưới) — đây là bước cuối cùng để đóng hẳn toàn bộ saga domain public/API Gateway.
+**Đã vá lần 1 (`api/email-track.js`)**: hạ trần `DWELL_CAP_S` xuống tối đa **25 giây** — đã verify
+route thông + ghi MySQL OK, nhưng phát hiện dwell luôn ra đúng 25s giả (xem mục mới nhất phía trên,
+đã vá lần 2 bằng `isViaApiGateway`).
 
 ---
 

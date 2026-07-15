@@ -20,14 +20,20 @@ const GIF = Buffer.from(
 // hiệu client ngắt kết nối vào function, xem KE_HOACH_MIGRATION.md mục 7b.
 // Ghi thêm event pos='dwell' với dwell_s (cột có sẵn trong schema, xem
 // db/schema.mysql.sql + db/migrate_05_email_dwell.sql).
-// TRẦN CỨNG 25s: từ khi /api/track đi qua AWS API Gateway (domain public
-// service.dev-saha...), Gateway tự ngắt sau ~29s (giới hạn cứng AWS, không
-// tăng được) rồi trả 504 cho CLIENT dù server vẫn đang chạy — nếu để
-// EMAIL_DWELL_CAP_S=60 như trước (khi còn gọi Ingress nội bộ trực tiếp,
-// không qua Gateway) thì MỌI pixel top/bottom sẽ luôn bị cắt ngang thành lỗi
-// 504 trước khi kịp trả lời. Clamp cứng ở đây (không chỉ dựa vào env) để an
-// toàn dù ai đó lỡ đặt biến môi trường cao hơn.
-const DWELL_CAP_S   = Math.min(25, Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '25', 10) || 25));
+// Request đi qua AWS API Gateway (domain public service.dev-saha...) có 2 vấn đề
+// KHÔNG SỬA ĐƯỢC bằng cấu hình: (1) Gateway tự ngắt sau ~29s (giới hạn cứng AWS)
+// nếu giữ kết nối quá lâu -> 504; (2) CloudFront/API Gateway không truyền tín hiệu
+// "client đã đóng email" về origin (giống hệt hạn chế đã gặp với Vercel, xem
+// KE_HOACH_MIGRATION.md mục 7b) -> dwell đo được LUÔN đúng bằng trần, vô nghĩa.
+// -> Với request qua API Gateway: BỎ QUA đo dwell hoàn toàn, trả pixel ngay lập
+// tức (vẫn ghi nhận đúng lượt "đã mở", chỉ không có số "thời gian đọc"). Với
+// request KHÔNG qua Gateway (gọi thẳng nội bộ mạng NHS, domain cũ) vẫn đo dwell
+// chính xác như trước, khôi phục trần 60s.
+function isViaApiGateway(req) {
+  return !!(req.headers['x-amzn-apigateway-api-id'] ||
+            /AmazonAPIGateway/i.test(req.headers['user-agent'] || ''));
+}
+const DWELL_CAP_S   = Math.max(5, parseInt(process.env.EMAIL_DWELL_CAP_S || '60', 10) || 60);
 const DWELL_TICK_MS = 2000;
 const GIF_BODY    = GIF.slice(0, GIF.length - 1);              // GIF trừ byte trailer 0x3B
 const GIF_TRAILER = GIF.slice(GIF.length - 1);
@@ -181,12 +187,11 @@ module.exports = async (req, res) => {
   // VBA hiện chỉ nhúng pixel top nên top là nguồn đo chính; bottom giữ để
   // tương thích email cũ còn 2 pixel.
   // CHỈ bật khi chạy trên server nội bộ (dbClient.isEnabled() = có MYSQL_HOST,
-  // tức server/ingest-server.js thường trực nhận kết nối TCP trực tiếp).
-  // Trên Vercel (Supabase) đã kiểm chứng proxy KHÔNG truyền tín hiệu client
-  // ngắt kết nối vào function — bật streaming ở đó sẽ khiến dwell luôn "chạm
-  // trần" (dữ liệu vô nghĩa), xem KE_HOACH_MIGRATION.md mục 7b — GIỮ pixel
-  // trả về tức thì như cũ trên Vercel.
-  if ((pos === 'top' || pos === 'bottom') && row.event_id && !isBlocked && !isImageProxy(row.ua) && dbClient.isEnabled()) {
+  // tức server/ingest-server.js thường trực nhận kết nối TCP trực tiếp) VÀ
+  // request KHÔNG đi qua API Gateway (xem isViaApiGateway ở trên — Gateway vừa
+  // giới hạn 29s vừa không truyền tín hiệu ngắt kết nối, y hệt hạn chế Vercel
+  // cũ). Qua Vercel/API Gateway: GIỮ pixel trả về tức thì, không đo dwell.
+  if ((pos === 'top' || pos === 'bottom') && row.event_id && !isBlocked && !isImageProxy(row.ua) && dbClient.isEnabled() && !isViaApiGateway(req)) {
     return streamDwellPixel(req, res, row);
   }
 
