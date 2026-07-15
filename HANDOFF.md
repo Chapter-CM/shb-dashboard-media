@@ -56,6 +56,55 @@ Sau khi gửi test, tab `#email` vẫn hiện "Chưa có dữ liệu".
 
 ---
 
+## 🚧 10/07 tối — Đang dở: thêm route `/dbquery` để né Security Group RDS chặn GitLab runner
+
+**Bối cảnh:** sau khi CI/CD Variable `MYSQL_DATABASE=cm_dashboard` được thêm (còn thiếu, đã bổ
+sung), chạy lại pipeline `main` thì job `sync_data` vẫn báo `[fb loadData] connect ETIMEDOUT` —
+**đây là đúng vấn đề Security Group RDS chặn GitLab runner đã chẩn đoán từ sáng (job `db_check`
+cũ)**, chưa từng được xử lý dứt điểm — team chỉ pivot sang gọi qua API ingest cho phần *ghi*
+(email/fb tracking), nhưng job `sync_data` (bake trang tĩnh Facebook/Email) vẫn tự kết nối MySQL
+trực tiếp từ GitLab runner → vẫn dính chặn y hệt.
+
+**Giải pháp tự làm (không cần mở Security Group AWS, không cần đợi anh Nam xử lý mạng):**
+`cm-dashboard-ingest` chạy TRONG cluster nên tới RDS được bình thường (đã verify). Thêm route
+`GET /dbquery` vào `server/ingest-server.js` (cần `?secret=` khớp `INGEST_SECRET`, `?path=` là
+path kiểu PostgREST) — proxy gọi `dbClient.get()` thật rồi trả JSON qua HTTP. Sửa `lib/db-client.js`:
+nếu có biến `INGEST_API_URL`, `get()` gọi qua HTTP route đó thay vì tự mở kết nối mysql2 trực
+tiếp. `sync_data` giờ dùng `INGEST_API_URL=https://cm-dashboard-ingest.dev-saha.aws.shb.com.vn`
+thay vì cần mở SG cho RDS — đi qua ALB nội bộ (`saha-internal-alb`), cùng nhóm ALB mà job
+`update_manifest_*` đã gọi `argocd login alb-internal.dev-saha.aws.shb.com.vn` thành công cả
+ngày → có cơ sở tin runner gọi được, nhưng **CHƯA verify bằng chạy thật** (đang chờ đủ điều kiện).
+
+**Đã làm xong (tự làm, không cần Nam):**
+1. Code `/dbquery` + `INGEST_API_URL` — đã viết + test cục bộ (giả lập request/response, lỗi
+   auth, lỗi thiếu MySQL đều đúng luồng) — commit GitHub `fe2217d`, đã đồng bộ sang GitLab
+   (`server/ingest-server.js`, `lib/db-client.js`), merge vào `main`.
+2. CI/CD Variable `MYSQL_DATABASE=cm_dashboard` — đã thêm (thiếu, gây lỗi bake trước đó).
+3. CI/CD Variable `INGEST_API_URL=https://cm-dashboard-ingest.dev-saha.aws.shb.com.vn` — đã thêm
+   (bỏ tick Protected, giống pattern các biến MySQL_* khác).
+
+**Việc đầu tiên phiên sau:**
+1. Đã nhắn anh Nam thêm biến `INGEST_SECRET` (giá trị lấy từ CI/CD Variables → Reveal values)
+   vào Deployment `cm-dashboard-ingest` (namespace `aws-saha-ms-dev`) — pod này hiện CHƯA có biến
+   đó nên route `/dbquery` sẽ luôn 401 nếu thiếu. Hỏi user đã có phản hồi chưa.
+2. Khi xong: chạy lại pipeline `main` (Run pipeline), xem log job `sync_data` — nếu còn
+   `ETIMEDOUT`/lỗi kết nối khác (không phải 401) → nghĩa là GitLab runner KHÔNG gọi được ALB nội
+   bộ cho domain `cm-dashboard-ingest...` (khác domain `alb-internal...` dù cùng nhóm ALB) → quay
+   lại phương án cũ: nhờ Nam mở Security Group RDS (`10.194.2.115:3306`) cho GitLab runner
+   (`runner-d63eeu3`, project `omnichannel`) — đã chẩn đoán chính xác từ sáng, chỉ cần Nam làm.
+3. Nếu `sync_data` chạy sạch, log có dữ liệu Facebook/Email thật (không phải `ETIMEDOUT`) →
+   F5 lại `#fb`/`#email`, xác nhận hết mock data, có card "% so kỳ trước" giống Vercel.
+4. Sau khi xác nhận ổn định, cân nhắc dọn: `/dbquery` là route "ai biết secret cũng query được
+   toàn bộ DB qua path tự do" — chấp nhận được vì chỉ dùng nội bộ CI, nhưng nên ghi chú rõ trong
+   code (đã có) và không expose secret ra ngoài phạm vi CI/CD Variables.
+
+**Việc UI Jira còn tồn đọng (độc lập, không phụ thuộc mục trên):** giao diện Jira `#jira` vẫn còn
+lộn xộn (masthead + sidebar đè/lệch) dù `public/api/jira/index.html` đã đồng bộ đúng bản mới nhất
+(diff xác nhận khớp GitHub, không phải do thiếu sync). Chưa xác định nguyên nhân — bước tiếp theo
+dự kiến là xem Console (F12) trang Jira tìm lỗi JS, hoặc so sánh trực tiếp DOM/CSS đang render.
+
+---
+
 ## ✅ 10/07 chiều — Cả 3 tab (Facebook/Jira/Email) đã sống trên `cm-dashboard.dev-saha.aws.shb.com.vn`, hết 403
 
 **Bối cảnh:** sau khi `cm-dashboard-ingest` Healthy (mục ✅ 10/07 trưa bên dưới), kiểm tra tiếp trang
