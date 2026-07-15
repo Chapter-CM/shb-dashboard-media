@@ -1,4 +1,31 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/07/2026 khuya)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026)
+
+## ✅ 15/07 — Anh Nam đã DONE Ingress public cho `/api/track` — đã cập nhật VBA sang v4.12, đang chờ user gửi email test
+
+**Bối cảnh:** Tiếp nối mục "🔥 14/07 tối — PHÁT HIỆN NGHIÊM TRỌNG" bên dưới (pixel `/api/track` chỉ mạng
+NHS gọi tới được). Anh Nam Trần Hoàng đã rep qua Teams: `done`, kèm domain public mới
+`service.dev-saha.aws.shb.com.vn/public-api/api/track`.
+
+**Đã làm:**
+- Cập nhật `tools/CampaignTracker.bas` lên **v4.12** — `TRACK_URL` đổi sang
+  `https://service.dev-saha.aws.shb.com.vn/public-api/api/track` (Ingress internet-facing riêng, chỉ
+  route đúng path `/api/track` sang Service `cm-dashboard-ingest`, không đụng dashboard/`/api/ingest`/DB).
+  Đích ghi dữ liệu (`ingest-server.js`/MySQL) không đổi.
+- ⚠️ **CHƯA verify bằng chạy thật** — cần user cài lại macro v4.12 vào Outlook, gửi 1 email test, rồi lặp
+  lại đúng kịch bản đã phát hiện lỗi hôm 14/07: mở bằng Outlook Desktop (mạng NHS) **và** Outlook
+  Mobile/4G/WiFi thường/VPN (ngoài mạng NHS) — xác nhận CẢ 2 đều ghi nhận được lượt mở/click, không chỉ
+  mạng NHS như domain cũ.
+
+**Việc đầu tiên phiên sau:**
+1. Hỏi user đã cài macro v4.12 + gửi test chưa, kết quả ra sao.
+2. Nếu domain public mới bị chặn/lỗi (ví dụ Ingress mới chưa attach đúng TLS/cert, hoặc path
+   `/public-api/api/track` map sai) → gọi thử trực tiếp URL bằng trình duyệt/curl xem trả về gì (ảnh 1×1
+   pixel, hay lỗi 404/502) trước khi nghi ngờ code VBA.
+3. Nếu OK ở cả 2 mạng → coi như xong hẳn nhánh "chỉ mạng NHS gọi được", đóng mục "🔥 14/07 tối" bên dưới.
+4. Nếu vẫn lỗi → có thể do Ingress mới trỏ khác port/Service so với Ingress nội bộ cũ — hỏi anh Nam xác
+   nhận lại chi tiết cấu hình (port 80, namespace `aws-saha-ms-dev`, đúng Service `cm-dashboard-ingest`).
+
+---
 
 ## 🔀 14/07 khuya — Facebook (chạy userscript thật) TẠM DỪNG, chuyển sang sửa lỗi giao diện còn tồn đọng
 

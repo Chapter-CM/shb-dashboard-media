@@ -1,11 +1,21 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.11
-' Stack  : Outlook Classic Desktop (VBA macro) -> /api/track noi bo SHB -> MySQL
+' SHB CM Campaign Tracker v4.12
+' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.11
+'   - Doi TRACK_URL sang Ingress public rieng (anh Nam tao 15/07):
+'       https://service.dev-saha.aws.shb.com.vn/public-api/api/track
+'     Ly do: domain noi bo cu (cm-dashboard.dev-saha.aws.shb.com.vn) chi mang NHS
+'     goi toi duoc - Outlook Mobile/WiFi thuong/VPN split-tunnel deu KHONG ghi nhan
+'     duoc pixel (phat hien khi test tay 14/07). Domain moi la Ingress internet-facing
+'     rieng, chi route dung path /api/track sang cung Service cm-dashboard-ingest,
+'     khong dung dashboard/api/ingest/DB. Dich ghi du lieu (ingest-server.js/MySQL)
+'     khong doi gi.
 '
 ' CHANGES vs v4.9/4.10
 '   - Fix "Khong tim thay dia chi email hop le" voi nguoi nhan GAL/contact:
@@ -32,8 +42,8 @@ Option Explicit
 '   - draft.Copy retained (preserves CID inline images).
 ' ================================================================
 
-Private Const TRACK_URL As String = "https://cm-dashboard.dev-saha.aws.shb.com.vn/api/track"
-Private Const VER       As String = "4.11"
+Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
+Private Const VER       As String = "4.12"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
