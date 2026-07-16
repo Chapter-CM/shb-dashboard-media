@@ -1,4 +1,49 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 15/07/2026 khuya muộn)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 16/07/2026)
+
+## 🔧 16/07 — Fix thêm "Đã gửi" → "Lượt gửi" (đếm sai vì gộp theo người) — ĐANG chờ deploy sau khi vướng 1 vòng quên commit
+
+**Bối cảnh:** Sau khi bỏ KPI dwell (xem mục "15/07 khuya muộn" bên dưới), user báo thẻ **"Đã gửi"** đếm
+sai — gửi 3 email tới cùng 1 người chỉ hiện "1" vì code gộp theo NGƯỜI NHẬN duy nhất, không phải theo
+LƯỢT GỬI thật.
+
+**Đã sửa (`api/email-dashboard.js`)**: đổi thẻ KPI đầu tiên từ "Đã gửi" (đếm người nhận duy nhất,
+`s.sent`) sang **"Lượt gửi"** (đếm `s.sentSessions` — tổng số email đã gửi thật, mỗi lần gửi/mỗi
+người = 1 lượt, không gộp). Trường `sentSessions` này vốn đã có sẵn trong code (dùng ở mục tóm tắt
+lãnh đạo) chỉ chưa được dùng cho thẻ KPI chính. Đã verify bằng mock 3 lượt gửi tới cùng 1 người qua
+headless Chromium → ra đúng "3 · 1 người", không lỗi JS.
+
+**⚠️ Sự cố thao tác đã xảy ra + đã xử lý xong (bài học cho phiên sau, tránh lặp lại)**:
+1. User copy file `email-dashboard.js` (bản có fix Lượt gửi) vào đúng `cm-dashboard/api/`, nhưng
+   **quên `git add`/`commit`/`push`** — file nằm im dưới dạng "Changes not staged" trên nhánh
+   `sync-final-session` (nhánh này đã merge vào `main` 1 lần TRƯỚC ĐÓ với bản CHƯA có fix Lượt gửi).
+   → Vì vậy dashboard live vẫn hiện "Đã gửi" cũ dù đã copy file đúng — dễ hiểu lầm là lỗi
+   deploy/cache hạ tầng, nhưng thực ra chỉ là quên bấm `git add`+`commit`+`push`.
+2. **`findstr` trên CMD Windows KHÔNG đọc được tiếng Việt có dấu đúng** (luôn trả về rỗng dù chuỗi
+   có tồn tại thật trong file) — đã đổi sang dùng `powershell -Command "Select-String -Path <file>
+   -Pattern '<khong-dau>','<co-dau>' -Encoding utf8"` để verify chính xác. **Từ nay luôn dùng
+   PowerShell Select-String để kiểm tra nội dung tiếng Việt trong file trên Windows, không dùng
+   `findstr` với chuỗi có dấu.**
+3. Cũng lưu ý: chuỗi tìm kiếm để verify phải là **cụm DUY NHẤT chỉ xuất hiện ở đúng chỗ cần sửa**
+   (VD "Thời gian đọc trung bình" — không tồn tại nơi khác trong file) — tránh dùng chuỗi mơ hồ như
+   "Chưa mở" (từng gây hiểu lầm vì trùng với tab lọc người nhận có sẵn từ trước, không liên quan).
+
+**Đã xử lý xong sự cố #1**: user đã chạy lại `git add`+`commit`+`push` lên nhánh `sync-final-session`
+(commit mới, KHÔNG phải commit cũ `93bdb9f`) — cần tạo **Merge Request MỚI** (vì nhánh này đã merge
+1 lần rồi) từ `sync-final-session` → `main`, merge, đợi pipeline chạy xong.
+
+**CHƯA xác nhận deploy xong** — chưa thấy user báo pipeline/kết quả F5 dashboard sau bước trên.
+
+**Việc đầu tiên phiên sau:**
+1. Hỏi user pipeline (MR mới) đã chạy xong chưa, đủ xanh `sync_data` → `docker build ecr` →
+   `update_manifest_aws_dev`.
+2. F5 (Ctrl+Shift+R để chắc không dính cache trình duyệt) dashboard `#email`, xác nhận: thẻ đầu tiên
+   đổi thành "Lượt gửi" (số đúng = tổng lượt gửi, không phải số người), không còn "Thời gian đọc
+   trung bình" ở KPI lẫn 3 bảng Người nhận/Chiến dịch/Squad.
+3. Nếu deploy xong mà vẫn hiện bản cũ → lúc đó MỚI nghi ngờ cache image Docker/`imagePullPolicy`
+   (đã có sẵn kịch bản chẩn đoán ở mục "15/07 chiều" nếu cần), đừng nghi ngay từ đầu như lần này khi
+   nguyên nhân thực ra chỉ là quên commit.
+
+---
 
 ## ✅ 15/07 khuya muộn — Test thật xác nhận dwell qua Gateway LUÔN ra đúng trần giả (không sửa được) — USER QUYẾT ĐỊNH BỎ HẲN KPI "Thời gian đọc" khỏi dashboard
 
