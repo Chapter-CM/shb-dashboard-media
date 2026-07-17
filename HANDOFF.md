@@ -1,4 +1,91 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 16/07/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 17/07/2026)
+
+## 🔧 17/07 — Facebook: ĐÃ nạp được dữ liệu thật qua mạng nội bộ (90 bài), CÒN 1 sai lệch số "Tổng lượt xem" cần đối chuẩn — ĐANG dở, tiếp phiên sau
+
+**Bối cảnh:** User xin được quyền đăng nhập Facebook trên máy công ty (có mạng nội bộ NHS) — nối
+tiếp mục "⏸️ 14/07 tối" bên dưới (giờ đã KHÔNG còn tạm dừng nữa, đã chạy thật).
+
+### Đã xong — toàn bộ pipeline nạp dữ liệu Facebook thật hoạt động end-to-end
+
+1. **CSP facebook.com chặn fetch trực tiếp từ Console** (Tampermonkey không cài được trên máy công
+   ty do Group Policy — xem lại mục "⏸️ 14/07 tối" — nên phải dùng bản Console dán tay). Giải pháp:
+   thêm route **`/ingest-bridge`** (`server/ingest-server.js` + `nginx.conf`) — 1 cửa sổ nhỏ mở từ
+   tab Facebook, nhận dữ liệu qua `postMessage` (CSP không chặn cái này) rồi tự gọi `/api/ingest`
+   cùng origin. Script gom (`tools/shb-content-library.console.js`) tự mở cửa sổ này, gom bài +
+   page-metrics, tự đẩy — không cần copy/dán thủ công nữa. Có ô trạng thái "SHB" nổi góc dưới phải
+   trang Facebook (🟢 đã nối / ✅ số lô / ❌ lỗi). Đường lui nếu bridge lỗi: `copy(SHBCL_export())`
+   + dán vào `tools/shb-ingest-upload.console.js` trên tab dashboard.
+2. **Fix `api/fb-ingest.js`**: bản cũ trên GitLab vẫn đòi `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` dù
+   dashboard đã migrate MySQL từ lâu → lỗi `500 Thiếu env` khi ingest qua bridge. Đã sửa dùng
+   `dbClient` (MySQL) giống các file khác, merge qua MR `fix/fb-ingest-mysql` (commit fb-ingest.js).
+3. **Xác nhận dữ liệu vào đúng MySQL** bằng `/dbquery` (trực tiếp URL trình duyệt, bỏ qua tầng
+   dashboard) — `fb_group_posts` có 90 dòng thật (kick-off SAHA BRANCH, Transformation Talk...),
+   `fb_page_insights` có ~31 bản page-metrics từ nhiều tab Insight đã ghé.
+4. **Debug vụ "vẫn ra mock dù DB đã có data"** (mất khá lâu, quan trọng đọc kỹ tránh lặp lại): đã
+   loại lần lượt — code sai (không, hash khớp Downloads↔GitLab) → thiếu biến CI/CD (không, có đủ
+   `INGEST_API_URL`/`INGEST_SECRET`, `main` là protected branch) → cache ArgoCD/image cũ (không, pod
+   luôn là bản mới nhất theo tuổi pod khớp giờ pipeline). Nguyên nhân thật: **chỉ đơn giản là F5 dashboard
+   quá sớm, trước khi đủ cả 6 stage pipeline chạy xong** (test lần đầu lúc `sync_data` job vừa xong
+   nhưng `docker_build_ecr`/`update_manifest_aws_dev` chưa deploy pod mới). Đã xác nhận chắc chắn bằng
+   cách thêm log `[fb loadData][DEBUG]` tạm thời vào `api/fb-dashboard.js` (in rõ số dòng mỗi bảng trả
+   về + nhánh code nào được chọn) — log cho ra đúng `DU LIEU THAT, posts=90`, và F5 sau khi đợi đủ pipeline
+   thì lên đúng số thật (198.314 lượt xem, 90 bài, ER 22.3%, có chuỗi ngày hoạt động).
+   **⚠️ CHƯA gỡ log DEBUG này** — cần gỡ trong lần sửa tiếp theo (không để lại lâu dài).
+5. **Xác nhận quy trình gom dữ liệu đã đỡ thủ công hơn nhiều so với lo ngại ban đầu**: Professional
+   Dashboard của Facebook là SPA — chuyển giữa các tab sidebar (Lượt xem/Lượt tương tác/Đối
+   tượng/Thu nhập/Thư viện nội dung) **không load lại trang**, nên hook fetch/XHR + kết nối bridge
+   VẪN SỐNG khi bấm qua lại các tab, không cần dán lại script mỗi trang. Chỉ cần dán 1 lần, rồi bấm
+   qua từng tab Insight (cuộn nhẹ mỗi tab để chart lazy-load), ô "SHB" tự tăng số theo.
+   Tính năng `Ctrl+Shift+Y` (auto-tour, dùng `location.href` để CHUYỂN TRANG CỨNG) hiện **PHẢN TÁC
+   DỤNG** — full reload sẽ xoá sạch state script/bridge, bắt phải dán lại. Chưa gỡ, cần gỡ hoặc sửa
+   thành soft-nav ở lần code tiếp theo — tạm thời DẶN USER ĐỪNG DÙNG PHÍM TẮT NÀY, chỉ bấm tay qua
+   sidebar.
+
+### ⚠️ VẤN ĐỀ CÒN DỞ — "Tổng lượt xem" (KPI card đầu, gauge đỏ) lệch số so với chính Facebook
+
+**Phát hiện của user (17/07 cuối phiên):** vào thẳng trang Facebook → Công cụ chuyên nghiệp →
+Thông tin chi tiết → **Lượt xem**, chọn khoảng ngày Tùy chỉnh **1/11/2025 – 17/7/2026** (tức
+"Tất cả" theo cách hiểu của mình) → Facebook tự hiện card **"328.293 ↑100% Lượt xem"** cho đúng
+khoảng đó. Nhưng dashboard nội bộ (`#fb`, filter "Tất cả") lại hiện **"198.314"** — lệch khá xa
+(~130 nghìn, ~40%).
+
+**Nghi vấn (CHƯA xác minh, cần làm ở phiên sau):** `buildPageInsights()` trong `api/fb-dashboard.js`
+(dòng ~128–180) tính `totalViews`/chuỗi `daily` bằng cách **UNION theo ngày dữ liệu series từ TẤT
+CẢ các lần bắt page-insights đã ingest** (mỗi lần ghé 1 tab Facebook với 1 khoảng ngày khác nhau —
+có lần LIFETIME, có lần khoảng hẹp hơn, có lần đúng Tùy chỉnh 1/11–17/7 mới nhất). Cơ chế
+"ngày nào bắt trước (theo `captured_at` mới nhất) thắng" có thể đang giữ lại giá trị **CŨ/HẸP HƠN**
+cho một số ngày nếu lần ghé mới nhất (đúng khoảng Tùy chỉnh to) **không trả đủ toàn bộ chuỗi ngày**
+trong 1 response GraphQL (Facebook có thể phân trang/lazy-load chuỗi dài theo cuộn, giống cơ chế
+Content Library) — dẫn tới tổng cộng dồn bị thiếu so với con số headline chính chủ Facebook tự tính.
+
+**Việc cần làm phiên sau (ưu tiên cao, đây là điều user nhấn mạnh "làm cho chuẩn"):**
+1. Xác nhận lại đúng cách bản Vercel cũ (Supabase) đã lấy con số "Tổng lượt xem" — cách này được
+   xem là chuẩn tham chiếu. Cần tìm hiểu: bản Vercel có tính bằng cách cộng dồn `daily` series
+   (như MySQL bản hiện tại đang làm) hay có đọc thẳng field headline tổng (kiểu `lifetime_views`/
+   `total_views` riêng, KHÔNG qua cộng dồn theo ngày) từ response GraphQL của đúng tab "Lượt xem"?
+   *(Lưu ý: KHÔNG có source code bản Vercel/api/fetch.js gốc trong repo này để đối chiếu trực tiếp —
+   chỉ có `tools/shb-content-library.user.js` là bản Tampermonkey gốc, logic bóc dữ liệu per-post
+   PHẦN NÀY đã xác nhận giống hệt bản Console hiện tại, không phải nguồn gây lệch. Sai lệch nằm ở
+   phần PAGE-LEVEL series/tổng hợp, không phải per-post.)*
+2. Vào lại trang **Lượt xem** trên Facebook, mở DevTools Network, xem RAW response JSON chứa
+   field tổng "328.293" đó nằm ở key nào (metric riêng có `__typename` khớp `/Metric/`, KHÔNG phải
+   `TimeSeries`?) — nếu có field tổng riêng, sửa `buildPageInsights()`/script gom ưu tiên dùng field
+   đó làm `totalViews` thay vì cộng dồn `daily`, cộng dồn `daily` chỉ dùng để vẽ chart xu hướng.
+3. Nếu đúng là do UNION nhiều lần ghé với khoảng ngày khác nhau gây thiếu ngày → cân nhắc: mỗi lần
+   ghé tab "Lượt xem" LUÔN chọn khoả, "Tất cả"/khoảng rộng nhất có thể trước khi cuộn, tránh trộn
+   nhiều page-insight snapshot có khoảng ngày khác nhau làm nhiễu phép UNION.
+4. Sau khi sửa xong: chạy lại pipeline, so số "Tổng lượt xem" dashboard với đúng số Facebook tự hiện
+   ở tab Lượt xem cho CÙNG 1 khoảng ngày — khớp mới coi là xong.
+5. Tiện thể dọn 2 việc kỹ thuật còn nợ (không khẩn nhưng đừng quên):
+   - Gỡ log `[DEBUG]` tạm trong `api/fb-dashboard.js` (thêm 17/07 để chẩn đoán vụ mock, đã xong việc).
+   - Gỡ hoặc sửa tính năng auto-tour `Ctrl+Shift+Y` trong `tools/shb-content-library.console.js`
+     (đang dùng full-page-reload, phản tác dụng với luồng SPA hiện tại).
+
+**Việc đầu tiên phiên sau:** đọc mục này, KHÔNG cần lặp lại toàn bộ debug đã xong (pipeline/ingest
+đã xác nhận chạy đúng) — bắt tay ngay vào việc #1–#2 ở trên (soi RAW response tab Lượt xem) để tìm
+đúng field tổng, rồi sửa `buildPageInsights()`.
+
+---
 
 ## 🔧 16/07 — Fix thêm "Đã gửi" → "Lượt gửi" (đếm sai vì gộp theo người) — ĐANG chờ deploy sau khi vướng 1 vòng quên commit
 
