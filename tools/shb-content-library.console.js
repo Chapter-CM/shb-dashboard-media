@@ -275,19 +275,16 @@
   // Dọn sessionStorage nếu còn sót từ bản cũ, tránh confirm() thừa.
   try { sessionStorage.removeItem('shbTour'); } catch (e) {}
 
-  // ── AUTOPILOT (17/07 bản 3): tự bấm qua sidebar (SPA — KHÔNG reload nên hook
-  // sống xuyên suốt) + tự cuộn + tự quét chart từng tab, hoàn toàn không cần tay
-  // động gì sau khi gõ 1 lệnh. Dùng: gõ SHBCL_autopilot() trong Console.
-  var AUTOPILOT_TABS = ['Lượt xem', 'Lượt tương tác', 'Đối tượng', 'Thu nhập', 'Thư viện nội dung'];
-
-  function findSidebarLink(text) {
-    var all = Array.from(document.querySelectorAll('a,[role="link"],div[role="button"]'));
-    var norm = function (s) { return String(s || '').trim().toLowerCase(); };
-    return all.find(function (el) {
-      var t = norm(el.innerText || el.textContent);
-      return t === norm(text) || (t.length < 40 && t.indexOf(norm(text)) === 0);
-    }) || null;
-  }
+  // ── SHBCL_sweep() (17/07 bản 3 — ĐÃ BỎ tự bấm sidebar): thử tự bấm xuyên suốt
+  // qua sidebar (AUTOPILOT) đã KHÔNG an toàn — sidebar Facebook có mục dạng xổ
+  // (accordion, VD "Lượt tương tác") bấm vào chỉ mở submenu chứ không nhảy trang,
+  // dễ lạc sang trang khác hẳn (đã xác nhận lỗi thật khi test). Rút gọn lại: vẫn
+  // phải TỰ BẤM TAY từng mục sidebar (an toàn, không đoán mù DOM), nhưng mỗi mục
+  // chỉ cần gõ ĐÚNG 1 LỆNH thay vì rê chuột thủ công: gõ SHBCL_sweep() trong
+  // Console SAU KHI đã bấm tay vào 1 tab Insight — nó tự cuộn + tự quét hết chart
+  // trang đó (mousemove giả lập), rồi báo số liệu gom được. Lặp lại: bấm tab kế →
+  // gõ SHBCL_sweep() → ... cho tới hết các tab cần (Lượt xem/Lượt tương tác/
+  // Đối tượng/Thu nhập/Thư viện nội dung).
 
   function sweepVisibleCharts(passes) {
     return new Promise(function (resolve) {
@@ -325,30 +322,20 @@
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
-  W.SHBCL_autopilot = async function (tabs) {
-    tabs = tabs || AUTOPILOT_TABS;
-    log('AUTOPILOT bắt đầu — sẽ tự đi qua', tabs.length, 'mục, không cần tay động vào nữa. Đừng bấm chuột/gõ phím trong lúc chạy.');
-    for (var i = 0; i < tabs.length; i++) {
-      var name = tabs[i];
-      var el = findSidebarLink(name);
-      if (!el) { log('⚠️ Không tìm thấy mục "' + name + '" trên sidebar — bỏ qua, tự bấm tay mục này nếu cần.'); continue; }
-      log('→ Đang mở "' + name + '"...');
-      try { el.click(); } catch (e) { log('lỗi click', name, e); continue; }
-      await sleep(2500);
-      await autoScrollOnce(4000);
-      await sweepVisibleCharts(2);
-      badge();
-      log('✓ Xong "' + name + '" — đã gom', POSTS.length, 'bài,', PAGES.length, 'page.');
-      await sleep(800);
-    }
-    log('AUTOPILOT XONG toàn bộ ' + tabs.length + ' mục. Ô SHB góc dưới phải là tổng cuối cùng.');
+  W.SHBCL_sweep = async function () {
+    log('SHBCL_sweep: đang cuộn + quét chart trang hiện tại...');
+    await autoScrollOnce(4000);
+    await sweepVisibleCharts(2);
+    badge();
+    log('✓ Xong trang này — tổng đã gom: ' + POSTS.length + ' bài, ' + PAGES.length + ' page. ' +
+        'Bấm sang tab Insight kế tiếp rồi gõ SHBCL_sweep() lần nữa.');
   };
-  log('Gõ SHBCL_autopilot() để tự động đi qua hết các tab Insight + quét chart, không cần bấm tay.');
+  log('Sau khi TỰ BẤM TAY vào 1 tab Insight (Lượt xem/Lượt tương tác/Đối tượng/Thu nhập/Thư viện nội dung), ' +
+      'gõ SHBCL_sweep() để tự cuộn + tự quét chart trang đó — lặp lại cho mỗi tab.');
 
   openBridge(); // mở cửa sổ bridge ngay (nếu bị chặn popup: bấm ô SHB góc dưới phải)
   badge();
   log('Bản console (bridge) đã chạy — dữ liệu tự đẩy lên MySQL qua cửa sổ bridge. ' +
       'Nếu ô SHB góc dưới phải báo 🔴, bấm vào đó để mở bridge. ' +
-      'Đường lui nếu bridge lỗi: copy(SHBCL_export()) + shb-ingest-upload.console.js. ' +
-      'Ctrl+Shift+Y = tự quét hết các mục Professional Dashboard.');
+      'Đường lui nếu bridge lỗi: copy(SHBCL_export()) + shb-ingest-upload.console.js.');
 })();
