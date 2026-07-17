@@ -215,7 +215,12 @@ async function loadData() {
       sbGet('/rest/v1/fb_posts?select=*&order=created_time.desc&limit=500'),
       sbGet('/rest/v1/fb_page_snapshots?select=*&order=captured_at.asc&limit=400'),
       sbGet('/rest/v1/fb_group_posts?select=*&order=reach.desc&limit=500').catch(function () { return []; }),
-      sbGet('/rest/v1/fb_page_insights?select=*&order=captured_at.desc&limit=80').catch(function () { return []; })
+      // limit=80 (cũ) là NGUYÊN NHÂN THẬT gây "Xu hướng theo thời gian" trống + headline
+      // rơi về fallback cộng-dồn-theo-bài: qua nhiều lượt quét (Lượt xem/Tương tác/Đối
+      // tượng/Thu nhập, quét đi quét lại), số dòng fb_page_insights vượt xa 80 — dòng
+      // chứa views_time_series thật bị đẩy khỏi cửa sổ "80 dòng mới nhất", buildPageInsights
+      // không còn thấy chuỗi views/interactions nào cả dù DB có đủ dữ liệu thật.
+      sbGet('/rest/v1/fb_page_insights?select=*&order=captured_at.desc&limit=3000').catch(function () { return []; })
     ]);
     var hasPage = Array.isArray(r[0]) && r[0].length;
     var hasGroup = Array.isArray(r[2]) && r[2].length;
