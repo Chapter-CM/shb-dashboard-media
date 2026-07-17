@@ -187,7 +187,12 @@ function buildPageInsights(rows) {
     captured: best ? new Date(best.captured_at).getTime() : new Date(rows[0].captured_at).getTime(),
     series: seriesMap, metricsMax: mMax,
     ageGender: ageGender, folDaily: folDaily,
-    follower: { total: m.follower || m.total_follower || 0, net: m.net_follower || 0, unfollow: m.unfollower || 0 }
+    // "net_follow" (không phải "net_follower") là tên field THẬT, đã xác nhận qua
+    // per-post pmv(p,'net_follow') dùng nhất quán ở nơi khác trong file này — dòng
+    // này trước đây gõ nhầm "net_follower" (thừa "er") khiến luôn ra 0. Giữ cả 2
+    // cách viết cho "total"/"unfollow" vì chưa có bằng chứng thật xác nhận tên chính
+    // xác, tương tự rủi ro đã gặp ở views_time_series/ageGender.
+    follower: { total: m.follower || m.total_follower || m.follow || m.total_follow || 0, net: m.net_follow || m.net_follower || 0, unfollow: m.unfollow || m.unfollower || 0 }
   };
 }
 // Bài Group "SHB Một Nhà" (nạp qua userscript -> /api/ingest -> fb_group_posts).
