@@ -3,15 +3,24 @@
 // này vào DevTools Console (F12) trên trang facebook.com rồi Enter.
 // Phải làm lại mỗi lần mở tab mới (KHÔNG tự động/không lưu như bản
 // Tampermonkey gốc: tools/shb-content-library.user.js).
+//
+// ⚠️ Đổi 17/07/2026: CSP của facebook.com CHẶN fetch tới domain ngoài
+// từ Console (Tampermonkey vượt được nhờ GM_xmlhttpRequest, Console
+// thì không). Vì vậy bản này KHÔNG gửi trực tiếp nữa mà chỉ GOM dữ
+// liệu vào bộ đệm. Quy trình 2 bước:
+//   1. Trên tab Facebook: dán script này → cuộn hết bài → gõ
+//      copy(SHBCL_export())  → dữ liệu đã nằm trong clipboard.
+//   2. Mở tab dashboard nội bộ (cm-dashboard.dev-saha.aws.shb.com.vn)
+//      → dán tools/shb-ingest-upload.console.js → dán clipboard vào ô
+//      hiện ra → bấm Gửi (cùng domain nên không bị CSP chặn).
 // ================================================================
 
 (function () {
   'use strict';
 
-  // ── CẤU HÌNH (chỉ nằm trên máy admin, KHÔNG commit secret thật) ──────────
-  // Đổi 14/07/2026: endpoint nội bộ SHB (trước là Vercel, xem lịch sử HANDOFF.md).
-  var INGEST = 'https://cm-dashboard.dev-saha.aws.shb.com.vn/api/ingest';
-  var SECRET = '500a13c1-4b4a-4da0-a4c7-c4200e51b66a';   // INGEST_SECRET noi bo SHB
+  // ── CẤU HÌNH ──────────────────────────────────────────────────────────────
+  // 17/07/2026: KHÔNG còn INGEST/SECRET ở đây — bản này chỉ GOM dữ liệu
+  // (CSP Facebook chặn gửi trực tiếp). Gửi bằng tools/shb-ingest-upload.console.js.
   var GROUP_ID = '503009407721580';          // SHB Một Nhà
   var AUTO_SCROLL = true;                     // tự cuộn để lazy-load hết bài trong dải ngày đang chọn
   var DEBUG = true;
@@ -73,7 +82,16 @@
     };
   }
 
-  var sent = {}; // chống gửi trùng trong cùng phiên
+  var sent = {}; // chống gom trùng trong cùng phiên
+  var POSTS = [];  // bộ đệm bài viết đã gom
+  var PAGES = [];  // bộ đệm page-level metrics đã gom
+
+  // Xuất toàn bộ dữ liệu đã gom (chuỗi JSON) — dùng: copy(SHBCL_export())
+  W.SHBCL_export = function () {
+    var out = JSON.stringify({ posts: POSTS, pages: PAGES });
+    log('export: ' + POSTS.length + ' bài + ' + PAGES.length + ' page metrics (' + out.length + ' ký tự). Gõ copy(SHBCL_export()) để đưa vào clipboard nếu chưa.');
+    return out;
+  };
 
   function handleLibrary(lib) {
     if (!lib || !lib.edges || !lib.edges.length) return;
@@ -86,13 +104,8 @@
       rows.push(row);
     });
     if (!rows.length) return;
-    log('gửi', rows.length, 'bài', rows);
-    fetch(INGEST, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': SECRET },
-      body: JSON.stringify(rows)
-    }).then(function (r) { return r.text().then(function (t) { log('ingest', r.status, t); }); })
-      .catch(function (e) { log('ingest LỖI', e); });
+    log('gom', rows.length, 'bài (tổng ' + (POSTS.length + rows.length) + ') — chưa gửi, sẽ export bằng copy(SHBCL_export())');
+    POSTS = POSTS.concat(rows);
   }
 
   // Tìm prodash_content_library ở các vị trí có thể: data.node.* hoặc data.*
@@ -135,12 +148,8 @@
     if (sig === pageLastSent) return; pageLastSent = sig;
     log('PAGE metrics:', acc.metrics, '| series:', Object.keys(acc.series));
     Object.keys(acc.series).forEach(function (k) { log('  series[' + k + ']:', JSON.stringify(acc.series[k]).slice(0, 400)); });
-    fetch(INGEST, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': SECRET },
-      body: JSON.stringify({ kind: 'page', date_range: rangeFromUrl(), metrics: acc.metrics, series: acc.series })
-    }).then(function (r) { return r.text().then(function (t) { log('page ingest', r.status, t); }); })
-      .catch(function (e) { log('page ingest LỖI', e); });
+    PAGES.push({ kind: 'page', date_range: rangeFromUrl(), metrics: acc.metrics, series: acc.series });
+    log('gom PAGE metrics (tổng ' + PAGES.length + ' bản) — chưa gửi, sẽ export bằng copy(SHBCL_export())');
   }
 
   function tryParse(text) {
@@ -229,5 +238,7 @@
   } catch (e) {}
   if (/professional_dashboard/.test(location.pathname)) tourTick();
 
-  log('Bản console đã chạy — bóc full chỉ số per-post + page-level. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
+  log('Bản console đã chạy — chế độ GOM (không gửi trực tiếp vì CSP Facebook). ' +
+      'Cuộn hết bài, rồi gõ: copy(SHBCL_export()) — sau đó dán vào uploader trên tab dashboard. ' +
+      'Bấm Ctrl+Shift+Y để tự quét hết các mục Professional Dashboard.');
 })();
