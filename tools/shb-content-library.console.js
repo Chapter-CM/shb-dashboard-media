@@ -111,6 +111,51 @@
   var POSTS = [];  // bộ đệm bài viết đã gom
   var PAGES = [];  // bộ đệm page-level metrics đã gom
 
+  // ── COVERAGE: đếm chính xác đã phủ đủ ngày nào trong khoảng đang chọn chưa —
+  // KHÔNG đoán mò như quét chuột giả, mà tính toán thật từ dữ liệu đã bắt được.
+  function parseUrlRange() {
+    var sp = new URLSearchParams(location.search);
+    var sd = sp.get('start_date'), ed = sp.get('end_date');
+    if (!sd || !ed) return null;
+    return { start: new Date(sd + 'T00:00:00Z').getTime(), end: new Date(ed + 'T00:00:00Z').getTime() };
+  }
+  function dayMs(t) { var d = new Date(t); d.setUTCHours(0, 0, 0, 0); return d.getTime(); }
+  function fmtDate(ms) { var d = new Date(ms); return String(d.getUTCDate()).padStart(2, '0') + '/' + String(d.getUTCMonth() + 1).padStart(2, '0'); }
+  function coverageReport(silent) {
+    var range = parseUrlRange();
+    if (!range) { if (!silent) log('Không xác định được khoảng ngày Tùy chỉnh từ URL — bỏ qua kiểm tra coverage (chỉ áp dụng khi chọn "Tùy chỉnh").'); return null; }
+    var covered = {};
+    PAGES.forEach(function (p) {
+      var s = p && p.series || {};
+      Object.keys(s).forEach(function (k) {
+        if (!/view/i.test(k)) return;
+        var pts = s[k] && s[k].points;
+        if (!Array.isArray(pts)) return;
+        pts.forEach(function (pt) { var t = new Date(pt.start_time).getTime(); if (t) covered[dayMs(t)] = 1; });
+      });
+    });
+    var totalDays = Math.round((range.end - range.start) / 864e5) + 1;
+    var coveredDays = 0, gaps = [], gapStart = null;
+    for (var t = range.start; t <= range.end; t += 864e5) {
+      if (covered[t]) {
+        coveredDays++;
+        if (gapStart != null) { gaps.push([gapStart, t - 864e5]); gapStart = null; }
+      } else if (gapStart == null) gapStart = t;
+    }
+    if (gapStart != null) gaps.push([gapStart, range.end]);
+    var pct = totalDays ? Math.round(coveredDays / totalDays * 100) : 0;
+    if (!silent) {
+      if (gaps.length) {
+        log('⚠️ Coverage ' + coveredDays + '/' + totalDays + ' ngày (' + pct + '%) — CÒN THIẾU ' + gaps.length + ' đoạn: ' +
+          gaps.slice(0, 15).map(function (g) { return fmtDate(g[0]) + (g[1] > g[0] ? '→' + fmtDate(g[1]) : ''); }).join(', ') + (gaps.length > 15 ? ' …' : ''));
+      } else {
+        log('✅ Coverage ' + coveredDays + '/' + totalDays + ' ngày (100%) — ĐỦ toàn bộ khoảng ngày đã chọn.');
+      }
+    }
+    return { totalDays: totalDays, coveredDays: coveredDays, pct: pct, gaps: gaps };
+  }
+  W.SHBCL_coverage = function () { return coverageReport(); };
+
   // Xuất toàn bộ dữ liệu đã gom (chuỗi JSON) — dùng: copy(SHBCL_export())
   // (đường lui khi bridge chưa deploy/không mở được)
   W.SHBCL_export = function () {
@@ -350,16 +395,30 @@
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
+  // Quét LẶP LẠI tự động cho tới khi coverage đủ 100% (hoặc hết MAX_TRY lần) —
+  // không còn "quét 1 phát rồi hy vọng", mà tự kiểm tra thật + tự thử lại.
   W.SHBCL_sweep = async function () {
-    log('SHBCL_sweep: đang cuộn + quét chart trang hiện tại...');
-    await autoScrollOnce(4000);
-    await sweepVisibleCharts(2);
+    var MAX_TRY = 6, tries = 0, cov = null;
+    log('SHBCL_sweep: bắt đầu quét + tự kiểm tra coverage (tối đa ' + MAX_TRY + ' lượt)...');
+    while (tries < MAX_TRY) {
+      tries++;
+      await autoScrollOnce(2500);
+      await sweepVisibleCharts(2);
+      badge();
+      cov = coverageReport(true);
+      if (!cov) { log('✓ Trang này không phải khoảng "Tùy chỉnh" (không kiểm tra được coverage) — xong sau 1 lượt quét.'); break; }
+      log('  lượt ' + tries + '/' + MAX_TRY + ': coverage ' + cov.coveredDays + '/' + cov.totalDays + ' ngày (' + cov.pct + '%)' + (cov.gaps.length ? ', còn ' + cov.gaps.length + ' đoạn thiếu' : ''));
+      if (!cov.gaps.length) break;
+    }
+    coverageReport(false); // in báo cáo cuối cùng đầy đủ (kể cả khi vẫn còn thiếu)
     badge();
     log('✓ Xong trang này — tổng đã gom: ' + POSTS.length + ' bài, ' + PAGES.length + ' page. ' +
-        'Bấm sang tab Insight kế tiếp rồi gõ SHBCL_sweep() lần nữa.');
+        (cov && cov.gaps.length ? '⚠️ VẪN CÒN THIẾU dữ liệu — xem đoạn ngày ở dòng "Coverage" phía trên, cân nhắc rê chuột tay thêm đúng đoạn đó rồi bấm "🔄 Quét trang này" lại. ' : '') +
+        'Xong thì bấm sang tab Insight kế tiếp, bấm lại nút Bookmark, rồi bấm "🔄 Quét trang này" (hoặc gõ SHBCL_sweep()) tiếp.');
   };
   log('Sau khi TỰ BẤM TAY vào 1 tab Insight (Lượt xem/Lượt tương tác/Đối tượng/Thu nhập/Thư viện nội dung), ' +
-      'gõ SHBCL_sweep() để tự cuộn + tự quét chart trang đó — lặp lại cho mỗi tab.');
+      'bấm nút "🔄 Quét trang này" trên ô SHB (hoặc gõ SHBCL_sweep()) — tự quét LẶP LẠI tới khi đủ dữ liệu, ' +
+      'tự báo rõ nếu còn thiếu đoạn ngày nào. Gõ SHBCL_coverage() bất kỳ lúc nào để xem báo cáo hiện tại.');
 
   openBridge(); // mở cửa sổ bridge ngay (nếu bị chặn popup: bấm ô SHB góc dưới phải)
   badge();
