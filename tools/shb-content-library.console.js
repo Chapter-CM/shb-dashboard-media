@@ -270,48 +270,13 @@
     }, 1500);
   }
 
-  // ── AUTO-TOUR: tự đi hết các mục của Professional Dashboard để quét sạch ────
-  // Bấm Ctrl+Shift+Y trên trang dashboard để bắt đầu. Script tự mở từng mục,
-  // mỗi mục đợi ~10s (đủ để auto-scroll nạp hết widget + hook bắt số liệu), rồi sang mục kế.
-  var TOUR = [
-    '/professional_dashboard/?ref=tab_bar',
-    '/professional_dashboard/profile_insights/views/',
-    '/professional_dashboard/profile_insights/interactions/',
-    '/professional_dashboard/profile_insights/audience/',
-    '/professional_dashboard/profile_insights/earnings/',
-    '/professional_dashboard/content/content_library/?ref=tab_bar'
-  ];
-  function tourTick() {
-    var raw = null; try { raw = sessionStorage.getItem('shbTour'); } catch (e) {}
-    if (!raw) return;
-    var q; try { q = JSON.parse(raw); } catch (e) { q = null; }
-    if (!q || !q.length) { try { sessionStorage.removeItem('shbTour'); } catch (e) {} return; }
-    // 17/07: KHÔNG tự tiếp tục tour ngầm nữa — từng làm mất dữ liệu đã gom vì
-    // tự chuyển trang ngay khi dán script (queue cũ còn sót trong sessionStorage).
-    if (!W.confirm('[SHB-CL] Phát hiện TOUR tự động đang dở (' + q.length + ' mục). Tiếp tục tour?\n\nBấm Cancel để HỦY tour và ở lại trang này (khuyên dùng khi đang gom bài Content Library).')) {
-      try { sessionStorage.removeItem('shbTour'); } catch (e) {}
-      log('TOUR đã hủy theo yêu cầu — ở lại trang hiện tại.');
-      return;
-    }
-    log('TOUR: đang ở', q[0], '— còn', q.length, 'mục');
-    setTimeout(function () {
-      q.shift();
-      try { sessionStorage.setItem('shbTour', JSON.stringify(q)); } catch (e) {}
-      if (q.length) { W.location.href = q[0]; }
-      else { try { sessionStorage.removeItem('shbTour'); } catch (e) {} log('TOUR xong — đã quét hết các mục.'); }
-    }, 10000);
-  }
-  function startTour() {
-    try { sessionStorage.setItem('shbTour', JSON.stringify(TOUR.slice())); } catch (e) {}
-    log('TOUR bắt đầu — sẽ tự đi qua', TOUR.length, 'mục (~1 phút). Đừng đụng chuột.');
-    W.location.href = TOUR[0];
-  }
-  try {
-    W.addEventListener('keydown', function (e) {
-      if (e.ctrlKey && e.shiftKey && (e.key === 'Y' || e.key === 'y')) { startTour(); }
-    });
-  } catch (e) {}
-  if (/professional_dashboard/.test(location.pathname)) tourTick();
+  // 17/07: ĐÃ GỠ auto-tour (Ctrl+Shift+Y) — dùng location.href để chuyển trang cứng,
+  // full-reload sẽ xoá sạch hook fetch/XHR + kết nối bridge, bắt phải dán lại script.
+  // Xác nhận thực tế: Professional Dashboard là SPA — bấm tay qua các mục sidebar
+  // (Lượt xem/Lượt tương tác/Đối tượng/Thu nhập/Thư viện nội dung) KHÔNG load lại
+  // trang, nên script/bridge tự sống xuyên suốt mà không cần thao tác gì thêm. Dọn
+  // sessionStorage nếu còn sót từ bản cũ, tránh confirm() thừa.
+  try { sessionStorage.removeItem('shbTour'); } catch (e) {}
 
   openBridge(); // mở cửa sổ bridge ngay (nếu bị chặn popup: bấm ô SHB góc dưới phải)
   badge();
