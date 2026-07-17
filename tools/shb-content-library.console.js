@@ -272,11 +272,78 @@
 
   // 17/07: ĐÃ GỠ auto-tour (Ctrl+Shift+Y) — dùng location.href để chuyển trang cứng,
   // full-reload sẽ xoá sạch hook fetch/XHR + kết nối bridge, bắt phải dán lại script.
-  // Xác nhận thực tế: Professional Dashboard là SPA — bấm tay qua các mục sidebar
-  // (Lượt xem/Lượt tương tác/Đối tượng/Thu nhập/Thư viện nội dung) KHÔNG load lại
-  // trang, nên script/bridge tự sống xuyên suốt mà không cần thao tác gì thêm. Dọn
-  // sessionStorage nếu còn sót từ bản cũ, tránh confirm() thừa.
+  // Dọn sessionStorage nếu còn sót từ bản cũ, tránh confirm() thừa.
   try { sessionStorage.removeItem('shbTour'); } catch (e) {}
+
+  // ── AUTOPILOT (17/07 bản 3): tự bấm qua sidebar (SPA — KHÔNG reload nên hook
+  // sống xuyên suốt) + tự cuộn + tự quét chart từng tab, hoàn toàn không cần tay
+  // động gì sau khi gõ 1 lệnh. Dùng: gõ SHBCL_autopilot() trong Console.
+  var AUTOPILOT_TABS = ['Lượt xem', 'Lượt tương tác', 'Đối tượng', 'Thu nhập', 'Thư viện nội dung'];
+
+  function findSidebarLink(text) {
+    var all = Array.from(document.querySelectorAll('a,[role="link"],div[role="button"]'));
+    var norm = function (s) { return String(s || '').trim().toLowerCase(); };
+    return all.find(function (el) {
+      var t = norm(el.innerText || el.textContent);
+      return t === norm(text) || (t.length < 40 && t.indexOf(norm(text)) === 0);
+    }) || null;
+  }
+
+  function sweepVisibleCharts(passes) {
+    return new Promise(function (resolve) {
+      var p = 0;
+      (function next() {
+        var svgs = Array.from(document.querySelectorAll('svg')).map(function (s) { return { el: s, r: s.getBoundingClientRect() }; })
+          .filter(function (x) { return x.r.width > 250 && x.r.height > 60 && x.r.top < window.innerHeight && x.r.bottom > 0; })
+          .sort(function (a, b) { return (b.r.width * b.r.height) - (a.r.width * a.r.height); });
+        if (!svgs.length) { p++; return p >= passes ? resolve() : setTimeout(next, 400); }
+        var r = svgs[0].r, ys = [0.3, 0.5, 0.7].map(function (f) { return r.top + r.height * f; });
+        var x = r.left, yi = 0;
+        var timer = setInterval(function () {
+          if (x > r.right) { yi++; if (yi >= ys.length) { clearInterval(timer); p++; return p >= passes ? resolve() : setTimeout(next, 400); } x = r.left; }
+          var y = ys[yi], el = document.elementFromPoint(x, y) || svgs[0].el;
+          ['mouseover', 'mousemove'].forEach(function (type) {
+            try { el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, view: window })); } catch (e) {}
+          });
+          x += 3;
+        }, 8);
+      })();
+    });
+  }
+
+  function autoScrollOnce(ms) {
+    return new Promise(function (resolve) {
+      var idle = 0, lastH = 0, end = Date.now() + ms;
+      var timer = setInterval(function () {
+        W.scrollTo(0, document.body.scrollHeight);
+        var h = document.body.scrollHeight;
+        if (h === lastH) idle++; else { idle = 0; lastH = h; }
+        if (idle >= 4 || Date.now() > end) { clearInterval(timer); resolve(); }
+      }, 500);
+    });
+  }
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  W.SHBCL_autopilot = async function (tabs) {
+    tabs = tabs || AUTOPILOT_TABS;
+    log('AUTOPILOT bắt đầu — sẽ tự đi qua', tabs.length, 'mục, không cần tay động vào nữa. Đừng bấm chuột/gõ phím trong lúc chạy.');
+    for (var i = 0; i < tabs.length; i++) {
+      var name = tabs[i];
+      var el = findSidebarLink(name);
+      if (!el) { log('⚠️ Không tìm thấy mục "' + name + '" trên sidebar — bỏ qua, tự bấm tay mục này nếu cần.'); continue; }
+      log('→ Đang mở "' + name + '"...');
+      try { el.click(); } catch (e) { log('lỗi click', name, e); continue; }
+      await sleep(2500);
+      await autoScrollOnce(4000);
+      await sweepVisibleCharts(2);
+      badge();
+      log('✓ Xong "' + name + '" — đã gom', POSTS.length, 'bài,', PAGES.length, 'page.');
+      await sleep(800);
+    }
+    log('AUTOPILOT XONG toàn bộ ' + tabs.length + ' mục. Ô SHB góc dưới phải là tổng cuối cùng.');
+  };
+  log('Gõ SHBCL_autopilot() để tự động đi qua hết các tab Insight + quét chart, không cần bấm tay.');
 
   openBridge(); // mở cửa sổ bridge ngay (nếu bị chặn popup: bấm ô SHB góc dưới phải)
   badge();
