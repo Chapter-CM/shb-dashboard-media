@@ -192,19 +192,27 @@ function mapGroupPosts(rows) {
 }
 async function loadData() {
   // Có MySQL nội bộ (MYSQL_HOST) hoặc Supabase thì đọc thật; thiếu cả 2 mới dùng mock.
-  if (!dbClient.isEnabled() && (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY)) return genMock();
+  if (!dbClient.isEnabled() && (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY)) { console.log('[fb loadData][DEBUG] dbClient.isEnabled()=false và thiếu SUPABASE_* -> mock ngay từ đầu'); return genMock(); }
   try {
-    var r = await Promise.all([
+    console.log('[fb loadData][DEBUG] dbClient.isEnabled()=' + dbClient.isEnabled() + ' INGEST_API_URL=' + (process.env.INGEST_API_URL || '(rỗng)') + ' MYSQL_HOST=' + (process.env.MYSQL_HOST ? '(có)' : '(rỗng)'));
+    var results = await Promise.allSettled([
       sbGet('/rest/v1/fb_posts?select=*&order=created_time.desc&limit=500'),
       sbGet('/rest/v1/fb_page_snapshots?select=*&order=captured_at.asc&limit=400'),
-      sbGet('/rest/v1/fb_group_posts?select=*&order=reach.desc&limit=500').catch(function () { return []; }),
-      sbGet('/rest/v1/fb_page_insights?select=*&order=captured_at.desc&limit=80').catch(function () { return []; })
+      sbGet('/rest/v1/fb_group_posts?select=*&order=reach.desc&limit=500'),
+      sbGet('/rest/v1/fb_page_insights?select=*&order=captured_at.desc&limit=80')
     ]);
+    var NAMES = ['fb_posts', 'fb_page_snapshots', 'fb_group_posts', 'fb_page_insights'];
+    var r = results.map(function (x, i) {
+      if (x.status === 'fulfilled') { console.log('[fb loadData][DEBUG] ' + NAMES[i] + ' OK -> ' + (Array.isArray(x.value) ? x.value.length + ' dòng' : typeof x.value)); return x.value; }
+      console.log('[fb loadData][DEBUG] ' + NAMES[i] + ' LỖI -> ' + (x.reason && x.reason.message)); return [];
+    });
     var hasPage = Array.isArray(r[0]) && r[0].length;
     var hasGroup = Array.isArray(r[2]) && r[2].length;
-    if (!hasPage && !hasGroup) return genMock();          // cả hai rỗng -> demo
+    console.log('[fb loadData][DEBUG] hasPage=' + hasPage + ' hasGroup=' + hasGroup);
+    if (!hasPage && !hasGroup) { console.log('[fb loadData][DEBUG] -> ca hai rong, roi ve mock'); return genMock(); }          // cả hai rỗng -> demo
     var data = (!hasPage && hasGroup) ? mapSupabase([], r[1], r[2]) : mapSupabase(r[0], r[1], r[2]);
     data.pageInsights = buildPageInsights(r[3]);
+    console.log('[fb loadData][DEBUG] -> DU LIEU THAT, posts=' + data.posts.length);
     return data;
   } catch (e) { console.error('[fb loadData]', e && e.message); return genMock(); }
 }
