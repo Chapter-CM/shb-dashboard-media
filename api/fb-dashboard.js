@@ -205,6 +205,16 @@ async function loadData() {
     if (!hasPage && !hasGroup) return genMock();          // cả hai rỗng -> demo
     var data = (!hasPage && hasGroup) ? mapSupabase([], r[1], r[2]) : mapSupabase(r[0], r[1], r[2]);
     data.pageInsights = buildPageInsights(r[3]);
+    // fb_page_snapshots (bảng CŨ, dùng trong mapSupabase() cho followers/series) không
+    // còn được userscript nào ghi vào nữa -> luôn rơi về mock dù đã có dữ liệu thật.
+    // Ưu tiên follower THẬT từ fb_page_insights (bảng MỚI, ghi qua sweep tab "Đối tượng")
+    // nếu đã quét được — GHI ĐÈ lên mock, không đổi gì khi chưa có dữ liệu thật.
+    if (data.pageInsights && data.pageInsights.follower && data.pageInsights.follower.total) {
+      data.page.followers = data.pageInsights.follower.total;
+    }
+    if (data.pageInsights && data.pageInsights.folDaily && data.pageInsights.folDaily.length) {
+      data.series = data.pageInsights.folDaily.map(function (p) { return { ms: p.ms, followers: p.value, views: 0, eng: 0 }; });
+    }
     return data;
   } catch (e) { console.error('[fb loadData]', e && e.message); return genMock(); }
 }
