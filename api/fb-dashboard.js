@@ -165,12 +165,19 @@ function buildPageInsights(rows) {
   });
   var best = rows[0];
   var totalViews = daily.reduce(function (a, p) { return a + p.value; }, 0) || (typeof m.views === 'number' ? m.views : 0);
-  // Nhân khẩu học + follower series (trang Đối tượng)
+  // Nhân khẩu học + follower series (trang Đối tượng) — KHÔNG khớp tên field CHÍNH
+  // XÁC (bài học từ bug views_time_series): "followers_by_age_gender" chỉ là tên
+  // ĐOÁN, tên thật Facebook trả về có thể khác. Nhận diện theo ĐẶC ĐIỂM: nhân khẩu
+  // học = có cả "age" và "gender" trong tên key (linh hoạt hơn exact match, vẫn đủ
+  // đặc trưng để không nhầm với breakdown khác như content-type/follower).
   var ageGender = null, folPts = null;
   rows.forEach(function (r) {
     var s = r.series || {};
-    if (!ageGender && s.followers_by_age_gender && Array.isArray(s.followers_by_age_gender.bucket_values)) ageGender = s.followers_by_age_gender.bucket_values;
-    if (!folPts && s.followers_time_series && Array.isArray(s.followers_time_series.points)) folPts = s.followers_time_series.points;
+    Object.keys(s).forEach(function (key) {
+      var v = s[key];
+      if (!ageGender && /age/i.test(key) && /gender/i.test(key) && v && Array.isArray(v.bucket_values)) ageGender = v.bucket_values;
+      if (!folPts && /^followers?(_|$)/.test(key) && v && Array.isArray(v.points)) folPts = v.points;
+    });
   });
   var folDaily = folPts ? folPts.map(function (p) { return { ms: new Date(p.start_time).getTime(), value: p.value || 0 }; }).filter(function (p) { return p.ms; }).sort(function (a, b) { return a.ms - b.ms; }) : [];
   return {
@@ -820,7 +827,7 @@ function heroChart(d,ser){
   else if(_metric==='eng'){daily=(PS.interactions||[]).filter(function(p){return inWin(p.ms);});note=actNote('Lượt tương tác');}
   else {daily=dailyER().filter(function(p){return inWin(p.ms);});note=actNote('ER %');}  // ER theo ngày = tương tác/lượt xem
   var chart=daily&&daily.length?pageDailyChart(daily,_metric==='er'?'%':'')
-    :'<div class="nd" style="padding:30px 16px;text-align:center">Chưa có chuỗi theo ngày hoạt động cho chỉ số này.'+(_metric==='eng'||_metric==='er'?'<br><span style="font-size:11.5px">Quét lại trang <b>Lượt tương tác</b> (Ctrl+Shift+Y) để lấy interactions_time_series.</span>':'')+'</div>';
+    :'<div class="nd" style="padding:30px 16px;text-align:center">Chưa có chuỗi theo ngày hoạt động cho chỉ số này.'+(_metric==='eng'||_metric==='er'?'<br><span style="font-size:11.5px">Quét lại trang <b>Lượt tương tác</b> (bấm nút "🔄 Quét trang này" trên ô SHB) để lấy interactions_time_series.</span>':'')+'</div>';
   return '<div class="hero-chart"><div class="hc-head"><div class="hc-title" data-tip="Xu hướng theo NGÀY CÓ HOẠT ĐỘNG (không phải ngày đăng) — chuẩn Facebook.">Xu hướng theo thời gian'+note+'</div>'
     +'<div class="metric-toggle"><button class="'+(_metric==='views'?'on':'')+'" onclick="setMetric(\'views\')">Lượt xem</button><button class="'+(_metric==='eng'?'on':'')+'" onclick="setMetric(\'eng\')">Tương tác</button><button class="'+(_metric==='er'?'on':'')+'" onclick="setMetric(\'er\')">ER %</button></div></div>'
     +chart+'</div>';
@@ -937,7 +944,7 @@ function ageGenderPanel(ag){
 function audienceSection(d){
   var pi=DATA.pageInsights;
   if(!(pi&&pi.ageGender&&pi.ageGender.length)){
-    return '<section id="s-aud"><div class="eyebrow">Đối tượng</div><div class="nd">Chưa có dữ liệu nhân khẩu học. Quét trang Đối tượng (Ctrl+Shift+Y).</div></section>';
+    return '<section id="s-aud"><div class="eyebrow">Đối tượng</div><div class="nd">Chưa có dữ liệu nhân khẩu học. Quét trang Đối tượng (bấm nút "🔄 Quét trang này" trên ô SHB).</div></section>';
   }
   var ag=ageGenderPanel(pi.ageGender);
   var tot=(ag.f+ag.m)||1;
