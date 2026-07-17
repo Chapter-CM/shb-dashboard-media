@@ -218,6 +218,13 @@
     if (!raw) return;
     var q; try { q = JSON.parse(raw); } catch (e) { q = null; }
     if (!q || !q.length) { try { sessionStorage.removeItem('shbTour'); } catch (e) {} return; }
+    // 17/07: KHÔNG tự tiếp tục tour ngầm nữa — từng làm mất dữ liệu đã gom vì
+    // tự chuyển trang ngay khi dán script (queue cũ còn sót trong sessionStorage).
+    if (!W.confirm('[SHB-CL] Phát hiện TOUR tự động đang dở (' + q.length + ' mục). Tiếp tục tour?\n\nBấm Cancel để HỦY tour và ở lại trang này (khuyên dùng khi đang gom bài Content Library).')) {
+      try { sessionStorage.removeItem('shbTour'); } catch (e) {}
+      log('TOUR đã hủy theo yêu cầu — ở lại trang hiện tại.');
+      return;
+    }
     log('TOUR: đang ở', q[0], '— còn', q.length, 'mục');
     setTimeout(function () {
       q.shift();
