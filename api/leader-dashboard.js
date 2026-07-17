@@ -142,11 +142,16 @@ function fbAgg(posts,days){
 }
 
 /* ── tổng hợp Email theo khoảng ngày (person-level, khớp logic hasSent/opened của email-dashboard.js) ── */
+// Loại campaign test/dev (VD "Test Gitlab", "Test Vba412" gửi lúc chạy thử pipeline/VBA)
+// khỏi TẤT CẢ tổng hợp trên trang lãnh đạo — số liệu test lẫn vào KPI/Top 5 khiến
+// "Email · Reach" bị đội lên tới >100% (đúng cảnh báo đã ghi trong email-dashboard.js:
+// "Open Rate > 100% = dữ liệu test hoặc thiếu sent events") và Top 5 toàn campaign giả.
+function isTestCampaign(name){return /^test\b/i.test(String(name||'').trim());}
 function emailAgg(logs,days){
   var now=Date.now(),cutNow=days>0?now-days*864e5:0,cutPrev=days>0?cutNow-days*864e5:0;
   function win(lo,hi){
     var sent={},opened={},clicked={},manSent={},manOpened={};
-    logs.forEach(function(l){var t=+new Date(l.timestamp);if(!(t>lo&&t<=hi))return;
+    logs.forEach(function(l){var t=+new Date(l.timestamp);if(!(t>lo&&t<=hi)||isTestCampaign(l.campaign))return;
       if(l.pos==='sent'){sent[l.rcpt]=1;if(l.msg_type==='mandatory')manSent[l.rcpt]=1;}
       if(l.pos==='top'){opened[l.rcpt]=1;if(l.msg_type==='mandatory')manOpened[l.rcpt]=1;}
       if(l.pos==='click')clicked[l.rcpt]=1;
@@ -190,7 +195,7 @@ function topFbPosts(posts,days){
 function topEmailCampaigns(logs,days){
   var now=Date.now(),cut=days>0?now-days*864e5:0;
   var map={};
-  logs.forEach(function(l){var t=+new Date(l.timestamp);if(!(t>cut&&t<=now)||!l.campaign)return;
+  logs.forEach(function(l){var t=+new Date(l.timestamp);if(!(t>cut&&t<=now)||!l.campaign||isTestCampaign(l.campaign))return;
     var k=l.campaign;if(!map[k])map[k]={name:k,sent:{},opened:{}};
     if(l.pos==='sent')map[k].sent[l.rcpt]=1;if(l.pos==='top')map[k].opened[l.rcpt]=1;});
   return Object.keys(map).map(function(k){var c=map[k],sN=Object.keys(c.sent).length,oN=Object.keys(c.opened).length;
