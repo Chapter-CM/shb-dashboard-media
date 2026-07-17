@@ -52,7 +52,12 @@ function genMockPosts(){
 // userscript -> /api/ingest) làm 1 nguồn nội dung — làm tương tự ở đây để không bỏ sót phần lớn
 // bài viết thực tế (chủ yếu nằm ở group, không phải page).
 function fetchFbPosts(){
-  if(!process.env.SUPABASE_URL||!process.env.SUPABASE_SERVICE_KEY)return Promise.resolve(genMockPosts());
+  // BUG (17/07/2026): trước đây chỉ check SUPABASE_URL/SUPABASE_SERVICE_KEY (biến CŨ, không
+  // còn dùng từ khi chuyển MySQL) mà QUÊN check dbClient.isEnabled() như fb-dashboard.js đã
+  // làm đúng -> luôn rơi về genMockPosts() dù MySQL có dữ liệu thật, khiến "Top 5 bài Facebook"
+  // + KPI Facebook trên trang lãnh đạo hiện toàn dữ liệu demo (nhận ra qua tên bài mẫu cố định
+  // như "Cẩm nang tài chính cá nhân", "Lãi suất tiết kiệm mới"...).
+  if(!dbClient.isEnabled()&&(!process.env.SUPABASE_URL||!process.env.SUPABASE_SERVICE_KEY))return Promise.resolve(genMockPosts());
   return Promise.all([
     fbGet('/rest/v1/fb_posts?select=post_id,created_time,views,like_count,love_count,haha_count,wow_count,sad_count,angry_count,comments,shares,message,topic&order=created_time.desc&limit=800'),
     fbGet('/rest/v1/fb_group_posts?select=post_id,created_time,reach,engagement,comments,title&order=created_time.desc&limit=500'),
@@ -129,16 +134,44 @@ function deltaTxt(cur,prev,goodUp){
 }
 function chip(d){if(!d)return '';return '<span class="delta '+d.cls+'">'+d.txt+'</span>';}
 
-/* ── tổng hợp Facebook theo khoảng ngày ── */
-function fbAgg(posts,days){
+/* ── tổng hợp Facebook theo khoảng ngày ──
+ * "views" ưu tiên lấy từ CHUỖI NGÀY THẬT (fb_page_insights, khớp cách fb-dashboard.js đã
+ * sửa đúng — Tổng lượt xem theo NGÀY HOẠT ĐỘNG, không phải cộng dồn reach từng bài) để
+ * KHỚP số với dashboard Facebook chính. Fallback về cộng dồn per-post reach nếu chưa có
+ * dailyViews (VD mock/demo hoặc chưa quét page-insights). */
+function fbAgg(posts,days,dailyViews){
   var now=Date.now(),cutNow=days>0?now-days*864e5:0,cutPrev=days>0?cutNow-days*864e5:0;
+  function sumDaily(lo,hi){var t=0;(dailyViews||[]).forEach(function(p){if(p.ms>lo&&p.ms<=hi)t+=p.value;});return t;}
   function win(lo,hi){
-    var views=0,eng=0,n=0;
-    posts.forEach(function(p){var t=+new Date(p.created_time);if(!(t>lo&&t<=hi))return;n++;views+=p.views||0;
+    var viewsPerPost=0,eng=0,n=0;
+    posts.forEach(function(p){var t=+new Date(p.created_time);if(!(t>lo&&t<=hi))return;n++;viewsPerPost+=p.views||0;
       eng+=(p.like_count||0)+(p.love_count||0)+(p.haha_count||0)+(p.wow_count||0)+(p.sad_count||0)+(p.angry_count||0)+(p.comments||0)+(p.shares||0);});
+    var views=(dailyViews&&dailyViews.length)?sumDaily(lo,hi):viewsPerPost;
     return {views:views,eng:eng,n:n,er:views>0?pc(eng/views*100):0};
   }
   return {cur:win(cutNow,now),prev:win(cutPrev,cutNow)};
+}
+/* ── chuỗi "views theo ngày" THẬT từ fb_page_insights — bản rút gọn của buildPageInsights()
+ * trong fb-dashboard.js, chỉ lấy phần daily views (đủ dùng cho trang lãnh đạo). Regex khớp
+ * CHÍNH XÁC đầu tên field "views"/"views_..." — KHÔNG dùng /view/ lỏng lẻo (bug đã gặp: khớp
+ * nhầm "video_view_three_second_time_series"/"video_view_one_min_time_series"). */
+function buildDailyViews(rows){
+  if(!Array.isArray(rows)||!rows.length)return [];
+  var byDay={};
+  rows.forEach(function(r){
+    var s=r.series||{};
+    Object.keys(s).forEach(function(key){
+      if(!/^views?(_|$)/.test(key))return;
+      var pts=s[key]&&s[key].points;
+      if(!Array.isArray(pts))return;
+      pts.forEach(function(p){var ms=new Date(p.start_time).getTime();if(ms&&byDay[ms]===undefined)byDay[ms]=p.value||0;});
+    });
+  });
+  return Object.keys(byDay).map(function(k){return {ms:+k,value:byDay[k]};}).sort(function(a,b){return a.ms-b.ms;});
+}
+function fetchFbPageInsights(){
+  if(!dbClient.isEnabled()&&(!process.env.SUPABASE_URL||!process.env.SUPABASE_SERVICE_KEY))return Promise.resolve([]);
+  return fbGet('/rest/v1/fb_page_insights?select=series,captured_at&order=captured_at.desc&limit=3000');
 }
 
 /* ── tổng hợp Email theo khoảng ngày (person-level, khớp logic hasSent/opened của email-dashboard.js) ── */
@@ -294,9 +327,9 @@ module.exports = async (req,res) => {
   res.setHeader('Content-Type','text/html; charset=utf-8');
   res.setHeader('Cache-Control','no-store');
   var days=parseInt((req.query&&req.query.days)||'30',10);if(isNaN(days))days=30;
-  var r=await Promise.all([fetchFbPosts(),fetchEmailLogs()]);
-  var posts=r[0],logs=r[1];
-  var fb=fbAgg(posts,days),email=emailAgg(logs,days);
+  var r=await Promise.all([fetchFbPosts(),fetchEmailLogs(),fetchFbPageInsights()]);
+  var posts=r[0],logs=r[1],dailyViews=buildDailyViews(r[2]);
+  var fb=fbAgg(posts,days,dailyViews),email=emailAgg(logs,days);
   var cross=crossover(posts,logs,days);
   var insights=buildInsights(fb,email);
   var now=new Date().toLocaleDateString('vi-VN',{month:'long',year:'numeric'});
