@@ -137,6 +137,16 @@
 
   function enqueue(label, body) { QUEUE.push({ label: label, body: body }); flush(); badge(); }
 
+  // Gửi LẠI toàn bộ dữ liệu đã gom qua bridge (dùng khi server lỗi xong đã fix,
+  // khỏi cuộn lại từ đầu): gõ SHBCL_resend() trong Console.
+  W.SHBCL_resend = function () {
+    okCount = 0; failCount = 0;
+    for (var i = 0; i < POSTS.length; i += 25) QUEUE.push({ label: 'bài ' + (i + 1) + '–' + Math.min(i + 25, POSTS.length), body: POSTS.slice(i, i + 25) });
+    PAGES.forEach(function (p, i) { QUEUE.push({ label: 'page metrics #' + (i + 1), body: p }); });
+    log('resend: xếp lại ' + QUEUE.length + ' lô (' + POSTS.length + ' bài + ' + PAGES.length + ' page).');
+    openBridge(); flush();
+  };
+
   W.addEventListener('message', function (ev) {
     if (ev.origin !== BRIDGE_ORIGIN) return;
     var m = ev.data || {};
