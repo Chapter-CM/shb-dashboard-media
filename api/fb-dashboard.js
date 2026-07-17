@@ -136,7 +136,12 @@ function buildPageInsights(rows) {
     Object.keys(s).forEach(function (key) {
       var pts = s[key] && s[key].points;
       if (!Array.isArray(pts) || !pts.length) return;
-      var norm = /interaction/.test(key) ? 'interactions' : /follow/.test(key) ? 'followers' : /view/.test(key) ? 'views' : key;
+      // Khớp CHÍNH XÁC đầu tên field, KHÔNG dùng match lỏng (bug đã gặp: /view/ khớp
+      // nhầm cả "video_view_three_second_time_series"/"video_view_one_min_time_series"
+      // — 2 chỉ số khác hẳn "views_time_series" — gây dồn nhầm chung 1 rổ, ngày nào bắt
+      // trước (dù là video_view=0) chặn mất giá trị views thật, làm tổng bị hụt so với
+      // số Facebook tự hiện).
+      var norm = /^interactions?(_|$)/.test(key) ? 'interactions' : /^followers?(_|$)/.test(key) ? 'followers' : /^views?(_|$)/.test(key) ? 'views' : key;
       if (!byDay[norm]) byDay[norm] = {};
       pts.forEach(function (p) { var ms = new Date(p.start_time).getTime(); if (ms && byDay[norm][ms] === undefined) byDay[norm][ms] = p.value || 0; });
     });
