@@ -1,5 +1,39 @@
 # HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 17/07/2026)
 
+## 🔧 17/07 tối — Audit đầy đủ cấu trúc dữ liệu Facebook (mọi field dashboard đọc) — 2 fix xong, 2 việc còn thiếu cần quét thêm
+
+**Bối cảnh:** User lo ngại cách quét (Content Library + sweep chart) không đủ khớp cấu trúc dữ liệu
+như bản Vercel cũ. Đã audit toàn bộ bằng cách `grep` mọi field `DATA.*`/`p.*`/`pageInsights.*` mà
+`api/fb-dashboard.js` đọc, đối chiếu với dữ liệu thật script bắt được (qua log Console thật, không
+đoán). Kết quả đầy đủ:
+
+| Chiều dữ liệu | Nguồn quét | Trạng thái |
+|---|---|---|
+| Bài viết per-post (reach/viewers/engagement tổng/comments) | Content Library | ✅ Đủ (90 bài) |
+| Reaction chi tiết/shares/replies/video watch per-post | — | ⚪ Facebook Content Library KHÔNG cung cấp (chỉ tổng engagement gộp) — bản Vercel cũ dùng CÙNG nguồn nên cũng thiếu y hệt, KHÔNG PHẢI lỗi phát sinh khi migrate, đừng cố quét thêm chỗ này |
+| Per-post metrics phụ (`impression`,`net_follow`,`video_view_*`) | `entity_insights` trong Content Library | ✅ Xác nhận thật qua log |
+| Lượt xem theo ngày (`PS.views`) | Tab **Lượt xem** | ✅ Xác nhận thật (đã có coverage check tự đếm % ngày đã phủ) |
+| **Lượt tương tác theo ngày (`PS.interactions`)** | Tab **Lượt tương tác** | ⚠️ **CHƯA XÁC NHẬN THẬT** — lần thử AUTOPILOT (đã gỡ) bấm nhầm vào submenu "Công cụ quản lý bình luận" (dùng để duyệt/trả lời comment, KHÔNG có chỉ số) thay vì trang chỉ số thật (URL đúng dạng `.../profile_insights/interactions/`) |
+| Follower + follower theo ngày | Tab **Đối tượng** | ✅ Đã sửa code (`api/fb-dashboard.js` `loadData()`) đọc từ `fb_page_insights` (bảng MỚI) thay vì `fb_page_snapshots` (bảng CŨ không còn ai ghi vào — trước đó follower LUÔN ra số mock giả dù phần khác đã thật). CẦN xác nhận đã ghé + quét đủ tab Đối tượng để có số thật. |
+| Nhân khẩu học tuổi/giới (`pi.ageGender`, key `followers_by_age_gender`) | Tab **Đối tượng** | ⚠️ Cần xác nhận đã ghé + quét |
+| Livestream (`lives[]`) | — | ❌ CHƯA CÓ đường ingest nào (kể cả code gốc/mapSupabase() hard-code `lives:[]`) — không phải lỗi migrate, là gap có từ trước. Chỉ cần làm nếu SHB Một Nhà thực sự có livestream cần theo dõi (hỏi user trước khi làm, việc lớn: cần bảng DB mới + route ingest mới). |
+
+**Đã sửa xong (`api/fb-dashboard.js`, commit `2173719`):** follower/series ưu tiên đọc từ
+`data.pageInsights.follower.total`/`folDaily` (bảng `fb_page_insights`, có dữ liệu thật) thay vì mù
+quáng dùng bảng `fb_page_snapshots` cũ luôn rỗng → luôn rơi về `genMock()` fallback. Không thay đổi gì
+khi chưa có dữ liệu thật (an toàn, không regression).
+
+**Việc đầu tiên phiên sau:**
+1. Hỏi user đã vào ĐÚNG trang "Lượt tương tác" (không phải "Công cụ quản lý bình luận") + tab "Đối
+   tượng" + quét (`SHBCL_sweep()` hoặc nút "🔄 Quét trang này") tới coverage gần 100% chưa.
+2. Sau khi quét xong, chạy lại pipeline `sync_data`, F5 dashboard `#fb` → xem mục **"Sức khỏe"** (dòng
+   chẩn đoán tự động trong code, dòng ~960-965 `api/fb-dashboard.js`) — sẽ tự báo
+   `Page Insights (views/viewers): OK` hoặc `Cần check` — dùng đúng dòng này để xác nhận đã đủ dữ
+   liệu, khỏi đoán mò như các lần trước.
+3. Hỏi user có cần mục Livestream không — nếu không thì bỏ qua hẳn gap này, không cần nhắc lại.
+
+---
+
 ## 🔧 17/07 — Facebook: ĐÃ nạp được dữ liệu thật qua mạng nội bộ (90 bài), CÒN 1 sai lệch số "Tổng lượt xem" cần đối chuẩn — ĐANG dở, tiếp phiên sau
 
 **Bối cảnh:** User xin được quyền đăng nhập Facebook trên máy công ty (có mạng nội bộ NHS) — nối
