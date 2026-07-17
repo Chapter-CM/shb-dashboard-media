@@ -1,8 +1,28 @@
 // ================================================================
-// BẢN CHẠY TAY QUA CONSOLE (không cần Tampermonkey) — dán nguyên file
-// này vào DevTools Console (F12) trên trang facebook.com rồi Enter.
-// Phải làm lại mỗi lần mở tab mới (KHÔNG tự động/không lưu như bản
-// Tampermonkey gốc: tools/shb-content-library.user.js).
+// BẢN CHẠY QUA CONSOLE HOẶC BOOKMARKLET (không cần Tampermonkey — máy
+// công ty chặn cài extension qua Group Policy, xem HANDOFF.md 14/07).
+//
+// ► CÁCH 1 — Console (F12): dán nguyên file này vào DevTools Console
+//   trên trang facebook.com rồi Enter.
+// ► CÁCH 2 — Bookmarklet (khuyên dùng, KHÔNG cần mở DevTools mỗi lần):
+//   biến file này thành 1 nút Bookmark trên thanh trình duyệt, từ nay
+//   chỉ cần BẤM NÚT đó (không gõ lệnh gì) mỗi khi cần gom dữ liệu.
+//   Cách tạo (làm 1 lần):
+//   1. Chuột phải thanh Bookmark → "Thêm trang" (Add page).
+//   2. Tên: "SHB Gom FB" (tuỳ ý). URL: dán TOÀN BỘ nội dung file
+//      tools/shb-bookmarklet.txt (đã được đóng gói sẵn, gửi kèm) vào ô URL.
+//   3. Lưu. Từ nay: mở Facebook → Công cụ chuyên nghiệp → BẤM nút
+//      Bookmark đó (không cần F12) — script tự chạy y hệt cách 1, có
+//      thêm nút "🔄 Quét trang này" ngay trên ô SHB góc dưới phải để
+//      quét chart bằng 1 cú bấm (không cần gõ SHBCL_sweep() nữa).
+//   Lưu ý: mỗi khi Facebook CHUYỂN SANG TRANG MỚI (đổi URL/F5), trình
+//   duyệt không tự chạy lại script (vì không phải extension) — bấm lại
+//   đúng nút Bookmark đó 1 lần nữa trên trang mới là được.
+//
+// Phải làm lại (bấm bookmark / dán Console) mỗi lần mở tab mới hoặc
+// chuyển trang (KHÔNG tự động/không lưu như bản Tampermonkey gốc:
+// tools/shb-content-library.user.js — bản đó auto-chạy mọi lúc nhưng
+// cần cài extension, hiện đang bị chặn).
 //
 // ⚠️ 17/07/2026 — CSP của facebook.com CHẶN fetch tới domain ngoài từ
 // Console (Tampermonkey vượt được nhờ GM_xmlhttpRequest, Console thì
@@ -114,7 +134,15 @@
     }
     b.innerHTML = '<b style="color:#e11d2a">SHB</b> gom: ' + POSTS.length + ' bài · ' + PAGES.length + ' page | ' +
       (bridgeReady ? '🟢 đã nối' : '🔴 <u>bấm để nối bridge</u>') +
-      ' | ✅' + okCount + (failCount ? ' ❌' + failCount : '') + (QUEUE.length ? ' | chờ gửi: ' + QUEUE.length : '');
+      ' | ✅' + okCount + (failCount ? ' ❌' + failCount : '') + (QUEUE.length ? ' | chờ gửi: ' + QUEUE.length : '') +
+      ' <button id="shb-cl-sweep-btn" style="margin-left:6px;background:linear-gradient(90deg,#e11d2a,#fb7427);' +
+      'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🔄 Quét trang này</button>';
+    var btn = document.getElementById('shb-cl-sweep-btn');
+    if (btn) btn.onclick = function (ev) {
+      ev.stopPropagation();
+      btn.disabled = true; btn.textContent = '⏳ đang quét...';
+      W.SHBCL_sweep().then(function () { btn.disabled = false; btn.textContent = '🔄 Quét trang này'; });
+    };
   }
 
   function openBridge() {
