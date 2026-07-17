@@ -4,23 +4,28 @@
 // Phải làm lại mỗi lần mở tab mới (KHÔNG tự động/không lưu như bản
 // Tampermonkey gốc: tools/shb-content-library.user.js).
 //
-// ⚠️ Đổi 17/07/2026: CSP của facebook.com CHẶN fetch tới domain ngoài
-// từ Console (Tampermonkey vượt được nhờ GM_xmlhttpRequest, Console
-// thì không). Vì vậy bản này KHÔNG gửi trực tiếp nữa mà chỉ GOM dữ
-// liệu vào bộ đệm. Quy trình 2 bước:
-//   1. Trên tab Facebook: dán script này → cuộn hết bài → gõ
-//      copy(SHBCL_export())  → dữ liệu đã nằm trong clipboard.
-//   2. Mở tab dashboard nội bộ (cm-dashboard.dev-saha.aws.shb.com.vn)
-//      → dán tools/shb-ingest-upload.console.js → dán clipboard vào ô
-//      hiện ra → bấm Gửi (cùng domain nên không bị CSP chặn).
+// ⚠️ 17/07/2026 — CSP của facebook.com CHẶN fetch tới domain ngoài từ
+// Console (Tampermonkey vượt được nhờ GM_xmlhttpRequest, Console thì
+// không), nhưng KHÔNG chặn postMessage. Bản này TỰ ĐỘNG đẩy dữ liệu
+// qua cửa sổ cầu nối /ingest-bridge (domain dashboard nội bộ — cần
+// deploy server/ingest-server.js + nginx.conf bản 17/07 trước):
+// dán script → cửa sổ bridge tự mở → cuộn bài → dữ liệu tự lên MySQL.
+// Theo dõi ở ô "SHB" góc dưới phải (🟢 đã nối / ✅ số lô đã gửi).
+// Đường lui nếu bridge chưa deploy: copy(SHBCL_export()) rồi dán vào
+// tools/shb-ingest-upload.console.js trên tab dashboard.
 // ================================================================
 
 (function () {
   'use strict';
 
   // ── CẤU HÌNH ──────────────────────────────────────────────────────────────
-  // 17/07/2026: KHÔNG còn INGEST/SECRET ở đây — bản này chỉ GOM dữ liệu
-  // (CSP Facebook chặn gửi trực tiếp). Gửi bằng tools/shb-ingest-upload.console.js.
+  // 17/07/2026 (bản 2 — TỰ ĐỘNG qua BRIDGE): CSP Facebook chặn fetch trực tiếp,
+  // nhưng KHÔNG chặn postMessage. Script tự mở cửa sổ /ingest-bridge (domain nội
+  // bộ) và đẩy dữ liệu qua đó — không cần copy/dán nữa. Nếu bridge chưa deploy
+  // (404) thì vẫn còn đường lui: copy(SHBCL_export()) + shb-ingest-upload.console.js.
+  var BRIDGE_URL = 'https://cm-dashboard.dev-saha.aws.shb.com.vn/ingest-bridge';
+  var BRIDGE_ORIGIN = 'https://cm-dashboard.dev-saha.aws.shb.com.vn';
+  var SECRET = '500a13c1-4b4a-4da0-a4c7-c4200e51b66a';   // INGEST_SECRET noi bo SHB
   var GROUP_ID = '503009407721580';          // SHB Một Nhà
   var AUTO_SCROLL = true;                     // tự cuộn để lazy-load hết bài trong dải ngày đang chọn
   var DEBUG = true;
@@ -87,11 +92,61 @@
   var PAGES = [];  // bộ đệm page-level metrics đã gom
 
   // Xuất toàn bộ dữ liệu đã gom (chuỗi JSON) — dùng: copy(SHBCL_export())
+  // (đường lui khi bridge chưa deploy/không mở được)
   W.SHBCL_export = function () {
     var out = JSON.stringify({ posts: POSTS, pages: PAGES });
     log('export: ' + POSTS.length + ' bài + ' + PAGES.length + ' page metrics (' + out.length + ' ký tự). Gõ copy(SHBCL_export()) để đưa vào clipboard nếu chưa.');
     return out;
   };
+
+  // ── BRIDGE: tự gửi qua cửa sổ /ingest-bridge bằng postMessage ─────────────
+  var bridgeWin = null, bridgeReady = false, QUEUE = [], msgId = 0, okCount = 0, failCount = 0;
+
+  function badge() {
+    var b = document.getElementById('shb-cl-badge');
+    if (!b) {
+      b = document.createElement('div');
+      b.id = 'shb-cl-badge';
+      b.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:999999;background:#fff;border:2px solid #e11d2a;border-radius:10px;padding:8px 12px;font:12px system-ui;color:#111;box-shadow:0 4px 20px rgba(0,0,0,.25);cursor:pointer';
+      b.title = 'Bấm để mở lại cửa sổ bridge nếu bị chặn popup';
+      b.onclick = openBridge;
+      document.body.appendChild(b);
+    }
+    b.innerHTML = '<b style="color:#e11d2a">SHB</b> gom: ' + POSTS.length + ' bài · ' + PAGES.length + ' page | ' +
+      (bridgeReady ? '🟢 đã nối' : '🔴 <u>bấm để nối bridge</u>') +
+      ' | ✅' + okCount + (failCount ? ' ❌' + failCount : '') + (QUEUE.length ? ' | chờ gửi: ' + QUEUE.length : '');
+  }
+
+  function openBridge() {
+    if (bridgeWin && !bridgeWin.closed) { try { bridgeWin.focus(); } catch (e) {} return; }
+    bridgeReady = false;
+    bridgeWin = W.open(BRIDGE_URL, 'shb_bridge', 'width=420,height=320');
+    if (!bridgeWin) log('⚠️ Popup bị chặn — bấm vào ô SHB góc dưới phải để mở bridge.');
+    badge();
+  }
+
+  function flush() {
+    if (!bridgeReady || !bridgeWin || bridgeWin.closed) return;
+    while (QUEUE.length) {
+      var j = QUEUE.shift();
+      try { bridgeWin.postMessage({ type: 'shb-ingest', id: ++msgId, label: j.label, secret: SECRET, body: j.body }, BRIDGE_ORIGIN); }
+      catch (e) { QUEUE.unshift(j); log('bridge postMessage lỗi', e); break; }
+    }
+    badge();
+  }
+
+  function enqueue(label, body) { QUEUE.push({ label: label, body: body }); flush(); badge(); }
+
+  W.addEventListener('message', function (ev) {
+    if (ev.origin !== BRIDGE_ORIGIN) return;
+    var m = ev.data || {};
+    if (m.type === 'shb-bridge-ready') { bridgeReady = true; log('🟢 Bridge đã nối — dữ liệu sẽ tự đẩy lên MySQL.'); flush(); }
+    if (m.type === 'shb-ingest-result') {
+      if (m.status >= 200 && m.status < 300) { okCount++; log('✅ ingest', m.status, m.label); }
+      else { failCount++; log('❌ ingest', m.status, m.label, m.text); }
+      badge();
+    }
+  });
 
   function handleLibrary(lib) {
     if (!lib || !lib.edges || !lib.edges.length) return;
@@ -104,8 +159,9 @@
       rows.push(row);
     });
     if (!rows.length) return;
-    log('gom', rows.length, 'bài (tổng ' + (POSTS.length + rows.length) + ') — chưa gửi, sẽ export bằng copy(SHBCL_export())');
     POSTS = POSTS.concat(rows);
+    log('gom', rows.length, 'bài (tổng ' + POSTS.length + ') — đẩy qua bridge');
+    enqueue('bài x' + rows.length, rows);
   }
 
   // Tìm prodash_content_library ở các vị trí có thể: data.node.* hoặc data.*
@@ -148,8 +204,10 @@
     if (sig === pageLastSent) return; pageLastSent = sig;
     log('PAGE metrics:', acc.metrics, '| series:', Object.keys(acc.series));
     Object.keys(acc.series).forEach(function (k) { log('  series[' + k + ']:', JSON.stringify(acc.series[k]).slice(0, 400)); });
-    PAGES.push({ kind: 'page', date_range: rangeFromUrl(), metrics: acc.metrics, series: acc.series });
-    log('gom PAGE metrics (tổng ' + PAGES.length + ' bản) — chưa gửi, sẽ export bằng copy(SHBCL_export())');
+    var payload = { kind: 'page', date_range: rangeFromUrl(), metrics: acc.metrics, series: acc.series };
+    PAGES.push(payload);
+    log('gom PAGE metrics (tổng ' + PAGES.length + ' bản) — đẩy qua bridge');
+    enqueue('page metrics', payload);
   }
 
   function tryParse(text) {
@@ -245,7 +303,10 @@
   } catch (e) {}
   if (/professional_dashboard/.test(location.pathname)) tourTick();
 
-  log('Bản console đã chạy — chế độ GOM (không gửi trực tiếp vì CSP Facebook). ' +
-      'Cuộn hết bài, rồi gõ: copy(SHBCL_export()) — sau đó dán vào uploader trên tab dashboard. ' +
-      'Bấm Ctrl+Shift+Y để tự quét hết các mục Professional Dashboard.');
+  openBridge(); // mở cửa sổ bridge ngay (nếu bị chặn popup: bấm ô SHB góc dưới phải)
+  badge();
+  log('Bản console (bridge) đã chạy — dữ liệu tự đẩy lên MySQL qua cửa sổ bridge. ' +
+      'Nếu ô SHB góc dưới phải báo 🔴, bấm vào đó để mở bridge. ' +
+      'Đường lui nếu bridge lỗi: copy(SHBCL_export()) + shb-ingest-upload.console.js. ' +
+      'Ctrl+Shift+Y = tự quét hết các mục Professional Dashboard.');
 })();
