@@ -469,9 +469,39 @@
     var cands = Array.from(document.querySelectorAll('a[role="link"], a, [role="link"]'));
     return cands.find(function (a) { return (a.textContent || '').trim() === label; }) || null;
   }
+  // Facebook KHÔNG giữ query date_range/start_date/end_date khi điều hướng SPA sang
+  // tab khác (tự rơi về mặc định "28 ngày qua") — đây là hành vi của chính Facebook,
+  // không sửa được từ script. Mù đoán DOM để tự bấm lại bộ chọn ngày rất dễ vỡ (không
+  // thấy được cấu trúc thật lúc chạy) → thay vào đó: PHÁT HIỆN đúng lúc ngày bị reset
+  // và TẠM DỪNG, hiện overlay yêu cầu tự chọn lại "Tuỳ chỉnh" (2 cú bấm, Facebook nhớ
+  // sẵn khoảng ngày vừa chọn lần trước) rồi bấm nút để script tiếp tục quét tab đó.
+  function rangeMatches(want) {
+    var have = parseUrlRange();
+    return !!(have && want && have.start === want.start && have.end === want.end);
+  }
+  function waitForDateFix(label, want) {
+    return new Promise(function (resolve) {
+      var ov = document.createElement('div');
+      ov.id = 'shb-cl-datewait';
+      ov.style.cssText = 'position:fixed;bottom:64px;right:16px;z-index:999999;background:#fff8e1;border:2px solid #f5a623;border-radius:10px;padding:12px 14px;font:13px system-ui;color:#111;box-shadow:0 4px 20px rgba(0,0,0,.3);max-width:320px';
+      ov.innerHTML = '⏸️ <b>Tab "' + esc0(label) + '"</b> đã rơi về "28 ngày qua" (Facebook không giữ khoảng ngày khi chuyển tab).<br>' +
+        '<b>Hãy tự chọn lại "Tuỳ chỉnh"</b> đúng khoảng ngày cần, rồi bấm nút dưới để quét tiếp:' +
+        '<div style="margin-top:8px;text-align:right"><button id="shb-cl-datewait-btn" style="background:linear-gradient(90deg,#e11d2a,#fb7427);color:#fff;border:0;border-radius:6px;padding:5px 12px;font:12px system-ui;cursor:pointer">✅ Đã chọn xong — Quét tab này</button></div>';
+      document.body.appendChild(ov);
+      var poll = setInterval(function () { if (rangeMatches(want)) finish(); }, 800); // tự đóng ngay khi phát hiện đã khớp, khỏi cần bấm
+      function finish() {
+        clearInterval(poll);
+        var el = document.getElementById('shb-cl-datewait'); if (el) el.remove();
+        resolve();
+      }
+      document.getElementById('shb-cl-datewait-btn').onclick = finish;
+    });
+  }
+  function esc0(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
   W.SHBCL_sweepAllTabs = async function (tabs) {
     tabs = tabs || INSIGHT_TABS;
-    log('SHBCL_sweepAllTabs: sẽ đi qua ' + tabs.length + ' tab: ' + tabs.join(', '));
+    var wantRange = parseUrlRange(); // khoảng ngày Tuỳ chỉnh đang chọn ở tab BAN ĐẦU — dùng làm chuẩn cho các tab sau
+    log('SHBCL_sweepAllTabs: sẽ đi qua ' + tabs.length + ' tab: ' + tabs.join(', ') + (wantRange ? '' : ' — ⚠️ chưa phát hiện khoảng "Tuỳ chỉnh" ở tab hiện tại, sẽ không kiểm tra được ngày bị reset ở các tab sau.'));
     for (var i = 0; i < tabs.length; i++) {
       var label = tabs[i];
       var link = findSidebarLink(label);
@@ -479,6 +509,11 @@
       log('➡️  [' + (i + 1) + '/' + tabs.length + '] Chuyển sang tab "' + label + '"...');
       link.click();
       await sleep(1800); // đợi SPA đổi route + gọi API đầu tiên của tab mới
+      if (wantRange && !rangeMatches(wantRange)) {
+        log('⏸️  Tab "' + label + '" rơi về mặc định (không phải khoảng Tuỳ chỉnh đã chọn) — chờ bạn chọn lại...');
+        await waitForDateFix(label, wantRange);
+        await sleep(1200); // đợi chart vẽ lại theo ngày mới trước khi quét
+      }
       await W.SHBCL_sweep();
     }
     log('✅ SHBCL_sweepAllTabs: xong tất cả tab — tổng đã gom: ' + POSTS.length + ' bài, ' + PAGES.length + ' page. Gõ SHBCL_coverage() để xem coverage từng chỉ số.');
