@@ -388,28 +388,29 @@
 
   // ── CHẨN ĐOÁN: bắt response khi bấm vào TỪNG BÀI trong Thư viện nội dung — trang chi
   // tiết 1 bài có breakdown Cảm xúc theo từng loại (Like/Love/Haha...) mà request danh
-  // sách (Content Library) không có. Đã xác nhận field thật là "top_reactions.summary"
-  // (mỗi phần tử: {reaction_count, reaction:{id,localized_name}}) — GIỮ LẠI CẢ request
-  // body (không chỉ response) để biết request nào ứng với bài nào (field "id" trong
-  // variables — thường là feedback id dạng base64 "feedback:<số>"), phục vụ viết
-  // SHBCL_fetchAllPostReactions() replay cho toàn bộ bài sau này.
+  // sách (Content Library) không có. Field thật là "top_reactions":{"count":N,"summary":
+  // [{reaction_count, reaction:{id,localized_name}}]} — CHÚ Ý: bình luận cũng có
+  // "top_reactions" nhưng dạng KHÁC ("edges":[{reaction_count,node:{id}}], không có
+  // breakdown loại) — lọc chặt theo '"top_reactions":{"count"' để chỉ bắt đúng của BÀI
+  // VIẾT, không lẫn bình luận. GIỮ LẠI CẢ request body để biết request ứng với bài nào.
   var LAST_POST_RESPONSES = [];
   function maybeCapturePostDetail(text, reqUrl, reqBody) {
-    if (text.indexOf('top_reactions') < 0) return; // lọc đúng response có breakdown cảm xúc, bỏ qua response "reaction" khác (reactors, v.v.)
+    if (text.indexOf('"top_reactions":{"count"') < 0) return; // chỉ bắt "top_reactions" của BÀI (có count+summary), bỏ qua dạng "edges" của bình luận
     LAST_POST_RESPONSES.unshift({ url: reqUrl, body: reqBody, text: text, ts: Date.now() });
     if (LAST_POST_RESPONSES.length > 5) LAST_POST_RESPONSES.length = 5;
   }
   W.SHBCL_lastPostReactions = function () {
-    if (!LAST_POST_RESPONSES.length) { log('⚠️ Chưa bắt được response nào có "top_reactions" — vào tab Thư viện nội dung, bấm mở chi tiết 1 bài (thấy breakdown Cảm xúc như Like/Love/Haha) rồi gọi lại lệnh này.'); return []; }
+    if (!LAST_POST_RESPONSES.length) { log('⚠️ Chưa bắt được response nào có breakdown Cảm xúc của BÀI (top_reactions dạng count+summary) — vào tab Thư viện nội dung, bấm mở chi tiết 1 bài (thấy breakdown Cảm xúc như Like/Love/Haha ngay dưới bài, KHÔNG phải dưới 1 bình luận) rồi gọi lại lệnh này.'); return []; }
     LAST_POST_RESPONSES.forEach(function (r, i) {
       var varsStr = '';
       try { varsStr = decodeURIComponent(String(r.body || '').split('&').filter(function (p) { return /^variables=/.test(p); })[0] || '').replace(/^variables=/, ''); } catch (e) {}
       var docIdM = String(r.body || '').match(/doc_id=(\d+)/);
+      var idx = r.text.indexOf('"top_reactions":{"count"');
       log('── response #' + i + ' (' + new Date(r.ts).toLocaleTimeString() + ') ──');
       log('url:', r.url);
       log('doc_id:', docIdM ? docIdM[1] : '(không thấy)');
       log('variables (JSON) của REQUEST:', varsStr || '(không tìm thấy — xem body thô)');
-      log('response (1500 ký tự quanh top_reactions):', r.text.slice(Math.max(0, r.text.indexOf('top_reactions') - 200), r.text.indexOf('top_reactions') + 1300));
+      log('response (600 ký tự TRƯỚC + 1200 SAU top_reactions — phần trước để tìm "id" của bài):', r.text.slice(Math.max(0, idx - 600), idx + 1200));
     });
     log('Gửi cả "variables (JSON)" và "response" của 1 request cho tôi (đã ẩn được token vì không dump nguyên body thô ở đây) để viết hàm replay cho toàn bộ bài.');
     return LAST_POST_RESPONSES;
