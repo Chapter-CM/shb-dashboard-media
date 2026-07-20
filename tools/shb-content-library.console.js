@@ -388,28 +388,36 @@
 
   // ── CHẨN ĐOÁN: bắt response khi bấm vào TỪNG BÀI trong Thư viện nội dung — trang chi
   // tiết 1 bài có breakdown Cảm xúc theo từng loại (Like/Love/Haha...) mà request danh
-  // sách (Content Library) không có. Chưa biết tên field/hình dạng thật nên CHỈ LƯU LẠI
-  // để xem trước qua SHBCL_lastPostReactions(), không đoán mù cách bóc tách.
+  // sách (Content Library) không có. Đã xác nhận field thật là "top_reactions.summary"
+  // (mỗi phần tử: {reaction_count, reaction:{id,localized_name}}) — GIỮ LẠI CẢ request
+  // body (không chỉ response) để biết request nào ứng với bài nào (field "id" trong
+  // variables — thường là feedback id dạng base64 "feedback:<số>"), phục vụ viết
+  // SHBCL_fetchAllPostReactions() replay cho toàn bộ bài sau này.
   var LAST_POST_RESPONSES = [];
-  function maybeCapturePostDetail(text, reqUrl) {
-    if (!/reaction/i.test(text)) return;
-    LAST_POST_RESPONSES.unshift({ url: reqUrl, text: text, ts: Date.now() });
+  function maybeCapturePostDetail(text, reqUrl, reqBody) {
+    if (text.indexOf('top_reactions') < 0) return; // lọc đúng response có breakdown cảm xúc, bỏ qua response "reaction" khác (reactors, v.v.)
+    LAST_POST_RESPONSES.unshift({ url: reqUrl, body: reqBody, text: text, ts: Date.now() });
     if (LAST_POST_RESPONSES.length > 5) LAST_POST_RESPONSES.length = 5;
   }
   W.SHBCL_lastPostReactions = function () {
-    if (!LAST_POST_RESPONSES.length) { log('⚠️ Chưa bắt được response nào có chữ "reaction" — vào tab Thư viện nội dung, bấm mở chi tiết 1 bài (thấy breakdown Cảm xúc như Like/Love/Haha) rồi gọi lại lệnh này.'); return []; }
+    if (!LAST_POST_RESPONSES.length) { log('⚠️ Chưa bắt được response nào có "top_reactions" — vào tab Thư viện nội dung, bấm mở chi tiết 1 bài (thấy breakdown Cảm xúc như Like/Love/Haha) rồi gọi lại lệnh này.'); return []; }
     LAST_POST_RESPONSES.forEach(function (r, i) {
+      var varsStr = '';
+      try { varsStr = decodeURIComponent(String(r.body || '').split('&').filter(function (p) { return /^variables=/.test(p); })[0] || '').replace(/^variables=/, ''); } catch (e) {}
+      var docIdM = String(r.body || '').match(/doc_id=(\d+)/);
       log('── response #' + i + ' (' + new Date(r.ts).toLocaleTimeString() + ') ──');
       log('url:', r.url);
-      log('nội dung (2000 ký tự đầu, tìm chữ "reaction" trong đó):', r.text.slice(0, 2000));
+      log('doc_id:', docIdM ? docIdM[1] : '(không thấy)');
+      log('variables (JSON) của REQUEST:', varsStr || '(không tìm thấy — xem body thô)');
+      log('response (1500 ký tự quanh top_reactions):', r.text.slice(Math.max(0, r.text.indexOf('top_reactions') - 200), r.text.indexOf('top_reactions') + 1300));
     });
-    log('Copy 1 đoạn quanh chữ "reaction" (kèm tên field bao quanh nó) gửi lại để xác định đúng cấu trúc — tránh đoán mù tên field.');
+    log('Gửi cả "variables (JSON)" và "response" của 1 request cho tôi (đã ẩn được token vì không dump nguyên body thô ở đây) để viết hàm replay cho toàn bộ bài.');
     return LAST_POST_RESPONSES;
   };
 
   function tryParse(text, reqUrl, reqBody) {
     text = String(text || '');
-    maybeCapturePostDetail(text, reqUrl);
+    maybeCapturePostDetail(text, reqUrl, reqBody);
     var hasLib = text.indexOf('prodash_content_library') > -1;
     var hasPage = /professional_dashboard/.test(location.pathname) &&
       (text.indexOf('MetricsQueryResult') > -1 || text.indexOf('TimeSeries') > -1);
