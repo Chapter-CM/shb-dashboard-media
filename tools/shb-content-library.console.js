@@ -197,12 +197,21 @@
       (bridgeReady ? '🟢 đã nối' : '🔴 <u>bấm để nối bridge</u>') +
       ' | ✅' + okCount + (failCount ? ' ❌' + failCount : '') + (QUEUE.length ? ' | chờ gửi: ' + QUEUE.length : '') +
       ' <button id="shb-cl-sweep-btn" style="margin-left:6px;background:linear-gradient(90deg,#e11d2a,#fb7427);' +
-      'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🔄 Quét trang này</button>';
+      'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🔄 Quét trang này</button>' +
+      ' <button id="shb-cl-sweepall-btn" style="margin-left:4px;background:#1877f2;' +
+      'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer" ' +
+      'title="Tự chuyển qua Lượt xem/Thu nhập/Lượt tương tác/Đối tượng/Nhắn tin/Thư viện nội dung và quét từng tab">🌐 Quét tất cả tab</button>';
     var btn = document.getElementById('shb-cl-sweep-btn');
     if (btn) btn.onclick = function (ev) {
       ev.stopPropagation();
       btn.disabled = true; btn.textContent = '⏳ đang quét...';
       W.SHBCL_sweep().then(function () { btn.disabled = false; btn.textContent = '🔄 Quét trang này'; });
+    };
+    var btnAll = document.getElementById('shb-cl-sweepall-btn');
+    if (btnAll) btnAll.onclick = function (ev) {
+      ev.stopPropagation();
+      btnAll.disabled = true; btnAll.textContent = '⏳ đang quét tất cả tab...';
+      W.SHBCL_sweepAllTabs().then(function () { btnAll.disabled = false; btnAll.textContent = '🌐 Quét tất cả tab'; });
     };
   }
 
@@ -447,9 +456,37 @@
         (cov && cov.gaps.length ? '⚠️ VẪN CÒN THIẾU dữ liệu — xem đoạn ngày ở dòng "Coverage" phía trên, cân nhắc rê chuột tay thêm đúng đoạn đó rồi bấm "🔄 Quét trang này" lại. ' : '') +
         'Xong thì bấm sang tab Insight kế tiếp, bấm lại nút Bookmark, rồi bấm "🔄 Quét trang này" (hoặc gõ SHBCL_sweep()) tiếp.');
   };
+  // ── QUÉT TỰ ĐỘNG QUA TẤT CẢ TAB — để logic dữ liệu của Công cụ chuyên nghiệp
+  // khớp với dashboard: dashboard gộp mọi chuỗi/metric THEO TÊN (views/interactions/
+  // followers/...), KHÔNG quan tâm lấy từ tab nào — nên chỉ cần đi hết các tab Insight
+  // 1 lần, script sẽ tự gom đủ views_time_series (tab Lượt xem), interactions_time_series
+  // (tab Lượt tương tác), followers + demographics (tab Đối tượng), thu nhập (tab Thu
+  // nhập)... KHÔNG cần đổi ngày thủ công cho từng tab: mỗi lần điều hướng SANG TAB MỚI
+  // là 1 lượt "trang mới mở" đối với React — luôn tự gọi API mới (khác vấn đề gặp ở tab
+  // đang đứng sẵn khi dán script, xem coverageReport()).
+  var INSIGHT_TABS = ['Lượt xem', 'Thu nhập', 'Lượt tương tác', 'Đối tượng', 'Nhắn tin', 'Thư viện nội dung'];
+  function findSidebarLink(label) {
+    var cands = Array.from(document.querySelectorAll('a[role="link"], a, [role="link"]'));
+    return cands.find(function (a) { return (a.textContent || '').trim() === label; }) || null;
+  }
+  W.SHBCL_sweepAllTabs = async function (tabs) {
+    tabs = tabs || INSIGHT_TABS;
+    log('SHBCL_sweepAllTabs: sẽ đi qua ' + tabs.length + ' tab: ' + tabs.join(', '));
+    for (var i = 0; i < tabs.length; i++) {
+      var label = tabs[i];
+      var link = findSidebarLink(label);
+      if (!link) { log('⚠️ Không tìm thấy tab "' + label + '" trong sidebar (tên có thể đã đổi, hoặc cần cuộn sidebar cho thấy) — bỏ qua, tự bấm tay tab này rồi gõ SHBCL_sweep().'); continue; }
+      log('➡️  [' + (i + 1) + '/' + tabs.length + '] Chuyển sang tab "' + label + '"...');
+      link.click();
+      await sleep(1800); // đợi SPA đổi route + gọi API đầu tiên của tab mới
+      await W.SHBCL_sweep();
+    }
+    log('✅ SHBCL_sweepAllTabs: xong tất cả tab — tổng đã gom: ' + POSTS.length + ' bài, ' + PAGES.length + ' page. Gõ SHBCL_coverage() để xem coverage từng chỉ số.');
+  };
   log('Sau khi TỰ BẤM TAY vào 1 tab Insight (Lượt xem/Lượt tương tác/Đối tượng/Thu nhập/Thư viện nội dung), ' +
       'bấm nút "🔄 Quét trang này" trên ô SHB (hoặc gõ SHBCL_sweep()) — tự quét LẶP LẠI tới khi đủ dữ liệu, ' +
-      'tự báo rõ nếu còn thiếu đoạn ngày nào. Gõ SHBCL_coverage() bất kỳ lúc nào để xem báo cáo hiện tại.');
+      'tự báo rõ nếu còn thiếu đoạn ngày nào. Gõ SHBCL_coverage() bất kỳ lúc nào để xem báo cáo hiện tại. ' +
+      'MUỐN QUÉT LUÔN TẤT CẢ TAB (khớp logic dashboard): gõ SHBCL_sweepAllTabs() — tự chuyển lần lượt qua Lượt xem/Thu nhập/Lượt tương tác/Đối tượng/Nhắn tin/Thư viện nội dung và quét từng tab.');
 
   openBridge(); // mở cửa sổ bridge ngay (nếu bị chặn popup: bấm ô SHB góc dưới phải)
   badge();
