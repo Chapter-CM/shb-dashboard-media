@@ -827,7 +827,7 @@ function heroRow(d,cur,prev,ser){
   var reactSum=cur.reduce(function(t,p){var rt=pmv(p,'reaction_total');return t+(rt>0?rt:reactTotal(p.react))+(p.shares||0);},0);
   var erViewsSum=cur.reduce(function(t,p){return t+(p.views||0);},0);
   var erAct=erViewsSum?pc(reactSum/erViewsSum*100):0;
-  var erSub='<span class="ksub-'+(erAct>=TARGET_ER?'up':'down')+'">'+(erAct>=TARGET_ER?'▲ đạt':'▼ dưới')+' mục tiêu '+TARGET_ER+'%</span>'+(reactSum===0&&cur.length?' <span style="font-size:9px;color:var(--faint)">· 0% vì chưa quét Cảm xúc chi tiết (SHBCL_fetchAllPostReactions)</span>':'');
+  var erSub=(reactSum===0&&cur.length?'<span style="font-size:9px;color:var(--faint)">chưa quét Cảm xúc chi tiết (SHBCL_fetchAllPostReactions)</span>':'');
   // ── sparklines ──
   var spkEng=(PS.interactions||[]).slice(-14).map(function(b){return b.value;});
   var spkViews=(PS.views||[]).slice(-14).map(function(b){return b.value;});
@@ -856,17 +856,13 @@ function heroRow(d,cur,prev,ser){
   var engWarn=engMiss?' · <span class="ksub-down">⚠ thiếu '+engMiss+' ngày</span>':'';
   // 20/07/2026: xác nhận trực tiếp trên Facebook — tab "Lượt xem" KHÔNG có thẻ "Người
   // xem" (unique viewers) nào cả (chỉ có Tổng lượt xem/Xem ≥3s/≥1 phút/Thời gian xem).
-  // Field "viewers" đang dùng KHÔNG rõ nguồn gốc thật — không tự tin hiển thị làm số
-  // chính thức nữa. Theo yêu cầu: còn dữ liệu thật (>0, đã từng bắt được) thì vẫn hiện,
-  // KHÔNG có thì thay bằng thẻ Lượt cảm xúc (đã có dữ liệu thật, đáng tin hơn).
-  var haveViewersV = viewersV > 0;
-  var reactCard = card('Lượt cảm xúc',tnum(reactSum),reactSum?'tổng cảm xúc kỳ này':'cần quét Cảm xúc chi tiết','Tổng Like/Love/Haha/Wow/Sad/Angry/Care của mọi bài trong kỳ.',{spark:null});
-  var viewersCard = card('Người xem',tnum(viewersV),(viewerDelta?viewerDelta+' so kỳ trước · ':'')+'duy nhất · cấp trang','Người xem duy nhất cấp trang (nguồn cần xác minh lại).',{spark:spkViews});
+  // Field "viewers" đang dùng KHÔNG rõ nguồn gốc thật, kể cả khi có số cũ đã bắt được
+  // vẫn không đáng tin — bỏ hẳn thẻ này, thay bằng Lượt cảm xúc (đã có dữ liệu thật).
   var k=[
     card('Lượt tương tác',tnum(engV),(engDelta?engDelta+' so kỳ trước':'tổng tương tác kỳ này')+engWarn,engAct!=null?('Tổng tương tác Facebook báo cho trang, theo ngày hoạt động.'+(engMiss?' ⚠ Thiếu '+engMiss+' ngày dữ liệu — quét bù ở tab Lượt tương tác.':'')):'Quét lại tab Lượt tương tác để có số này.',{spark:spkEng}),
     card('ER (Engagement Rate)',erAct+'%',(erDelta?erDelta+' so kỳ trước · ':'')+erSub,'(Cảm xúc + Chia sẻ) ÷ Lượt xem, không tính bình luận. Cần quét Cảm xúc chi tiết mới có số.',{spark:spkEr}),
     card('Lượt tiếp cận',tnum(reachSum),(reachDelta?reachDelta+' so kỳ trước · ':'')+'tỉ lệ tiếp cận '+reachRatio+'%','Chỉ số riêng dashboard: tổng người xem mọi bài, TÍNH CẢ TRÙNG. Không phải Reach chuẩn Facebook.',{spark:spkReach}),
-    haveViewersV?viewersCard:reactCard,
+    card('Lượt cảm xúc',tnum(reactSum),reactSum?'tổng cảm xúc kỳ này':'cần quét Cảm xúc chi tiết','Tổng Like/Love/Haha/Wow/Sad/Angry/Care của mọi bài trong kỳ.',{spark:null}),
     card('Lượt hiển thị',tnum(impV),(impDelta?impDelta+' so kỳ trước · ':'')+'tổng từ các bài','Số lần nội dung hiển thị trên màn hình — khác Lượt xem (không tính lượt xem thật).',{spark:spkImp}),
     card('Bình luận',tnum(cmtV),(cmtDelta?cmtDelta+' so kỳ trước · ':'')+'tổng từ các bài','Tổng bình luận, cộng dồn từ các bài trong kỳ.',{spark:spkCmt})
   ].join('');
