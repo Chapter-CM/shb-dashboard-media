@@ -146,7 +146,7 @@
     var totalDays = Math.round((range.end - range.start) / 864e5) + 1;
     var out = {};
     var fams = Object.keys(famCov);
-    if (!fams.length) { if (!silent) log('⚠️ Chưa bắt được chuỗi theo ngày nào — quét chart (nút "🔄 Quét trang này") rồi kiểm tra lại.'); return null; }
+    if (!fams.length) { if (!silent) log('⚠️ Chưa bắt được chuỗi theo ngày nào. Script chỉ bắt được request MẠNG MỚI — nếu bạn dán script SAU KHI chart đã tải xong (mở tab từ trước) sẽ không bắt được gì dù rê chuột bao nhiêu. Hãy ĐỔI KHOẢNG NGÀY (vd bấm "7N" rồi bấm lại "Tuỳ chỉnh" chọn đúng khoảng cần) để ép Facebook gọi lại API, thấy chart vẽ lại rồi mới bấm "🔄 Quét trang này".'); return null; }
     fams.forEach(function (fam) {
       var covered = famCov[fam];
       var coveredDays = 0, gaps = [], gapStart = null;
@@ -421,16 +421,23 @@
     Object.keys(cov).forEach(function (fam) { if (!worst || cov[fam].coveredDays < worst.coveredDays) worst = cov[fam]; });
     return worst;
   }
+  // Trang biểu đồ Insight (Lượt xem/Lượt tương tác/Đối tượng/Thu nhập) hiển thị
+  // 1 chart tĩnh, KHÔNG cần cuộn tải thêm nội dung — cuộn xuống chỉ làm mất chart
+  // khỏi khung nhìn (script tìm SVG lớn nhất ĐANG HIỂN THỊ), khiến sweep không
+  // bắt được gì. Chỉ trang Thư viện nội dung (danh sách bài, infinite-scroll)
+  // mới cần autoScrollOnce.
+  function isInsightChartPage() { return /professional_dashboard\/insights/.test(location.pathname); }
   W.SHBCL_sweep = async function () {
     var MAX_TRY = 6, tries = 0, cov = null;
-    log('SHBCL_sweep: bắt đầu quét + tự kiểm tra coverage (tối đa ' + MAX_TRY + ' lượt)...');
+    var skipScroll = isInsightChartPage();
+    log('SHBCL_sweep: bắt đầu quét + tự kiểm tra coverage (tối đa ' + MAX_TRY + ' lượt)...' + (skipScroll ? ' (trang biểu đồ — bỏ qua bước tự cuộn)' : ''));
     while (tries < MAX_TRY) {
       tries++;
-      await autoScrollOnce(2500);
+      if (!skipScroll) await autoScrollOnce(2500);
       await sweepVisibleCharts(2);
       badge();
       cov = worstCoverage(coverageReport(true));
-      if (!cov) { log('✓ Trang này không phải khoảng "Tùy chỉnh" (không kiểm tra được coverage) — xong sau 1 lượt quét.'); break; }
+      if (!cov) { log('✓ Không kiểm tra được coverage (không phải khoảng "Tùy chỉnh", HOẶC chưa bắt được request mạng nào — xem chi tiết bằng SHBCL_coverage()) — xong sau 1 lượt quét.'); break; }
       log('  lượt ' + tries + '/' + MAX_TRY + ': coverage ' + cov.coveredDays + '/' + cov.totalDays + ' ngày (' + cov.pct + '%)' + (cov.gaps.length ? ', còn ' + cov.gaps.length + ' đoạn thiếu' : ''));
       if (!cov.gaps.length) break;
     }
