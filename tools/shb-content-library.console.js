@@ -711,6 +711,30 @@
     var cands = Array.from(document.querySelectorAll('a[role="link"], a, [role="link"]'));
     return cands.find(function (a) { return (a.textContent || '').trim() === label; }) || null;
   }
+  // Thư viện nội dung: Facebook GIỚI HẠN số trang tải mỗi lần "mở" component — đã xác
+  // nhận qua thực tế: kể cả người dùng cuộn TAY THẬT cũng bị dừng giữa chừng, chỉ khi
+  // thoát sang tab khác rồi quay lại (ép component dựng lại từ đầu) mới tải thêm được.
+  // Tự động hoá ĐÚNG thao tác đó: nhảy đi tab khác → quay lại → cuộn → lặp lại tới khi
+  // số bài không tăng thêm 2 vòng liên tiếp (coi như đã lấy hết) hoặc hết số vòng tối đa.
+  async function scrapeContentLibraryFully(maxRounds) {
+    maxRounds = maxRounds || 6;
+    var libLabel = 'Thư viện nội dung', bounceLabel = 'Lượt xem';
+    var lastCount = -1, stableRounds = 0;
+    for (var r = 0; r < maxRounds; r++) {
+      var lib = findSidebarLink(libLabel);
+      if (lib) lib.click(); else log('⚠️ Không tìm thấy tab "' + libLabel + '" ở vòng ' + (r + 1) + ' — có thể đang đứng sẵn ở đó, bỏ qua bước bấm.');
+      await sleep(1500);
+      for (var s = 0; s < 5; s++) await autoScrollOnce(3000);
+      log('📜  Thư viện nội dung — vòng ' + (r + 1) + '/' + maxRounds + ': đã gom ' + POSTS.length + ' bài.');
+      if (POSTS.length === lastCount) { stableRounds++; if (stableRounds >= 2) { log('✅ Số bài không tăng thêm 2 vòng liên tiếp — coi như đã lấy hết.'); break; } }
+      else stableRounds = 0;
+      lastCount = POSTS.length;
+      if (r < maxRounds - 1) {
+        var away = findSidebarLink(bounceLabel) || findSidebarLink('Đối tượng');
+        if (away) { away.click(); await sleep(1200); } // ép component Thư viện nội dung dựng lại từ đầu ở vòng sau
+      }
+    }
+  }
   // Facebook KHÔNG giữ query date_range/start_date/end_date khi điều hướng SPA sang
   // tab khác (tự rơi về mặc định "28 ngày qua") — đây là hành vi của chính Facebook,
   // không sửa được từ script. Mù đoán DOM để tự bấm lại bộ chọn ngày rất dễ vỡ (không
@@ -780,31 +804,36 @@
     log('SHBCL_fetchAllTabs: khoảng ' + startISO + ' → ' + endISO + ', đi qua ' + tabs.length + ' tab, REPLAY request thật cho từng tab (không rê chuột)...');
     for (var i = 0; i < tabs.length; i++) {
       var label = tabs[i];
-      var link = findSidebarLink(label);
-      if (!link) { log('⚠️ Không tìm thấy tab "' + label + '" — bỏ qua, tự làm tay tab này (đứng ở tab đó rồi gõ SHBCL_fetchFullRange("' + startISO + '","' + endISO + '")).'); continue; }
-      log('➡️  [' + (i + 1) + '/' + tabs.length + '] Chuyển sang tab "' + label + '"...');
-      link.click();
-      await sleep(1800); // đợi SPA đổi route + gọi API đầu tiên của tab mới
-      // Thư viện nội dung là danh sách PHÂN TRANG KIỂU CUỘN (infinite-scroll) — KHÁC hẳn
-      // các tab biểu đồ theo ngày (không có "Tuỳ chỉnh"/request TimeSeries để replay).
-      // Cuộn nhiều lượt để Facebook tự lazy-load hết toàn bộ bài thay vì chỉ lấy đúng số
-      // bài tải sẵn lúc mới vào tab (nguyên nhân quét thiếu bài so với tổng Facebook báo).
-      if (label === 'Thư viện nội dung') {
-        log('📜  Tab "' + label + '" là danh sách cuộn — tự cuộn nhiều lượt để tải hết bài...');
-        for (var s = 0; s < 6; s++) await autoScrollOnce(3000); // query nặng, cần chờ lâu hơn cho lượt tải trang kế tiếp
-        continue;
+      // Bọc TỪNG TAB trong try/catch riêng — lỗi ở 1 tab (network, timeout, request hỏng...)
+      // trước đây làm CẢ VÒNG LẶP dừng giữa chừng (promise reject không ai bắt), khiến nút
+      // "Quét toàn bộ" có cảm giác "không chạy hết". Giờ lỗi 1 tab chỉ bỏ qua tab đó, log rõ
+      // ràng, rồi tiếp tục tab kế tiếp — không để 1 chỗ hỏng kéo sập cả quy trình.
+      try {
+        var link = findSidebarLink(label);
+        if (!link) { log('⚠️ Không tìm thấy tab "' + label + '" — bỏ qua, tự làm tay tab này (đứng ở tab đó rồi gõ SHBCL_fetchFullRange("' + startISO + '","' + endISO + '")).'); continue; }
+        log('➡️  [' + (i + 1) + '/' + tabs.length + '] Chuyển sang tab "' + label + '"...');
+        link.click();
+        await sleep(1800); // đợi SPA đổi route + gọi API đầu tiên của tab mới
+        // Thư viện nội dung là danh sách PHÂN TRANG KIỂU CUỘN — Facebook GIỚI HẠN số trang
+        // tải mỗi lần "mở" component (đã xác nhận: kể cả cuộn TAY thật cũng bị dừng, chỉ
+        // thoát tab đi/về mới tải thêm) — nên thay vì chỉ cuộn, tự "nhảy đi tab khác rồi
+        // quay lại" nhiều vòng để ép Facebook dựng lại component + tải thêm trang, y hệt
+        // thao tác tay đã xác nhận hiệu quả.
+        if (label === 'Thư viện nội dung') { await scrapeContentLibraryFully(); continue; }
+        var beforeCount = LAST_TS_REQUESTS.length;
+        if (!rangeMatches(wantRange)) {
+          log('⏸️  Tab "' + label + '" rơi về mặc định (Facebook tự reset khi chuyển tab) — chờ bạn chọn lại "Tuỳ chỉnh" ' + startISO + ' → ' + endISO + '...');
+          await waitForDateFix(label, wantRange);
+          await sleep(1200); // đợi chart vẽ lại + request đầu tiên của khoảng ngày mới chạy xong
+        }
+        // Đợi có request MỚI (khác lượt trước) rồi mới replay — tránh dùng nhầm request cũ của tab trước.
+        var waited = 0;
+        while (LAST_TS_REQUESTS.length === beforeCount && waited < 6000) { await sleep(300); waited += 300; }
+        if (LAST_TS_REQUESTS.length === beforeCount) { log('⚠️ Không bắt được request mới ở tab "' + label + '" — bỏ qua, tự làm tay tab này.'); continue; }
+        await W.SHBCL_fetchFullRange(startISO, endISO, chunkDays, 0);
+      } catch (e) {
+        log('❌ Lỗi ở tab "' + label + '" — BỎ QUA, tiếp tục tab kế tiếp:', e);
       }
-      var beforeCount = LAST_TS_REQUESTS.length;
-      if (!rangeMatches(wantRange)) {
-        log('⏸️  Tab "' + label + '" rơi về mặc định (Facebook tự reset khi chuyển tab) — chờ bạn chọn lại "Tuỳ chỉnh" ' + startISO + ' → ' + endISO + '...');
-        await waitForDateFix(label, wantRange);
-        await sleep(1200); // đợi chart vẽ lại + request đầu tiên của khoảng ngày mới chạy xong
-      }
-      // Đợi có request MỚI (khác lượt trước) rồi mới replay — tránh dùng nhầm request cũ của tab trước.
-      var waited = 0;
-      while (LAST_TS_REQUESTS.length === beforeCount && waited < 6000) { await sleep(300); waited += 300; }
-      if (LAST_TS_REQUESTS.length === beforeCount) { log('⚠️ Không bắt được request mới ở tab "' + label + '" — bỏ qua, tự làm tay tab này.'); continue; }
-      await W.SHBCL_fetchFullRange(startISO, endISO, chunkDays, 0);
     }
     coverageReport(false);
     badge();
