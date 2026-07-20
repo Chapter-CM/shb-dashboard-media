@@ -386,8 +386,30 @@
     return LAST_TS_REQUESTS;
   };
 
+  // ── CHẨN ĐOÁN: bắt response khi bấm vào TỪNG BÀI trong Thư viện nội dung — trang chi
+  // tiết 1 bài có breakdown Cảm xúc theo từng loại (Like/Love/Haha...) mà request danh
+  // sách (Content Library) không có. Chưa biết tên field/hình dạng thật nên CHỈ LƯU LẠI
+  // để xem trước qua SHBCL_lastPostReactions(), không đoán mù cách bóc tách.
+  var LAST_POST_RESPONSES = [];
+  function maybeCapturePostDetail(text, reqUrl) {
+    if (!/reaction/i.test(text)) return;
+    LAST_POST_RESPONSES.unshift({ url: reqUrl, text: text, ts: Date.now() });
+    if (LAST_POST_RESPONSES.length > 5) LAST_POST_RESPONSES.length = 5;
+  }
+  W.SHBCL_lastPostReactions = function () {
+    if (!LAST_POST_RESPONSES.length) { log('⚠️ Chưa bắt được response nào có chữ "reaction" — vào tab Thư viện nội dung, bấm mở chi tiết 1 bài (thấy breakdown Cảm xúc như Like/Love/Haha) rồi gọi lại lệnh này.'); return []; }
+    LAST_POST_RESPONSES.forEach(function (r, i) {
+      log('── response #' + i + ' (' + new Date(r.ts).toLocaleTimeString() + ') ──');
+      log('url:', r.url);
+      log('nội dung (2000 ký tự đầu, tìm chữ "reaction" trong đó):', r.text.slice(0, 2000));
+    });
+    log('Copy 1 đoạn quanh chữ "reaction" (kèm tên field bao quanh nó) gửi lại để xác định đúng cấu trúc — tránh đoán mù tên field.');
+    return LAST_POST_RESPONSES;
+  };
+
   function tryParse(text, reqUrl, reqBody) {
     text = String(text || '');
+    maybeCapturePostDetail(text, reqUrl);
     var hasLib = text.indexOf('prodash_content_library') > -1;
     var hasPage = /professional_dashboard/.test(location.pathname) &&
       (text.indexOf('MetricsQueryResult') > -1 || text.indexOf('TimeSeries') > -1);
