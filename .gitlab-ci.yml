@@ -102,6 +102,14 @@ pages:
       - public
   dependencies:
     - sync_data
+  # 17/07/2026: job này chỉ publish GitLab Pages (không dùng để deploy dashboard thật —
+  # dashboard thật deploy qua docker_build_ecr/update_manifest_aws_dev ở các stage sau).
+  # Lỗi "403 Forbidden ... FATAL: permission denied" khi tải artifact (đã gặp nhiều lần,
+  # xem GITLAB_COPY_LIST.md) từng CHẶN ĐỨNG toàn bộ các stage phía sau (aws-authen,
+  # docker_build_ecr, update_helm_value không chạy được), khiến sync_data đọc DB đúng
+  # nhưng dashboard KHÔNG BAO GIỜ được build/deploy lại — allow_failure để lỗi job này
+  # (không quan trọng) không còn chặn đường deploy thật nữa.
+  allow_failure: true
 
 .aws-authen:
   stage: aws-authen

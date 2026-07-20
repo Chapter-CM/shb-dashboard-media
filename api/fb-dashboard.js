@@ -136,7 +136,12 @@ function buildPageInsights(rows) {
     Object.keys(s).forEach(function (key) {
       var pts = s[key] && s[key].points;
       if (!Array.isArray(pts) || !pts.length) return;
-      var norm = /interaction/.test(key) ? 'interactions' : /follow/.test(key) ? 'followers' : /view/.test(key) ? 'views' : key;
+      // Khớp CHÍNH XÁC đầu tên field, KHÔNG dùng match lỏng (bug đã gặp: /view/ khớp
+      // nhầm cả "video_view_three_second_time_series"/"video_view_one_min_time_series"
+      // — 2 chỉ số khác hẳn "views_time_series" — gây dồn nhầm chung 1 rổ, ngày nào bắt
+      // trước (dù là video_view=0) chặn mất giá trị views thật, làm tổng bị hụt so với
+      // số Facebook tự hiện).
+      var norm = /^interactions?(_|$)/.test(key) ? 'interactions' : /^followers?(_|$)/.test(key) ? 'followers' : /^views?(_|$)/.test(key) ? 'views' : key;
       if (!byDay[norm]) byDay[norm] = {};
       pts.forEach(function (p) { var ms = new Date(p.start_time).getTime(); if (ms && byDay[norm][ms] === undefined) byDay[norm][ms] = p.value || 0; });
     });
@@ -160,12 +165,19 @@ function buildPageInsights(rows) {
   });
   var best = rows[0];
   var totalViews = daily.reduce(function (a, p) { return a + p.value; }, 0) || (typeof m.views === 'number' ? m.views : 0);
-  // Nhân khẩu học + follower series (trang Đối tượng)
+  // Nhân khẩu học + follower series (trang Đối tượng) — KHÔNG khớp tên field CHÍNH
+  // XÁC (bài học từ bug views_time_series): "followers_by_age_gender" chỉ là tên
+  // ĐOÁN, tên thật Facebook trả về có thể khác. Nhận diện theo ĐẶC ĐIỂM: nhân khẩu
+  // học = có cả "age" và "gender" trong tên key (linh hoạt hơn exact match, vẫn đủ
+  // đặc trưng để không nhầm với breakdown khác như content-type/follower).
   var ageGender = null, folPts = null;
   rows.forEach(function (r) {
     var s = r.series || {};
-    if (!ageGender && s.followers_by_age_gender && Array.isArray(s.followers_by_age_gender.bucket_values)) ageGender = s.followers_by_age_gender.bucket_values;
-    if (!folPts && s.followers_time_series && Array.isArray(s.followers_time_series.points)) folPts = s.followers_time_series.points;
+    Object.keys(s).forEach(function (key) {
+      var v = s[key];
+      if (!ageGender && /age/i.test(key) && /gender/i.test(key) && v && Array.isArray(v.bucket_values)) ageGender = v.bucket_values;
+      if (!folPts && /^followers?(_|$)/.test(key) && v && Array.isArray(v.points)) folPts = v.points;
+    });
   });
   var folDaily = folPts ? folPts.map(function (p) { return { ms: new Date(p.start_time).getTime(), value: p.value || 0 }; }).filter(function (p) { return p.ms; }).sort(function (a, b) { return a.ms - b.ms; }) : [];
   return {
@@ -175,7 +187,12 @@ function buildPageInsights(rows) {
     captured: best ? new Date(best.captured_at).getTime() : new Date(rows[0].captured_at).getTime(),
     series: seriesMap, metricsMax: mMax,
     ageGender: ageGender, folDaily: folDaily,
-    follower: { total: m.follower || m.total_follower || 0, net: m.net_follower || 0, unfollow: m.unfollower || 0 }
+    // "net_follow" (không phải "net_follower") là tên field THẬT, đã xác nhận qua
+    // per-post pmv(p,'net_follow') dùng nhất quán ở nơi khác trong file này — dòng
+    // này trước đây gõ nhầm "net_follower" (thừa "er") khiến luôn ra 0. Giữ cả 2
+    // cách viết cho "total"/"unfollow" vì chưa có bằng chứng thật xác nhận tên chính
+    // xác, tương tự rủi ro đã gặp ở views_time_series/ageGender.
+    follower: { total: m.follower || m.total_follower || m.follow || m.total_follow || 0, net: m.net_follow || m.net_follower || 0, unfollow: m.unfollow || m.unfollower || 0 }
   };
 }
 // Bài Group "SHB Một Nhà" (nạp qua userscript -> /api/ingest -> fb_group_posts).
@@ -198,13 +215,28 @@ async function loadData() {
       sbGet('/rest/v1/fb_posts?select=*&order=created_time.desc&limit=500'),
       sbGet('/rest/v1/fb_page_snapshots?select=*&order=captured_at.asc&limit=400'),
       sbGet('/rest/v1/fb_group_posts?select=*&order=reach.desc&limit=500').catch(function () { return []; }),
-      sbGet('/rest/v1/fb_page_insights?select=*&order=captured_at.desc&limit=80').catch(function () { return []; })
+      // limit=80 (cũ) là NGUYÊN NHÂN THẬT gây "Xu hướng theo thời gian" trống + headline
+      // rơi về fallback cộng-dồn-theo-bài: qua nhiều lượt quét (Lượt xem/Tương tác/Đối
+      // tượng/Thu nhập, quét đi quét lại), số dòng fb_page_insights vượt xa 80 — dòng
+      // chứa views_time_series thật bị đẩy khỏi cửa sổ "80 dòng mới nhất", buildPageInsights
+      // không còn thấy chuỗi views/interactions nào cả dù DB có đủ dữ liệu thật.
+      sbGet('/rest/v1/fb_page_insights?select=*&order=captured_at.desc&limit=3000').catch(function () { return []; })
     ]);
     var hasPage = Array.isArray(r[0]) && r[0].length;
     var hasGroup = Array.isArray(r[2]) && r[2].length;
     if (!hasPage && !hasGroup) return genMock();          // cả hai rỗng -> demo
     var data = (!hasPage && hasGroup) ? mapSupabase([], r[1], r[2]) : mapSupabase(r[0], r[1], r[2]);
     data.pageInsights = buildPageInsights(r[3]);
+    // fb_page_snapshots (bảng CŨ, dùng trong mapSupabase() cho followers/series) không
+    // còn được userscript nào ghi vào nữa -> luôn rơi về mock dù đã có dữ liệu thật.
+    // Ưu tiên follower THẬT từ fb_page_insights (bảng MỚI, ghi qua sweep tab "Đối tượng")
+    // nếu đã quét được — GHI ĐÈ lên mock, không đổi gì khi chưa có dữ liệu thật.
+    if (data.pageInsights && data.pageInsights.follower && data.pageInsights.follower.total) {
+      data.page.followers = data.pageInsights.follower.total;
+    }
+    if (data.pageInsights && data.pageInsights.folDaily && data.pageInsights.folDaily.length) {
+      data.series = data.pageInsights.folDaily.map(function (p) { return { ms: p.ms, followers: p.value, views: 0, eng: 0 }; });
+    }
     return data;
   } catch (e) { console.error('[fb loadData]', e && e.message); return genMock(); }
 }
@@ -805,7 +837,7 @@ function heroChart(d,ser){
   else if(_metric==='eng'){daily=(PS.interactions||[]).filter(function(p){return inWin(p.ms);});note=actNote('Lượt tương tác');}
   else {daily=dailyER().filter(function(p){return inWin(p.ms);});note=actNote('ER %');}  // ER theo ngày = tương tác/lượt xem
   var chart=daily&&daily.length?pageDailyChart(daily,_metric==='er'?'%':'')
-    :'<div class="nd" style="padding:30px 16px;text-align:center">Chưa có chuỗi theo ngày hoạt động cho chỉ số này.'+(_metric==='eng'||_metric==='er'?'<br><span style="font-size:11.5px">Quét lại trang <b>Lượt tương tác</b> (Ctrl+Shift+Y) để lấy interactions_time_series.</span>':'')+'</div>';
+    :'<div class="nd" style="padding:30px 16px;text-align:center">Chưa có chuỗi theo ngày hoạt động cho chỉ số này.'+(_metric==='eng'||_metric==='er'?'<br><span style="font-size:11.5px">Quét lại trang <b>Lượt tương tác</b> (bấm nút "🔄 Quét trang này" trên ô SHB) để lấy interactions_time_series.</span>':'')+'</div>';
   return '<div class="hero-chart"><div class="hc-head"><div class="hc-title" data-tip="Xu hướng theo NGÀY CÓ HOẠT ĐỘNG (không phải ngày đăng) — chuẩn Facebook.">Xu hướng theo thời gian'+note+'</div>'
     +'<div class="metric-toggle"><button class="'+(_metric==='views'?'on':'')+'" onclick="setMetric(\'views\')">Lượt xem</button><button class="'+(_metric==='eng'?'on':'')+'" onclick="setMetric(\'eng\')">Tương tác</button><button class="'+(_metric==='er'?'on':'')+'" onclick="setMetric(\'er\')">ER %</button></div></div>'
     +chart+'</div>';
@@ -922,7 +954,7 @@ function ageGenderPanel(ag){
 function audienceSection(d){
   var pi=DATA.pageInsights;
   if(!(pi&&pi.ageGender&&pi.ageGender.length)){
-    return '<section id="s-aud"><div class="eyebrow">Đối tượng</div><div class="nd">Chưa có dữ liệu nhân khẩu học. Quét trang Đối tượng (Ctrl+Shift+Y).</div></section>';
+    return '<section id="s-aud"><div class="eyebrow">Đối tượng</div><div class="nd">Chưa có dữ liệu nhân khẩu học. Quét trang Đối tượng (bấm nút "🔄 Quét trang này" trên ô SHB).</div></section>';
   }
   var ag=ageGenderPanel(pi.ageGender);
   var tot=(ag.f+ag.m)||1;

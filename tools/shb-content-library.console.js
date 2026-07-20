@@ -1,16 +1,50 @@
 // ================================================================
-// BẢN CHẠY TAY QUA CONSOLE (không cần Tampermonkey) — dán nguyên file
-// này vào DevTools Console (F12) trên trang facebook.com rồi Enter.
-// Phải làm lại mỗi lần mở tab mới (KHÔNG tự động/không lưu như bản
-// Tampermonkey gốc: tools/shb-content-library.user.js).
+// BẢN CHẠY QUA CONSOLE HOẶC BOOKMARKLET (không cần Tampermonkey — máy
+// công ty chặn cài extension qua Group Policy, xem HANDOFF.md 14/07).
+//
+// ► CÁCH 1 — Console (F12): dán nguyên file này vào DevTools Console
+//   trên trang facebook.com rồi Enter.
+// ► CÁCH 2 — Bookmarklet (khuyên dùng, KHÔNG cần mở DevTools mỗi lần):
+//   biến file này thành 1 nút Bookmark trên thanh trình duyệt, từ nay
+//   chỉ cần BẤM NÚT đó (không gõ lệnh gì) mỗi khi cần gom dữ liệu.
+//   Cách tạo (làm 1 lần):
+//   1. Chuột phải thanh Bookmark → "Thêm trang" (Add page).
+//   2. Tên: "SHB Gom FB" (tuỳ ý). URL: dán TOÀN BỘ nội dung file
+//      tools/shb-bookmarklet.txt (đã được đóng gói sẵn, gửi kèm) vào ô URL.
+//   3. Lưu. Từ nay: mở Facebook → Công cụ chuyên nghiệp → BẤM nút
+//      Bookmark đó (không cần F12) — script tự chạy y hệt cách 1, có
+//      thêm nút "🔄 Quét trang này" ngay trên ô SHB góc dưới phải để
+//      quét chart bằng 1 cú bấm (không cần gõ SHBCL_sweep() nữa).
+//   Lưu ý: mỗi khi Facebook CHUYỂN SANG TRANG MỚI (đổi URL/F5), trình
+//   duyệt không tự chạy lại script (vì không phải extension) — bấm lại
+//   đúng nút Bookmark đó 1 lần nữa trên trang mới là được.
+//
+// Phải làm lại (bấm bookmark / dán Console) mỗi lần mở tab mới hoặc
+// chuyển trang (KHÔNG tự động/không lưu như bản Tampermonkey gốc:
+// tools/shb-content-library.user.js — bản đó auto-chạy mọi lúc nhưng
+// cần cài extension, hiện đang bị chặn).
+//
+// ⚠️ 17/07/2026 — CSP của facebook.com CHẶN fetch tới domain ngoài từ
+// Console (Tampermonkey vượt được nhờ GM_xmlhttpRequest, Console thì
+// không), nhưng KHÔNG chặn postMessage. Bản này TỰ ĐỘNG đẩy dữ liệu
+// qua cửa sổ cầu nối /ingest-bridge (domain dashboard nội bộ — cần
+// deploy server/ingest-server.js + nginx.conf bản 17/07 trước):
+// dán script → cửa sổ bridge tự mở → cuộn bài → dữ liệu tự lên MySQL.
+// Theo dõi ở ô "SHB" góc dưới phải (🟢 đã nối / ✅ số lô đã gửi).
+// Đường lui nếu bridge chưa deploy: copy(SHBCL_export()) rồi dán vào
+// tools/shb-ingest-upload.console.js trên tab dashboard.
 // ================================================================
 
 (function () {
   'use strict';
 
-  // ── CẤU HÌNH (chỉ nằm trên máy admin, KHÔNG commit secret thật) ──────────
-  // Đổi 14/07/2026: endpoint nội bộ SHB (trước là Vercel, xem lịch sử HANDOFF.md).
-  var INGEST = 'https://cm-dashboard.dev-saha.aws.shb.com.vn/api/ingest';
+  // ── CẤU HÌNH ──────────────────────────────────────────────────────────────
+  // 17/07/2026 (bản 2 — TỰ ĐỘNG qua BRIDGE): CSP Facebook chặn fetch trực tiếp,
+  // nhưng KHÔNG chặn postMessage. Script tự mở cửa sổ /ingest-bridge (domain nội
+  // bộ) và đẩy dữ liệu qua đó — không cần copy/dán nữa. Nếu bridge chưa deploy
+  // (404) thì vẫn còn đường lui: copy(SHBCL_export()) + shb-ingest-upload.console.js.
+  var BRIDGE_URL = 'https://cm-dashboard.dev-saha.aws.shb.com.vn/ingest-bridge';
+  var BRIDGE_ORIGIN = 'https://cm-dashboard.dev-saha.aws.shb.com.vn';
   var SECRET = '500a13c1-4b4a-4da0-a4c7-c4200e51b66a';   // INGEST_SECRET noi bo SHB
   var GROUP_ID = '503009407721580';          // SHB Một Nhà
   var AUTO_SCROLL = true;                     // tự cuộn để lazy-load hết bài trong dải ngày đang chọn
@@ -73,7 +107,129 @@
     };
   }
 
-  var sent = {}; // chống gửi trùng trong cùng phiên
+  var sent = {}; // chống gom trùng trong cùng phiên
+  var POSTS = [];  // bộ đệm bài viết đã gom
+  var PAGES = [];  // bộ đệm page-level metrics đã gom
+
+  // ── COVERAGE: đếm chính xác đã phủ đủ ngày nào trong khoảng đang chọn chưa —
+  // KHÔNG đoán mò như quét chuột giả, mà tính toán thật từ dữ liệu đã bắt được.
+  function parseUrlRange() {
+    var sp = new URLSearchParams(location.search);
+    var sd = sp.get('start_date'), ed = sp.get('end_date');
+    if (!sd || !ed) return null;
+    return { start: new Date(sd + 'T00:00:00Z').getTime(), end: new Date(ed + 'T00:00:00Z').getTime() };
+  }
+  function dayMs(t) { var d = new Date(t); d.setUTCHours(0, 0, 0, 0); return d.getTime(); }
+  function fmtDate(ms) { var d = new Date(ms); return String(d.getUTCDate()).padStart(2, '0') + '/' + String(d.getUTCMonth() + 1).padStart(2, '0'); }
+  function coverageReport(silent) {
+    var range = parseUrlRange();
+    if (!range) { if (!silent) log('Không xác định được khoảng ngày Tùy chỉnh từ URL — bỏ qua kiểm tra coverage (chỉ áp dụng khi chọn "Tùy chỉnh").'); return null; }
+    var covered = {};
+    PAGES.forEach(function (p) {
+      var s = p && p.series || {};
+      Object.keys(s).forEach(function (k) {
+        if (!/view/i.test(k)) return;
+        var pts = s[k] && s[k].points;
+        if (!Array.isArray(pts)) return;
+        pts.forEach(function (pt) { var t = new Date(pt.start_time).getTime(); if (t) covered[dayMs(t)] = 1; });
+      });
+    });
+    var totalDays = Math.round((range.end - range.start) / 864e5) + 1;
+    var coveredDays = 0, gaps = [], gapStart = null;
+    for (var t = range.start; t <= range.end; t += 864e5) {
+      if (covered[t]) {
+        coveredDays++;
+        if (gapStart != null) { gaps.push([gapStart, t - 864e5]); gapStart = null; }
+      } else if (gapStart == null) gapStart = t;
+    }
+    if (gapStart != null) gaps.push([gapStart, range.end]);
+    var pct = totalDays ? Math.round(coveredDays / totalDays * 100) : 0;
+    if (!silent) {
+      if (gaps.length) {
+        log('⚠️ Coverage ' + coveredDays + '/' + totalDays + ' ngày (' + pct + '%) — CÒN THIẾU ' + gaps.length + ' đoạn: ' +
+          gaps.slice(0, 15).map(function (g) { return fmtDate(g[0]) + (g[1] > g[0] ? '→' + fmtDate(g[1]) : ''); }).join(', ') + (gaps.length > 15 ? ' …' : ''));
+      } else {
+        log('✅ Coverage ' + coveredDays + '/' + totalDays + ' ngày (100%) — ĐỦ toàn bộ khoảng ngày đã chọn.');
+      }
+    }
+    return { totalDays: totalDays, coveredDays: coveredDays, pct: pct, gaps: gaps };
+  }
+  W.SHBCL_coverage = function () { return coverageReport(); };
+
+  // Xuất toàn bộ dữ liệu đã gom (chuỗi JSON) — dùng: copy(SHBCL_export())
+  // (đường lui khi bridge chưa deploy/không mở được)
+  W.SHBCL_export = function () {
+    var out = JSON.stringify({ posts: POSTS, pages: PAGES });
+    log('export: ' + POSTS.length + ' bài + ' + PAGES.length + ' page metrics (' + out.length + ' ký tự). Gõ copy(SHBCL_export()) để đưa vào clipboard nếu chưa.');
+    return out;
+  };
+
+  // ── BRIDGE: tự gửi qua cửa sổ /ingest-bridge bằng postMessage ─────────────
+  var bridgeWin = null, bridgeReady = false, QUEUE = [], msgId = 0, okCount = 0, failCount = 0;
+
+  function badge() {
+    var b = document.getElementById('shb-cl-badge');
+    if (!b) {
+      b = document.createElement('div');
+      b.id = 'shb-cl-badge';
+      b.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:999999;background:#fff;border:2px solid #e11d2a;border-radius:10px;padding:8px 12px;font:12px system-ui;color:#111;box-shadow:0 4px 20px rgba(0,0,0,.25);cursor:pointer';
+      b.title = 'Bấm để mở lại cửa sổ bridge nếu bị chặn popup';
+      b.onclick = openBridge;
+      document.body.appendChild(b);
+    }
+    b.innerHTML = '<b style="color:#e11d2a">SHB</b> gom: ' + POSTS.length + ' bài · ' + PAGES.length + ' page | ' +
+      (bridgeReady ? '🟢 đã nối' : '🔴 <u>bấm để nối bridge</u>') +
+      ' | ✅' + okCount + (failCount ? ' ❌' + failCount : '') + (QUEUE.length ? ' | chờ gửi: ' + QUEUE.length : '') +
+      ' <button id="shb-cl-sweep-btn" style="margin-left:6px;background:linear-gradient(90deg,#e11d2a,#fb7427);' +
+      'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🔄 Quét trang này</button>';
+    var btn = document.getElementById('shb-cl-sweep-btn');
+    if (btn) btn.onclick = function (ev) {
+      ev.stopPropagation();
+      btn.disabled = true; btn.textContent = '⏳ đang quét...';
+      W.SHBCL_sweep().then(function () { btn.disabled = false; btn.textContent = '🔄 Quét trang này'; });
+    };
+  }
+
+  function openBridge() {
+    if (bridgeWin && !bridgeWin.closed) { try { bridgeWin.focus(); } catch (e) {} return; }
+    bridgeReady = false;
+    bridgeWin = W.open(BRIDGE_URL, 'shb_bridge', 'width=420,height=320');
+    if (!bridgeWin) log('⚠️ Popup bị chặn — bấm vào ô SHB góc dưới phải để mở bridge.');
+    badge();
+  }
+
+  function flush() {
+    if (!bridgeReady || !bridgeWin || bridgeWin.closed) return;
+    while (QUEUE.length) {
+      var j = QUEUE.shift();
+      try { bridgeWin.postMessage({ type: 'shb-ingest', id: ++msgId, label: j.label, secret: SECRET, body: j.body }, BRIDGE_ORIGIN); }
+      catch (e) { QUEUE.unshift(j); log('bridge postMessage lỗi', e); break; }
+    }
+    badge();
+  }
+
+  function enqueue(label, body) { QUEUE.push({ label: label, body: body }); flush(); badge(); }
+
+  // Gửi LẠI toàn bộ dữ liệu đã gom qua bridge (dùng khi server lỗi xong đã fix,
+  // khỏi cuộn lại từ đầu): gõ SHBCL_resend() trong Console.
+  W.SHBCL_resend = function () {
+    okCount = 0; failCount = 0;
+    for (var i = 0; i < POSTS.length; i += 25) QUEUE.push({ label: 'bài ' + (i + 1) + '–' + Math.min(i + 25, POSTS.length), body: POSTS.slice(i, i + 25) });
+    PAGES.forEach(function (p, i) { QUEUE.push({ label: 'page metrics #' + (i + 1), body: p }); });
+    log('resend: xếp lại ' + QUEUE.length + ' lô (' + POSTS.length + ' bài + ' + PAGES.length + ' page).');
+    openBridge(); flush();
+  };
+
+  W.addEventListener('message', function (ev) {
+    if (ev.origin !== BRIDGE_ORIGIN) return;
+    var m = ev.data || {};
+    if (m.type === 'shb-bridge-ready') { bridgeReady = true; log('🟢 Bridge đã nối — dữ liệu sẽ tự đẩy lên MySQL.'); flush(); }
+    if (m.type === 'shb-ingest-result') {
+      if (m.status >= 200 && m.status < 300) { okCount++; log('✅ ingest', m.status, m.label); }
+      else { failCount++; log('❌ ingest', m.status, m.label, m.text); }
+      badge();
+    }
+  });
 
   function handleLibrary(lib) {
     if (!lib || !lib.edges || !lib.edges.length) return;
@@ -86,13 +242,9 @@
       rows.push(row);
     });
     if (!rows.length) return;
-    log('gửi', rows.length, 'bài', rows);
-    fetch(INGEST, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': SECRET },
-      body: JSON.stringify(rows)
-    }).then(function (r) { return r.text().then(function (t) { log('ingest', r.status, t); }); })
-      .catch(function (e) { log('ingest LỖI', e); });
+    POSTS = POSTS.concat(rows);
+    log('gom', rows.length, 'bài (tổng ' + POSTS.length + ') — đẩy qua bridge');
+    enqueue('bài x' + rows.length, rows);
   }
 
   // Tìm prodash_content_library ở các vị trí có thể: data.node.* hoặc data.*
@@ -135,12 +287,10 @@
     if (sig === pageLastSent) return; pageLastSent = sig;
     log('PAGE metrics:', acc.metrics, '| series:', Object.keys(acc.series));
     Object.keys(acc.series).forEach(function (k) { log('  series[' + k + ']:', JSON.stringify(acc.series[k]).slice(0, 400)); });
-    fetch(INGEST, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': SECRET },
-      body: JSON.stringify({ kind: 'page', date_range: rangeFromUrl(), metrics: acc.metrics, series: acc.series })
-    }).then(function (r) { return r.text().then(function (t) { log('page ingest', r.status, t); }); })
-      .catch(function (e) { log('page ingest LỖI', e); });
+    var payload = { kind: 'page', date_range: rangeFromUrl(), metrics: acc.metrics, series: acc.series };
+    PAGES.push(payload);
+    log('gom PAGE metrics (tổng ' + PAGES.length + ' bản) — đẩy qua bridge');
+    enqueue('page metrics', payload);
   }
 
   function tryParse(text) {
@@ -193,41 +343,86 @@
     }, 1500);
   }
 
-  // ── AUTO-TOUR: tự đi hết các mục của Professional Dashboard để quét sạch ────
-  // Bấm Ctrl+Shift+Y trên trang dashboard để bắt đầu. Script tự mở từng mục,
-  // mỗi mục đợi ~10s (đủ để auto-scroll nạp hết widget + hook bắt số liệu), rồi sang mục kế.
-  var TOUR = [
-    '/professional_dashboard/?ref=tab_bar',
-    '/professional_dashboard/profile_insights/views/',
-    '/professional_dashboard/profile_insights/interactions/',
-    '/professional_dashboard/profile_insights/audience/',
-    '/professional_dashboard/profile_insights/earnings/',
-    '/professional_dashboard/content/content_library/?ref=tab_bar'
-  ];
-  function tourTick() {
-    var raw = null; try { raw = sessionStorage.getItem('shbTour'); } catch (e) {}
-    if (!raw) return;
-    var q; try { q = JSON.parse(raw); } catch (e) { q = null; }
-    if (!q || !q.length) { try { sessionStorage.removeItem('shbTour'); } catch (e) {} return; }
-    log('TOUR: đang ở', q[0], '— còn', q.length, 'mục');
-    setTimeout(function () {
-      q.shift();
-      try { sessionStorage.setItem('shbTour', JSON.stringify(q)); } catch (e) {}
-      if (q.length) { W.location.href = q[0]; }
-      else { try { sessionStorage.removeItem('shbTour'); } catch (e) {} log('TOUR xong — đã quét hết các mục.'); }
-    }, 10000);
-  }
-  function startTour() {
-    try { sessionStorage.setItem('shbTour', JSON.stringify(TOUR.slice())); } catch (e) {}
-    log('TOUR bắt đầu — sẽ tự đi qua', TOUR.length, 'mục (~1 phút). Đừng đụng chuột.');
-    W.location.href = TOUR[0];
-  }
-  try {
-    W.addEventListener('keydown', function (e) {
-      if (e.ctrlKey && e.shiftKey && (e.key === 'Y' || e.key === 'y')) { startTour(); }
-    });
-  } catch (e) {}
-  if (/professional_dashboard/.test(location.pathname)) tourTick();
+  // 17/07: ĐÃ GỠ auto-tour (Ctrl+Shift+Y) — dùng location.href để chuyển trang cứng,
+  // full-reload sẽ xoá sạch hook fetch/XHR + kết nối bridge, bắt phải dán lại script.
+  // Dọn sessionStorage nếu còn sót từ bản cũ, tránh confirm() thừa.
+  try { sessionStorage.removeItem('shbTour'); } catch (e) {}
 
-  log('Bản console đã chạy — bóc full chỉ số per-post + page-level. Bấm Ctrl+Shift+Y để tự quét hết các mục.');
+  // ── SHBCL_sweep() (17/07 bản 3 — ĐÃ BỎ tự bấm sidebar): thử tự bấm xuyên suốt
+  // qua sidebar (AUTOPILOT) đã KHÔNG an toàn — sidebar Facebook có mục dạng xổ
+  // (accordion, VD "Lượt tương tác") bấm vào chỉ mở submenu chứ không nhảy trang,
+  // dễ lạc sang trang khác hẳn (đã xác nhận lỗi thật khi test). Rút gọn lại: vẫn
+  // phải TỰ BẤM TAY từng mục sidebar (an toàn, không đoán mù DOM), nhưng mỗi mục
+  // chỉ cần gõ ĐÚNG 1 LỆNH thay vì rê chuột thủ công: gõ SHBCL_sweep() trong
+  // Console SAU KHI đã bấm tay vào 1 tab Insight — nó tự cuộn + tự quét hết chart
+  // trang đó (mousemove giả lập), rồi báo số liệu gom được. Lặp lại: bấm tab kế →
+  // gõ SHBCL_sweep() → ... cho tới hết các tab cần (Lượt xem/Lượt tương tác/
+  // Đối tượng/Thu nhập/Thư viện nội dung).
+
+  function sweepVisibleCharts(passes) {
+    return new Promise(function (resolve) {
+      var p = 0;
+      (function next() {
+        var svgs = Array.from(document.querySelectorAll('svg')).map(function (s) { return { el: s, r: s.getBoundingClientRect() }; })
+          .filter(function (x) { return x.r.width > 250 && x.r.height > 60 && x.r.top < window.innerHeight && x.r.bottom > 0; })
+          .sort(function (a, b) { return (b.r.width * b.r.height) - (a.r.width * a.r.height); });
+        if (!svgs.length) { p++; return p >= passes ? resolve() : setTimeout(next, 400); }
+        var r = svgs[0].r, ys = [0.3, 0.5, 0.7].map(function (f) { return r.top + r.height * f; });
+        var x = r.left, yi = 0;
+        var timer = setInterval(function () {
+          if (x > r.right) { yi++; if (yi >= ys.length) { clearInterval(timer); p++; return p >= passes ? resolve() : setTimeout(next, 400); } x = r.left; }
+          var y = ys[yi], el = document.elementFromPoint(x, y) || svgs[0].el;
+          ['mouseover', 'mousemove'].forEach(function (type) {
+            try { el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, view: window })); } catch (e) {}
+          });
+          x += 3;
+        }, 8);
+      })();
+    });
+  }
+
+  function autoScrollOnce(ms) {
+    return new Promise(function (resolve) {
+      var idle = 0, lastH = 0, end = Date.now() + ms;
+      var timer = setInterval(function () {
+        W.scrollTo(0, document.body.scrollHeight);
+        var h = document.body.scrollHeight;
+        if (h === lastH) idle++; else { idle = 0; lastH = h; }
+        if (idle >= 4 || Date.now() > end) { clearInterval(timer); resolve(); }
+      }, 500);
+    });
+  }
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  // Quét LẶP LẠI tự động cho tới khi coverage đủ 100% (hoặc hết MAX_TRY lần) —
+  // không còn "quét 1 phát rồi hy vọng", mà tự kiểm tra thật + tự thử lại.
+  W.SHBCL_sweep = async function () {
+    var MAX_TRY = 6, tries = 0, cov = null;
+    log('SHBCL_sweep: bắt đầu quét + tự kiểm tra coverage (tối đa ' + MAX_TRY + ' lượt)...');
+    while (tries < MAX_TRY) {
+      tries++;
+      await autoScrollOnce(2500);
+      await sweepVisibleCharts(2);
+      badge();
+      cov = coverageReport(true);
+      if (!cov) { log('✓ Trang này không phải khoảng "Tùy chỉnh" (không kiểm tra được coverage) — xong sau 1 lượt quét.'); break; }
+      log('  lượt ' + tries + '/' + MAX_TRY + ': coverage ' + cov.coveredDays + '/' + cov.totalDays + ' ngày (' + cov.pct + '%)' + (cov.gaps.length ? ', còn ' + cov.gaps.length + ' đoạn thiếu' : ''));
+      if (!cov.gaps.length) break;
+    }
+    coverageReport(false); // in báo cáo cuối cùng đầy đủ (kể cả khi vẫn còn thiếu)
+    badge();
+    log('✓ Xong trang này — tổng đã gom: ' + POSTS.length + ' bài, ' + PAGES.length + ' page. ' +
+        (cov && cov.gaps.length ? '⚠️ VẪN CÒN THIẾU dữ liệu — xem đoạn ngày ở dòng "Coverage" phía trên, cân nhắc rê chuột tay thêm đúng đoạn đó rồi bấm "🔄 Quét trang này" lại. ' : '') +
+        'Xong thì bấm sang tab Insight kế tiếp, bấm lại nút Bookmark, rồi bấm "🔄 Quét trang này" (hoặc gõ SHBCL_sweep()) tiếp.');
+  };
+  log('Sau khi TỰ BẤM TAY vào 1 tab Insight (Lượt xem/Lượt tương tác/Đối tượng/Thu nhập/Thư viện nội dung), ' +
+      'bấm nút "🔄 Quét trang này" trên ô SHB (hoặc gõ SHBCL_sweep()) — tự quét LẶP LẠI tới khi đủ dữ liệu, ' +
+      'tự báo rõ nếu còn thiếu đoạn ngày nào. Gõ SHBCL_coverage() bất kỳ lúc nào để xem báo cáo hiện tại.');
+
+  openBridge(); // mở cửa sổ bridge ngay (nếu bị chặn popup: bấm ô SHB góc dưới phải)
+  badge();
+  log('Bản console (bridge) đã chạy — dữ liệu tự đẩy lên MySQL qua cửa sổ bridge. ' +
+      'Nếu ô SHB góc dưới phải báo 🔴, bấm vào đó để mở bridge. ' +
+      'Đường lui nếu bridge lỗi: copy(SHBCL_export()) + shb-ingest-upload.console.js.');
 })();

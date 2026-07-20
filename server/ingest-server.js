@@ -44,6 +44,47 @@ function dbQueryHandler(req, res) {
   });
 }
 
+// ── /ingest-bridge — trang cầu nối cho userscript Facebook (17/07/2026) ──────
+// CSP của facebook.com chặn fetch ra domain ngoài từ Console, nhưng KHÔNG chặn
+// postMessage giữa các cửa sổ. Script trên tab Facebook mở trang này (domain
+// nội bộ, không dính CSP Facebook) rồi postMessage từng lô dữ liệu sang; trang
+// này gọi /api/ingest CÙNG ORIGIN và trả kết quả về qua postMessage.
+// KHÔNG chứa secret nào — secret do script Facebook gửi kèm message, /api/ingest
+// tự xác thực như mọi request bình thường.
+const BRIDGE_HTML = `<!doctype html><meta charset="utf-8"><title>SHB Ingest Bridge</title>
+<body style="font:13px/1.6 system-ui;margin:16px;color:#111">
+<b style="color:#e11d2a">SHB Ingest Bridge</b> — giữ cửa sổ này mở trong lúc cuộn Facebook.
+<div id=log style="margin-top:8px;font:11px monospace;white-space:pre-wrap"></div>
+<script>
+(function(){
+  var ALLOW = /^https:\\/\\/([a-z0-9-]+\\.)?facebook\\.com$/;
+  var el = document.getElementById('log');
+  function log(s){ el.textContent += s + '\\n'; }
+  window.addEventListener('message', function(ev){
+    if (!ALLOW.test(ev.origin)) return;
+    var m = ev.data || {};
+    if (m.type !== 'shb-ingest') return;
+    fetch('/api/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': m.secret || '' },
+      body: JSON.stringify(m.body)
+    }).then(function(r){ return r.text().then(function(t){
+      log((r.status < 300 ? 'OK  ' : 'LOI ') + r.status + ' ' + (m.label || '') + (r.status < 300 ? '' : ' ' + t.slice(0,150)));
+      ev.source.postMessage({ type:'shb-ingest-result', id:m.id, label:m.label, status:r.status, text:t.slice(0,300) }, ev.origin);
+    });}).catch(function(e){
+      log('LOI ' + (m.label||'') + ' ' + e.message);
+      ev.source.postMessage({ type:'shb-ingest-result', id:m.id, label:m.label, status:0, text:e.message }, ev.origin);
+    });
+  });
+  if (window.opener) { try { window.opener.postMessage({ type:'shb-bridge-ready' }, '*'); } catch(e){} }
+  log('Bridge sẵn sàng — chờ dữ liệu từ tab Facebook...');
+})();
+</scr` + `ipt>`;
+function bridgeHandler(req, res) {
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(BRIDGE_HTML);
+}
+
 const server = http.createServer((req, res) => {
   // So khop bang endsWith (khong phai ===) vi Ingress public moi (service.dev-saha...
   // /public-api/api/track) co the KHONG strip prefix truoc khi chuyen toi pod nay -
@@ -53,6 +94,7 @@ const server = http.createServer((req, res) => {
   if (path === '/api/track' || path === '/api/email-track' || path.endsWith('/api/track')) return trackHandler(req, res);
   if (path === '/api/ingest' || path === '/api/fb-ingest' || path.endsWith('/api/ingest')) return ingestHandler(req, res);
   if (path === '/dbquery') return dbQueryHandler(req, res);
+  if (path === '/ingest-bridge' || path.endsWith('/ingest-bridge')) return bridgeHandler(req, res);
   if (path === '/healthz') { res.writeHead(200); return res.end('ok'); }
   res.writeHead(404);
   res.end('not found');
