@@ -527,11 +527,13 @@
     };
   }
 
-  // ── Auto-scroll để lazy-load hết bài (FB chỉ render dần khi cuộn) ──────────
+  // ── Auto-scroll để lazy-load hết bài (FB chỉ render dần khi cuộn) — cuộn CẢ window
+  // LẪN mọi khung con cuộn được (bảng Thư viện nội dung có thể cuộn riêng bên trong,
+  // window.scrollTo() không chạm tới), xem scrollAllContainers() bên dưới. ──────────
   if (AUTO_SCROLL) {
     var idle = 0, lastH = 0;
     var timer = setInterval(function () {
-      W.scrollTo(0, document.body.scrollHeight);
+      scrollAllContainers();
       var h = document.body.scrollHeight;
       if (h === lastH) { if (++idle >= 6) { clearInterval(timer); log('auto-scroll xong'); } }
       else { idle = 0; lastH = h; }
@@ -576,11 +578,25 @@
     });
   }
 
+  // Bảng Thư viện nội dung có thể cuộn bên trong 1 KHUNG CON riêng (overflow-y auto),
+  // KHÔNG phải cuộn cả trang — cuộn mỗi window.scrollTo() không chạm tới đúng khung đó
+  // nên không ép Facebook tải thêm (chỉ khi chuyển tab đi/về, component tự dựng lại từ
+  // đầu mới thấy thêm bài — đúng triệu chứng gặp phải). Cuộn CẢ window LẪN mọi div có
+  // vẻ cuộn được (heuristic: scrollHeight hơn clientHeight > 200px) để không phụ thuộc
+  // đoán đúng 1 selector cụ thể (dễ vỡ khi Facebook đổi cấu trúc DOM).
+  function scrollAllContainers() {
+    W.scrollTo(0, document.body.scrollHeight);
+    var divs = document.querySelectorAll('div');
+    for (var i = 0; i < divs.length; i++) {
+      var el = divs[i];
+      if (el.scrollHeight - el.clientHeight > 200) el.scrollTop = el.scrollHeight;
+    }
+  }
   function autoScrollOnce(ms) {
     return new Promise(function (resolve) {
       var idle = 0, lastH = 0, end = Date.now() + ms;
       var timer = setInterval(function () {
-        W.scrollTo(0, document.body.scrollHeight);
+        scrollAllContainers();
         var h = document.body.scrollHeight;
         if (h === lastH) idle++; else { idle = 0; lastH = h; }
         if (idle >= 4 || Date.now() > end) { clearInterval(timer); resolve(); }
@@ -775,7 +791,7 @@
       // bài tải sẵn lúc mới vào tab (nguyên nhân quét thiếu bài so với tổng Facebook báo).
       if (label === 'Thư viện nội dung') {
         log('📜  Tab "' + label + '" là danh sách cuộn — tự cuộn nhiều lượt để tải hết bài...');
-        for (var s = 0; s < 4; s++) await autoScrollOnce(2500);
+        for (var s = 0; s < 6; s++) await autoScrollOnce(3000); // query nặng, cần chờ lâu hơn cho lượt tải trang kế tiếp
         continue;
       }
       var beforeCount = LAST_TS_REQUESTS.length;
