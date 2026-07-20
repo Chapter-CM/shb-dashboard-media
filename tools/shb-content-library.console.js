@@ -227,34 +227,35 @@
     b.innerHTML = '<b style="color:#e11d2a">SHB</b> gom: ' + POSTS.length + ' bài · ' + PAGES.length + ' page | ' +
       (bridgeReady ? '🟢 đã nối' : '🔴 <u>bấm để nối bridge</u>') +
       ' | ✅' + okCount + (failCount ? ' ❌' + failCount : '') + (QUEUE.length ? ' | chờ gửi: ' + QUEUE.length : '') +
-      ' <button id="shb-cl-sweep-btn" style="margin-left:6px;background:linear-gradient(90deg,#e11d2a,#fb7427);' +
-      'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🔄 Quét trang này</button>' +
-      ' <button id="shb-cl-fetchall-btn" style="margin-left:4px;background:linear-gradient(90deg,#0a7cff,#00c853);' +
+      ' <button id="shb-cl-fetchall-btn" style="margin-left:6px;background:linear-gradient(90deg,#0a7cff,#00c853);' +
       'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer;font-weight:600" ' +
-      'title="KHUYÊN DÙNG: tự chuyển qua tất cả tab Insight, REPLAY request thật (không rê chuột) — chuẩn nhất, ít thao tác tay nhất. Chọn đúng Tuỳ chỉnh trước khi bấm.">⚡ Quét chuẩn (khuyên dùng)</button>' +
-      ' <button id="shb-cl-sweep-btn" style="margin-left:6px;background:linear-gradient(90deg,#e11d2a,#fb7427);' +
+      'title="KHUYÊN DÙNG: tự chuyển qua tất cả tab Insight, REPLAY request thật (không rê chuột) — chuẩn nhất, ít thao tác tay nhất. Chọn đúng Tuỳ chỉnh trước khi bấm.">⚡ Quét chuẩn</button>' +
+      ' <button id="shb-cl-more-btn" style="margin-left:4px;background:#333;' +
       'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer" ' +
-      'title="Cách cũ (rê chuột giả lập) — đường lui nếu Quét chuẩn không replay được">🔄 Quét trang này</button>' +
-      ' <button id="shb-cl-sweepall-btn" style="margin-left:4px;background:#1877f2;' +
-      'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer" ' +
-      'title="Cách cũ (rê chuột giả lập) qua tất cả tab — đường lui nếu Quét chuẩn không replay được">🌐 Quét tất cả tab (cũ)</button>';
+      'title="Cách cũ (rê chuột giả lập) — đường lui nếu Quét chuẩn không replay được">⋯ Cách khác</button>' +
+      '<div id="shb-cl-more-menu" style="display:none;margin-top:6px;text-align:right">' +
+      '<button id="shb-cl-sweep-btn" style="background:linear-gradient(90deg,#e11d2a,#fb7427);color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🔄 Quét trang này (rê chuột)</button> ' +
+      '<button id="shb-cl-sweepall-btn" style="background:#1877f2;color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🌐 Quét tất cả tab (rê chuột)</button>' +
+      '</div>';
     var btnFetchAll = document.getElementById('shb-cl-fetchall-btn');
     if (btnFetchAll) btnFetchAll.onclick = function (ev) {
       ev.stopPropagation();
       btnFetchAll.disabled = true; btnFetchAll.textContent = '⏳ đang quét chuẩn...';
-      W.SHBCL_fetchAllTabs().then(function () { btnFetchAll.disabled = false; btnFetchAll.textContent = '⚡ Quét chuẩn (khuyên dùng)'; });
+      W.SHBCL_fetchAllTabs().then(function () { btnFetchAll.disabled = false; btnFetchAll.textContent = '⚡ Quét chuẩn'; });
     };
+    var btnMore = document.getElementById('shb-cl-more-btn'), menu = document.getElementById('shb-cl-more-menu');
+    if (btnMore) btnMore.onclick = function (ev) { ev.stopPropagation(); menu.style.display = menu.style.display === 'none' ? 'block' : 'none'; };
     var btn = document.getElementById('shb-cl-sweep-btn');
     if (btn) btn.onclick = function (ev) {
       ev.stopPropagation();
       btn.disabled = true; btn.textContent = '⏳ đang quét...';
-      W.SHBCL_sweep().then(function () { btn.disabled = false; btn.textContent = '🔄 Quét trang này'; });
+      W.SHBCL_sweep().then(function () { btn.disabled = false; btn.textContent = '🔄 Quét trang này (rê chuột)'; });
     };
     var btnAll = document.getElementById('shb-cl-sweepall-btn');
     if (btnAll) btnAll.onclick = function (ev) {
       ev.stopPropagation();
       btnAll.disabled = true; btnAll.textContent = '⏳ đang quét tất cả tab...';
-      W.SHBCL_sweepAllTabs().then(function () { btnAll.disabled = false; btnAll.textContent = '🌐 Quét tất cả tab (cũ)'; });
+      W.SHBCL_sweepAllTabs().then(function () { btnAll.disabled = false; btnAll.textContent = '🌐 Quét tất cả tab (rê chuột)'; });
     };
   }
 
