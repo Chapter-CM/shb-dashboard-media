@@ -788,8 +788,17 @@ function heroRow(d,cur,prev,ser){
   var viewerDelta=(!cFil)&&(viewersV||_pReach)?deltaChip(viewersV,_sumF(_pf,function(p){return pmv(p,'viewers');})):'';
   var erDelta='';
   if(!cFil&&winRange()&&PS.views&&PS.views.length&&PS.interactions&&PS.interactions.length){var _wr=winRange(),_sp=_wr[1]-_wr[0],_pvw=sumIn(PS.views,_wr[0]-_sp,_wr[0]);erDelta=_pvw?deltaChip(erAct,pc(sumIn(PS.interactions,_wr[0]-_sp,_wr[0])/_pvw*100)):'';}
+  // Chuỗi interactions chỉ có những NGÀY ĐÃ QUÉT ĐƯỢC (tooltip lazy-load) — quét sót
+  // ngày nào là tổng hụt ngày đó so với số Facebook tự hiện. Đối chiếu với chuỗi views
+  // (cùng nguồn quét, thường phủ tốt hơn) để cảnh báo thay vì lặng lẽ hiện số thiếu.
+  var engMiss=0;
+  if(engAct!=null&&PS.views&&PS.views.length){
+    var _iD={};(PS.interactions||[]).forEach(function(p){if(inWin(p.ms))_iD[p.ms]=1;});
+    PS.views.forEach(function(p){if(inWin(p.ms)&&_iD[p.ms]===undefined)engMiss++;});
+  }
+  var engWarn=engMiss?' · <span class="ksub-down">⚠ thiếu '+engMiss+' ngày</span>':'';
   var k=[
-    card('Lượt tương tác',tnum(engV),(engDelta?engDelta+' so kỳ trước':'tổng tương tác kỳ này'),engAct!=null?'Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Số phụ = so kỳ liền trước.':'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{spark:spkEng}),
+    card('Lượt tương tác',tnum(engV),(engDelta?engDelta+' so kỳ trước':'tổng tương tác kỳ này')+engWarn,engAct!=null?('Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Số phụ = so kỳ liền trước.'+(engMiss?' ⚠ Chuỗi interactions đang THIẾU '+engMiss+' ngày so với chuỗi views trong khoảng này — số đang hụt so với Facebook. Vào tab Lượt tương tác, chọn đúng khoảng ngày rồi bấm "🔄 Quét trang này" để quét bù.':'')):'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{spark:spkEng}),
     card('ER (Engagement Rate)',erAct+'%',(erDelta?erDelta+' so kỳ trước · ':'')+erSub,'Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.',{spark:spkEr}),
     card('Lượt tiếp cận',tnum(reachSum),(reachDelta?reachDelta+' so kỳ trước · ':'')+'tỉ lệ tiếp cận '+reachRatio+'%','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem.',{spark:spkReach}),
     card('Người xem',tnum(viewersV),(viewerDelta?viewerDelta+' so kỳ trước · ':'')+'duy nhất · cấp trang','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{spark:spkViews}),

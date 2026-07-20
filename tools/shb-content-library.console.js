@@ -121,38 +121,54 @@
   }
   function dayMs(t) { var d = new Date(t); d.setUTCHours(0, 0, 0, 0); return d.getTime(); }
   function fmtDate(ms) { var d = new Date(ms); return String(d.getUTCDate()).padStart(2, '0') + '/' + String(d.getUTCMonth() + 1).padStart(2, '0'); }
+  // Gom ngày đã bắt được theo TỪNG HỌ chỉ số (views/interactions/followers/...) —
+  // trước đây chỉ đếm key khớp /view/ nên đứng ở tab "Lượt tương tác"
+  // (interactions_time_series) coverage luôn báo 0%/bị bỏ qua, quét thiếu cả
+  // đoạn dài mà không hề có cảnh báo → tổng Lượt tương tác trên dashboard hụt
+  // hẳn so với số Facebook tự hiện.
+  function familyOf(key) {
+    return /^interactions?(_|$)/.test(key) ? 'interactions' : /^followers?(_|$)/.test(key) ? 'followers' : /^views?(_|$)/.test(key) ? 'views' : key.replace(/_time_series$/, '');
+  }
   function coverageReport(silent) {
     var range = parseUrlRange();
     if (!range) { if (!silent) log('Không xác định được khoảng ngày Tùy chỉnh từ URL — bỏ qua kiểm tra coverage (chỉ áp dụng khi chọn "Tùy chỉnh").'); return null; }
-    var covered = {};
+    var famCov = {}; // family -> {dayMs:1}
     PAGES.forEach(function (p) {
       var s = p && p.series || {};
       Object.keys(s).forEach(function (k) {
-        if (!/view/i.test(k)) return;
         var pts = s[k] && s[k].points;
         if (!Array.isArray(pts)) return;
-        pts.forEach(function (pt) { var t = new Date(pt.start_time).getTime(); if (t) covered[dayMs(t)] = 1; });
+        var fam = familyOf(k);
+        if (!famCov[fam]) famCov[fam] = {};
+        pts.forEach(function (pt) { var t = new Date(pt.start_time).getTime(); if (t) famCov[fam][dayMs(t)] = 1; });
       });
     });
     var totalDays = Math.round((range.end - range.start) / 864e5) + 1;
-    var coveredDays = 0, gaps = [], gapStart = null;
-    for (var t = range.start; t <= range.end; t += 864e5) {
-      if (covered[t]) {
-        coveredDays++;
-        if (gapStart != null) { gaps.push([gapStart, t - 864e5]); gapStart = null; }
-      } else if (gapStart == null) gapStart = t;
-    }
-    if (gapStart != null) gaps.push([gapStart, range.end]);
-    var pct = totalDays ? Math.round(coveredDays / totalDays * 100) : 0;
-    if (!silent) {
-      if (gaps.length) {
-        log('⚠️ Coverage ' + coveredDays + '/' + totalDays + ' ngày (' + pct + '%) — CÒN THIẾU ' + gaps.length + ' đoạn: ' +
-          gaps.slice(0, 15).map(function (g) { return fmtDate(g[0]) + (g[1] > g[0] ? '→' + fmtDate(g[1]) : ''); }).join(', ') + (gaps.length > 15 ? ' …' : ''));
-      } else {
-        log('✅ Coverage ' + coveredDays + '/' + totalDays + ' ngày (100%) — ĐỦ toàn bộ khoảng ngày đã chọn.');
+    var out = {};
+    var fams = Object.keys(famCov);
+    if (!fams.length) { if (!silent) log('⚠️ Chưa bắt được chuỗi theo ngày nào — quét chart (nút "🔄 Quét trang này") rồi kiểm tra lại.'); return null; }
+    fams.forEach(function (fam) {
+      var covered = famCov[fam];
+      var coveredDays = 0, gaps = [], gapStart = null;
+      for (var t = range.start; t <= range.end; t += 864e5) {
+        if (covered[t]) {
+          coveredDays++;
+          if (gapStart != null) { gaps.push([gapStart, t - 864e5]); gapStart = null; }
+        } else if (gapStart == null) gapStart = t;
       }
-    }
-    return { totalDays: totalDays, coveredDays: coveredDays, pct: pct, gaps: gaps };
+      if (gapStart != null) gaps.push([gapStart, range.end]);
+      var pct = totalDays ? Math.round(coveredDays / totalDays * 100) : 0;
+      out[fam] = { totalDays: totalDays, coveredDays: coveredDays, pct: pct, gaps: gaps };
+      if (!silent) {
+        if (gaps.length) {
+          log('⚠️ [' + fam + '] Coverage ' + coveredDays + '/' + totalDays + ' ngày (' + pct + '%) — CÒN THIẾU ' + gaps.length + ' đoạn: ' +
+            gaps.slice(0, 15).map(function (g) { return fmtDate(g[0]) + (g[1] > g[0] ? '→' + fmtDate(g[1]) : ''); }).join(', ') + (gaps.length > 15 ? ' …' : ''));
+        } else {
+          log('✅ [' + fam + '] Coverage ' + coveredDays + '/' + totalDays + ' ngày (100%) — ĐỦ toàn bộ khoảng ngày đã chọn.');
+        }
+      }
+    });
+    return out;
   }
   W.SHBCL_coverage = function () { return coverageReport(); };
 
@@ -397,6 +413,14 @@
 
   // Quét LẶP LẠI tự động cho tới khi coverage đủ 100% (hoặc hết MAX_TRY lần) —
   // không còn "quét 1 phát rồi hy vọng", mà tự kiểm tra thật + tự thử lại.
+  // Coverage giờ trả về THEO TỪNG HỌ chỉ số — lấy họ TỆ NHẤT làm điều kiện dừng,
+  // vì tab hiện tại có thể là interactions/followers chứ không chỉ views.
+  function worstCoverage(cov) {
+    if (!cov) return null;
+    var worst = null;
+    Object.keys(cov).forEach(function (fam) { if (!worst || cov[fam].coveredDays < worst.coveredDays) worst = cov[fam]; });
+    return worst;
+  }
   W.SHBCL_sweep = async function () {
     var MAX_TRY = 6, tries = 0, cov = null;
     log('SHBCL_sweep: bắt đầu quét + tự kiểm tra coverage (tối đa ' + MAX_TRY + ' lượt)...');
@@ -405,7 +429,7 @@
       await autoScrollOnce(2500);
       await sweepVisibleCharts(2);
       badge();
-      cov = coverageReport(true);
+      cov = worstCoverage(coverageReport(true));
       if (!cov) { log('✓ Trang này không phải khoảng "Tùy chỉnh" (không kiểm tra được coverage) — xong sau 1 lượt quét.'); break; }
       log('  lượt ' + tries + '/' + MAX_TRY + ': coverage ' + cov.coveredDays + '/' + cov.totalDays + ' ngày (' + cov.pct + '%)' + (cov.gaps.length ? ', còn ' + cov.gaps.length + ' đoạn thiếu' : ''));
       if (!cov.gaps.length) break;
