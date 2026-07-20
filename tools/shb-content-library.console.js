@@ -172,6 +172,37 @@
   }
   W.SHBCL_coverage = function () { return coverageReport(); };
 
+  // Chẩn đoán: liệt kê TẤT CẢ chuỗi theo ngày (raw field name, chưa gộp nhóm) đã bắt
+  // được trong PAGES, kèm tổng giá trị trong khoảng ngày Tuỳ chỉnh đang chọn (nếu có).
+  // Dùng khi số trên dashboard KHÔNG khớp Facebook dù coverage đã đủ ngày — Facebook có
+  // thể dùng 1 field KHÁC "interactions_time_series" (vd 1 field "engagement" rộng hơn,
+  // gồm cả click/xem chứ không chỉ cảm xúc+bình luận+chia sẻ) để tính ra số đầu trang.
+  // So cột "sumInRange" với số Facebook hiển thị để tìm đúng field cần map.
+  W.SHBCL_seriesKeys = function () {
+    var range = parseUrlRange();
+    var agg = {};
+    PAGES.forEach(function (p) {
+      var s = p && p.series || {};
+      Object.keys(s).forEach(function (k) {
+        var pts = s[k] && s[k].points;
+        if (!Array.isArray(pts) || !pts.length) return;
+        if (!agg[k]) agg[k] = { days: {}, sumAll: 0, sumInRange: 0 };
+        pts.forEach(function (pt) {
+          var ms = new Date(pt.start_time).getTime(); if (!ms) return;
+          var v = pt.value || 0;
+          if (agg[k].days[ms] === undefined) { agg[k].sumAll += v; if (range && ms >= range.start && ms <= range.end) agg[k].sumInRange += v; }
+          agg[k].days[ms] = 1;
+        });
+      });
+    });
+    var rows = Object.keys(agg).map(function (k) { return { key: k, ngayDaBat: Object.keys(agg[k].days).length, tongTatCa: agg[k].sumAll, tongTrongKhoangDangChon: range ? agg[k].sumInRange : '(chưa chọn Tuỳ chỉnh)' }; });
+    rows.sort(function (a, b) { return (b.tongTatCa || 0) - (a.tongTatCa || 0); });
+    console.table(rows);
+    log('SHBCL_seriesKeys: ' + rows.length + ' chuỗi theo ngày đã bắt được (tên field GỐC, chưa gộp nhóm views/interactions/followers). ' +
+        'So cột "tongTrongKhoangDangChon" với số Facebook hiển thị trên đầu trang (vd 49.159) để tìm ĐÚNG field cần dùng cho KPI Lượt tương tác.');
+    return rows;
+  };
+
   // Xuất toàn bộ dữ liệu đã gom (chuỗi JSON) — dùng: copy(SHBCL_export())
   // (đường lui khi bridge chưa deploy/không mở được)
   W.SHBCL_export = function () {
