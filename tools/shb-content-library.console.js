@@ -478,6 +478,62 @@
   }
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function iso(d) { return d.toISOString().slice(0, 10); }
+
+  // ── REPLAY REQUEST THẬT — thay hẳn cách rê chuột giả lập ────────────────────
+  // Rê chuột giả lập KHÔNG đáng tin cậy (isTrusted:false, chỉ ép được 1 chart đang
+  // hiển thị, hay bị Facebook lờ đi). Ở đây thay bằng cách CHẮC ĂN hơn: dùng lại
+  // ĐÚNG request GraphQL Facebook vừa gọi thật (đã bắt qua SHBCL_lastRequests()),
+  // chỉ đổi phần "variables" (customStartDate/customEndDate/timeRange) rồi tự
+  // fetch() lại — cookie phiên đăng nhập tự đính kèm vì cùng gốc (same-origin),
+  // KHÔNG cần rê chuột, KHÔNG phụ thuộc chart nào đang hiển thị, tự chia đủ mọi
+  // đoạn ngày nên không sót ngày.
+  function buildVariables(base, startISO, endISO) {
+    var v = JSON.parse(JSON.stringify(base));
+    v.customStartDate = startISO; v.customEndDate = endISO; v.dateRange = 'CUSTOM';
+    v.timeRange = { start_iso_date: startISO, end_iso_date: endISO, type: 'CUSTOM' };
+    return v;
+  }
+  function replaceVariablesInBody(rawBody, newVarsObj) {
+    var encoded = encodeURIComponent(JSON.stringify(newVarsObj));
+    if (!/(^|&)variables=/.test(rawBody)) return null; // body không có field "variables" dạng x-www-form-urlencoded — không replay được kiểu này
+    return rawBody.replace(/variables=[^&]*/, 'variables=' + encoded);
+  }
+  W.SHBCL_fetchRange = async function (startISO, endISO, reqIndex) {
+    reqIndex = reqIndex || 0;
+    var req = LAST_TS_REQUESTS[reqIndex];
+    if (!req || typeof req.body !== 'string') { log('⚠️ Chưa có request nào đã bắt (dạng chuỗi x-www-form-urlencoded) — chạy SHBCL_lastRequests() trước để kiểm tra.'); return null; }
+    var m = req.body.match(/variables=([^&]*)/);
+    if (!m) { log('⚠️ Request #' + reqIndex + ' không có field "variables" — không replay được.'); return null; }
+    var baseVars; try { baseVars = JSON.parse(decodeURIComponent(m[1])); } catch (e) { log('⚠️ Không parse được variables gốc:', e); return null; }
+    var newBody = replaceVariablesInBody(req.body, buildVariables(baseVars, startISO, endISO));
+    var res = await fetch(req.url, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: newBody });
+    var text = await res.text();
+    tryParse(text, req.url, newBody); // tái dùng pipeline có sẵn: bóc series, gom PAGES, đẩy bridge
+    return text;
+  };
+  // Tự chia [startISO, endISO] thành từng đoạn chunkDays ngày (mặc định 30) rồi gọi
+  // SHBCL_fetchRange() lần lượt — phủ đủ toàn bộ khoảng ngày cần, không thủ công.
+  W.SHBCL_fetchFullRange = async function (startISO, endISO, chunkDays, reqIndex) {
+    chunkDays = chunkDays || 30;
+    if (!LAST_TS_REQUESTS.length) { log('⚠️ Chưa bắt được request nào — mở tab Insight cần lấy (vd Lượt tương tác), đợi chart tải xong 1 lần rồi gọi lại SHBCL_fetchFullRange().'); return; }
+    var start = new Date(startISO + 'T00:00:00Z'), end = new Date(endISO + 'T00:00:00Z'), cur = new Date(start), chunks = [];
+    while (cur <= end) {
+      var chunkEnd = new Date(Math.min(cur.getTime() + (chunkDays - 1) * 864e5, end.getTime()));
+      chunks.push([iso(cur), iso(chunkEnd)]);
+      cur = new Date(chunkEnd.getTime() + 864e5);
+    }
+    log('SHBCL_fetchFullRange: sẽ gọi ' + chunks.length + ' đoạn (' + chunkDays + ' ngày/đoạn) từ ' + startISO + ' → ' + endISO + '...');
+    for (var i = 0; i < chunks.length; i++) {
+      log('  đoạn ' + (i + 1) + '/' + chunks.length + ': ' + chunks[i][0] + ' → ' + chunks[i][1]);
+      await W.SHBCL_fetchRange(chunks[i][0], chunks[i][1], reqIndex || 0);
+      badge();
+      await sleep(700); // giãn cách nhẹ tránh gọi dồn dập bị Facebook chặn tạm
+    }
+    coverageReport(false);
+    badge();
+    log('✅ SHBCL_fetchFullRange: xong ' + chunks.length + ' đoạn — tổng đã gom: ' + POSTS.length + ' bài, ' + PAGES.length + ' page. Gõ SHBCL_coverage() để xem chi tiết.');
+  };
 
   // Quét LẶP LẠI tự động cho tới khi coverage đủ 100% (hoặc hết MAX_TRY lần) —
   // không còn "quét 1 phát rồi hy vọng", mà tự kiểm tra thật + tự thử lại.
@@ -577,10 +633,11 @@
     }
     log('✅ SHBCL_sweepAllTabs: xong tất cả tab — tổng đã gom: ' + POSTS.length + ' bài, ' + PAGES.length + ' page. Gõ SHBCL_coverage() để xem coverage từng chỉ số.');
   };
-  log('Sau khi TỰ BẤM TAY vào 1 tab Insight (Lượt xem/Lượt tương tác/Đối tượng/Thu nhập/Thư viện nội dung), ' +
-      'bấm nút "🔄 Quét trang này" trên ô SHB (hoặc gõ SHBCL_sweep()) — tự quét LẶP LẠI tới khi đủ dữ liệu, ' +
-      'tự báo rõ nếu còn thiếu đoạn ngày nào. Gõ SHBCL_coverage() bất kỳ lúc nào để xem báo cáo hiện tại. ' +
-      'MUỐN QUÉT LUÔN TẤT CẢ TAB (khớp logic dashboard): gõ SHBCL_sweepAllTabs() — tự chuyển lần lượt qua Lượt xem/Thu nhập/Lượt tương tác/Đối tượng/Nhắn tin/Thư viện nội dung và quét từng tab.');
+  log('KHUYÊN DÙNG (chắc ăn nhất, không rê chuột, không sót ngày): mở tab Insight cần lấy, đợi chart tải xong 1 lần, ' +
+      'rồi gõ SHBCL_fetchFullRange("2025-12-01","2026-07-20") — tự chia nhỏ khoảng ngày và GỌI LẠI ĐÚNG request thật của Facebook ' +
+      'cho từng đoạn, không cần rê chuột/không phụ thuộc chart hiển thị. Gõ SHBCL_lastRequests() để xem request đã bắt được trước khi gọi. ' +
+      'Cách cũ (rê chuột giả lập, kém tin cậy hơn) vẫn còn: bấm nút "🔄 Quét trang này" trên ô SHB (hoặc gõ SHBCL_sweep()/SHBCL_sweepAllTabs()). ' +
+      'Gõ SHBCL_coverage() bất kỳ lúc nào để xem báo cáo hiện tại.');
 
   openBridge(); // mở cửa sổ bridge ngay (nếu bị chặn popup: bấm ô SHB góc dưới phải)
   badge();
