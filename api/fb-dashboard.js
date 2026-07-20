@@ -854,11 +854,19 @@ function heroRow(d,cur,prev,ser){
     PS.views.forEach(function(p){if(inWin(p.ms)&&_iD[p.ms]===undefined)engMiss++;});
   }
   var engWarn=engMiss?' · <span class="ksub-down">⚠ thiếu '+engMiss+' ngày</span>':'';
+  // 20/07/2026: xác nhận trực tiếp trên Facebook — tab "Lượt xem" KHÔNG có thẻ "Người
+  // xem" (unique viewers) nào cả (chỉ có Tổng lượt xem/Xem ≥3s/≥1 phút/Thời gian xem).
+  // Field "viewers" đang dùng KHÔNG rõ nguồn gốc thật — không tự tin hiển thị làm số
+  // chính thức nữa. Theo yêu cầu: còn dữ liệu thật (>0, đã từng bắt được) thì vẫn hiện,
+  // KHÔNG có thì thay bằng thẻ Lượt cảm xúc (đã có dữ liệu thật, đáng tin hơn).
+  var haveViewersV = viewersV > 0;
+  var reactCard = card('Lượt cảm xúc',tnum(reactSum),reactSum?'tổng cảm xúc kỳ này':'cần quét Cảm xúc chi tiết','Tổng Like/Love/Haha/Wow/Sad/Angry/Care của mọi bài trong kỳ.',{spark:null});
+  var viewersCard = card('Người xem',tnum(viewersV),(viewerDelta?viewerDelta+' so kỳ trước · ':'')+'duy nhất · cấp trang','Người xem duy nhất cấp trang (nguồn cần xác minh lại).',{spark:spkViews});
   var k=[
     card('Lượt tương tác',tnum(engV),(engDelta?engDelta+' so kỳ trước':'tổng tương tác kỳ này')+engWarn,engAct!=null?('Tổng tương tác Facebook báo cho trang, theo ngày hoạt động.'+(engMiss?' ⚠ Thiếu '+engMiss+' ngày dữ liệu — quét bù ở tab Lượt tương tác.':'')):'Quét lại tab Lượt tương tác để có số này.',{spark:spkEng}),
     card('ER (Engagement Rate)',erAct+'%',(erDelta?erDelta+' so kỳ trước · ':'')+erSub,'(Cảm xúc + Chia sẻ) ÷ Lượt xem, không tính bình luận. Cần quét Cảm xúc chi tiết mới có số.',{spark:spkEr}),
     card('Lượt tiếp cận',tnum(reachSum),(reachDelta?reachDelta+' so kỳ trước · ':'')+'tỉ lệ tiếp cận '+reachRatio+'%','Chỉ số riêng dashboard: tổng người xem mọi bài, TÍNH CẢ TRÙNG. Không phải Reach chuẩn Facebook.',{spark:spkReach}),
-    card('Người xem',tnum(viewersV),(viewerDelta?viewerDelta+' so kỳ trước · ':'')+'duy nhất · cấp trang','Người xem duy nhất cấp trang — lấy từ tab Lượt xem trên Facebook.',{spark:spkViews}),
+    haveViewersV?viewersCard:reactCard,
     card('Lượt hiển thị',tnum(impV),(impDelta?impDelta+' so kỳ trước · ':'')+'tổng từ các bài','Số lần nội dung hiển thị trên màn hình — khác Lượt xem (không tính lượt xem thật).',{spark:spkImp}),
     card('Bình luận',tnum(cmtV),(cmtDelta?cmtDelta+' so kỳ trước · ':'')+'tổng từ các bài','Tổng bình luận, cộng dồn từ các bài trong kỳ.',{spark:spkCmt})
   ].join('');
@@ -1079,7 +1087,7 @@ function healthSection(d){
 function dictSection(){
   var items=[
     ['Lượt xem (Views)','Số lần nội dung được xem, kể cả xem lại nhiều lần.'],
-    ['Người xem (Viewers)','Số người DUY NHẤT đã xem — một người xem nhiều lần chỉ tính 1.'],
+    ['Người xem (Viewers)','Số người DUY NHẤT đã xem. Nguồn field đang cần xác minh lại — chưa có dữ liệu thì thẻ tự đổi sang Lượt cảm xúc.'],
     ['Lượt hiển thị (Impressions)','Số lần nội dung hiển thị trên màn hình, kể cả khi không được xem thật.'],
     ['Lượt tương tác (Engagement)','Chỉ số "engagement" Facebook trả về cho bài/trang — khớp số Facebook hiển thị.'],
     ['Cảm xúc (Reactions)','Tổng Like/Love/Haha/Wow/Sad/Angry/Care — cần quét chi tiết mới có số.'],
