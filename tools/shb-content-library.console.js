@@ -454,8 +454,14 @@
   W.SHBCL_fetchAllPostReactions = async function (reqIndex) {
     reqIndex = reqIndex || 0;
     var tmpl = LAST_POST_RESPONSES[reqIndex];
-    if (!tmpl || typeof tmpl.body !== 'string') { log('⚠️ Chưa có mẫu request — bấm mở chi tiết 1 bài (thấy Cảm xúc dưới bài) rồi gõ SHBCL_lastPostReactions() để xác nhận trước, sau đó gọi lại lệnh này.'); return; }
-    if (!POSTS.length) { log('⚠️ POSTS đang rỗng trong phiên này — cuộn qua Thư viện nội dung (hoặc bấm "🔄 Quét trang này") để nạp danh sách bài trước, rồi gọi lại.'); return; }
+    if (!tmpl || typeof tmpl.body !== 'string') {
+      var msg1 = 'Chưa có mẫu Cảm xúc — vào Thư viện nội dung, bấm mở 1 bài (thấy Cảm xúc dưới bài, KHÔNG phải dưới bình luận) 1 lần, rồi bấm lại nút này.';
+      log('⚠️ ' + msg1); showBigWarning(msg1); return;
+    }
+    if (!POSTS.length) {
+      var msg2 = 'Chưa có bài nào trong phiên này — quét tab "Thư viện nội dung" trước (nằm trong "🚀 Quét toàn bộ"), rồi bấm lại nút này.';
+      log('⚠️ ' + msg2); showBigWarning(msg2); return;
+    }
     log('SHBCL_fetchAllPostReactions: sẽ lấy Cảm xúc chi tiết cho ' + POSTS.length + ' bài (không rê chuột, không cần bấm tay)...');
     var ok = 0, fail = 0;
     for (var i = 0; i < POSTS.length; i++) {
@@ -770,6 +776,19 @@
     });
   }
   function esc0(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+  // Cảnh báo TO trên màn hình — log Console dễ bị bỏ sót (nhất là khi tab Console không
+  // mở), khiến người dùng tưởng nút đã chạy xong dù script thực ra dừng ngay từ đầu vì
+  // thiếu điều kiện (vd chưa chọn "Tuỳ chỉnh"). Tự biến mất sau 6 giây hoặc bấm để đóng.
+  function showBigWarning(msg) {
+    var el = document.getElementById('shb-cl-warn'); if (el) el.remove();
+    el = document.createElement('div');
+    el.id = 'shb-cl-warn';
+    el.style.cssText = 'position:fixed;bottom:110px;right:16px;z-index:1000000;background:#fff3cd;border:2px solid #f5a623;border-radius:10px;padding:12px 14px;font:13px system-ui;color:#111;box-shadow:0 4px 20px rgba(0,0,0,.35);max-width:320px;cursor:pointer';
+    el.innerHTML = '⚠️ <b>Chưa quét được</b><div style="margin-top:4px">' + esc0(msg) + '</div><div style="margin-top:6px;font-size:11px;color:#666">(bấm để đóng)</div>';
+    el.onclick = function () { el.remove(); };
+    document.body.appendChild(el);
+    setTimeout(function () { var e2 = document.getElementById('shb-cl-warn'); if (e2) e2.remove(); }, 6000);
+  }
   W.SHBCL_sweepAllTabs = async function (tabs) {
     tabs = tabs || INSIGHT_TABS;
     var wantRange = parseUrlRange(); // khoảng ngày Tuỳ chỉnh đang chọn ở tab BAN ĐẦU — dùng làm chuẩn cho các tab sau
@@ -799,7 +818,12 @@
     chunkDays = chunkDays || 30;
     tabs = tabs || INSIGHT_TABS;
     var wantRange = parseUrlRange();
-    if (!wantRange) { log('⚠️ Hãy chọn "Tuỳ chỉnh" đúng khoảng ngày cần TRÊN TAB HIỆN TẠI trước, rồi gọi lại SHBCL_fetchAllTabs().'); return; }
+    if (!wantRange) {
+      var msg = 'Hãy chọn "Tuỳ chỉnh" đúng khoảng ngày cần TRÊN TAB HIỆN TẠI trước, rồi bấm lại "🚀 Quét toàn bộ".';
+      log('⚠️ ' + msg);
+      showBigWarning(msg); // hiện to trên màn hình — log Console dễ bị bỏ sót, gây hiểu lầm nút "chạy xong" dù chưa làm gì
+      return;
+    }
     var startISO = iso(new Date(wantRange.start)), endISO = iso(new Date(wantRange.end));
     log('SHBCL_fetchAllTabs: khoảng ' + startISO + ' → ' + endISO + ', đi qua ' + tabs.length + ' tab, REPLAY request thật cho từng tab (không rê chuột)...');
     for (var i = 0; i < tabs.length; i++) {
@@ -853,7 +877,8 @@
       log('➡️  Tiếp tục lấy Cảm xúc chi tiết cho toàn bộ bài...');
       await W.SHBCL_fetchAllPostReactions();
     } else {
-      log('⚠️  CHƯA lấy được Cảm xúc chi tiết bài viết — vào tab Thư viện nội dung, bấm mở 1 bài BẤT KỲ (thấy Cảm xúc dưới bài, KHÔNG phải dưới bình luận) 1 LẦN, rồi bấm nút "🚀 Quét toàn bộ" lại — các lần sau trong CÙNG phiên này sẽ tự động, không cần bấm nữa.');
+      var msg3 = 'CHƯA lấy được Cảm xúc chi tiết — vào Thư viện nội dung, bấm mở 1 bài BẤT KỲ (thấy Cảm xúc dưới bài, KHÔNG phải dưới bình luận) 1 LẦN, rồi bấm "🚀 Quét toàn bộ" lại — lần sau trong CÙNG phiên sẽ tự động, không cần bấm nữa.';
+      log('⚠️  ' + msg3); showBigWarning(msg3);
     }
     log('✅ SHBCL_runAll: XONG TOÀN BỘ.');
   };
