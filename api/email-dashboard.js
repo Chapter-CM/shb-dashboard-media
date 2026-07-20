@@ -833,7 +833,10 @@ function process(logs){
 }
 /* ── chart helpers ── */
 function gPolar(cx,cy,r,deg){var a=(deg-90)*Math.PI/180;return[cx+r*Math.cos(a),cy+r*Math.sin(a)];}
-function gArc(cx,cy,r,a0,a1){var s=gPolar(cx,cy,r,a0),e=gPolar(cx,cy,r,a1);return 'M'+s[0].toFixed(2)+' '+s[1].toFixed(2)+' A'+r+' '+r+' 0 '+((a1-a0)>180?1:0)+' 1 '+e[0].toFixed(2)+' '+e[1].toFixed(2);}
+// Sửa 20/07/2026: bản trước vẽ theo hướng (a0→a1, sweep=1) NGƯỢC với fb-dashboard.js
+// (a1→a0, sweep=0) — 2 cách viết không tương đương, gây cung tròn bị khuyết/lệch chỗ
+// (thấy rõ ở gauge Tỉ lệ mở tab Email). Dùng lại ĐÚNG công thức đã chạy tốt bên fb-dashboard.js.
+function gArc(cx,cy,r,a0,a1){var s=gPolar(cx,cy,r,a1),e=gPolar(cx,cy,r,a0),large=a1-a0<=180?0:1;return 'M'+s[0].toFixed(2)+' '+s[1].toFixed(2)+' A'+r+' '+r+' 0 '+large+' 0 '+e[0].toFixed(2)+' '+e[1].toFixed(2);}
 function radialGauge(pct,target){
   var p=Math.max(0,Math.min(100,pct||0)),cx=110,cy=110,r=88,sw=18,A0=-135,SPAN=270;
   var valEnd=A0+p/100*SPAN,tickA=A0+Math.max(0,Math.min(100,target))/100*SPAN;
