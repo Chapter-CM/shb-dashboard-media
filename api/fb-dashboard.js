@@ -779,14 +779,15 @@ function heroRow(d,cur,prev,ser){
   var engDelta=(!cFil)?seriesDelta(PS.interactions):'';
   // ── ER = (Cảm xúc + Chia sẻ) ÷ Lượt xem — theo yêu cầu 20/07/2026 (KHÔNG tính bình luận).
   // Tính theo TỪNG BÀI đang lọc (per-post), vì Facebook không cấp chuỗi "reactions/shares
-  // theo ngày" tách riêng ở cấp trang (chỉ có engagement_time_series gộp chung). Với bài
-  // nguồn Group/Content Library, react=0 + shares=0 luôn (nguồn này không tách được Cảm
-  // xúc/Chia sẻ riêng — xem comment ở groupAsPosts()) nên ER sẽ ra 0% cho tới khi có bài
-  // nguồn Trang (Graph API) hoặc Facebook mở lại breakdown theo bài cho Group.
-  var reactSum=cur.reduce(function(t,p){return t+reactTotal(p.react)+(p.shares||0);},0);
+  // theo ngày" tách riêng ở cấp trang (chỉ có engagement_time_series gộp chung). Bài nguồn
+  // Group/Content Library gốc có react=0+shares=0 (không tách được) — nhưng 20/07 đã bổ
+  // sung field per-post "reaction_total" (replay request chi tiết bài, SHBCL_fetchAllPostReactions()
+  // trong tools/shb-content-library.console.js) — ƯU TIÊN dùng field này nếu có, fallback
+  // về reactTotal(p.react) cho bài chưa quét cảm xúc chi tiết/bài nguồn Trang cũ.
+  var reactSum=cur.reduce(function(t,p){var rt=pmv(p,'reaction_total');return t+(rt>0?rt:reactTotal(p.react))+(p.shares||0);},0);
   var erViewsSum=cur.reduce(function(t,p){return t+(p.views||0);},0);
   var erAct=erViewsSum?pc(reactSum/erViewsSum*100):0;
-  var erSub='<span class="ksub-'+(erAct>=TARGET_ER?'up':'down')+'">'+(erAct>=TARGET_ER?'▲ đạt':'▼ dưới')+' mục tiêu '+TARGET_ER+'%</span>'+(reactSum===0&&cur.length?' <span style="font-size:9px;color:var(--faint)">· 0% vì bài nguồn Group chưa tách được Cảm xúc/Chia sẻ riêng</span>':'');
+  var erSub='<span class="ksub-'+(erAct>=TARGET_ER?'up':'down')+'">'+(erAct>=TARGET_ER?'▲ đạt':'▼ dưới')+' mục tiêu '+TARGET_ER+'%</span>'+(reactSum===0&&cur.length?' <span style="font-size:9px;color:var(--faint)">· 0% vì chưa quét Cảm xúc chi tiết (SHBCL_fetchAllPostReactions)</span>':'');
   // ── sparklines ──
   var spkEng=(PS.interactions||[]).slice(-14).map(function(b){return b.value;});
   var spkViews=(PS.views||[]).slice(-14).map(function(b){return b.value;});
@@ -802,7 +803,7 @@ function heroRow(d,cur,prev,ser){
   var impDelta=(!cFil)&&(impV||_pImp)?deltaChip(impV,_pImp):'';
   var cmtDelta=(!cFil)&&(cmtV||_pCmt)?deltaChip(cmtV,_pCmt):'';
   var viewerDelta=(!cFil)&&(viewersV||_pReach)?deltaChip(viewersV,_sumF(_pf,function(p){return pmv(p,'viewers');})):'';
-  var _pReact=_sumF(_pf,function(p){return reactTotal(p.react)+(p.shares||0);}),_pErViews=_sumF(_pf,function(p){return p.views||0;});
+  var _pReact=_sumF(_pf,function(p){var rt=pmv(p,'reaction_total');return (rt>0?rt:reactTotal(p.react))+(p.shares||0);}),_pErViews=_sumF(_pf,function(p){return p.views||0;});
   var erDelta=(reactSum||_pReact)?deltaChip(erAct,_pErViews?pc(_pReact/_pErViews*100):0):'';
   // Chuỗi interactions chỉ có những NGÀY ĐÃ QUÉT ĐƯỢC (tooltip lazy-load) — quét sót
   // ngày nào là tổng hụt ngày đó so với số Facebook tự hiện. Đối chiếu với chuỗi views

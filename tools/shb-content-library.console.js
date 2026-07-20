@@ -416,6 +416,45 @@
     return LAST_POST_RESPONSES;
   };
 
+  // ── REPLAY Cảm xúc chi tiết cho TOÀN BỘ bài đã quét — không cần bấm tay từng bài.
+  // feedbackTargetID trong request = base64("feedback:"+post_id) — post_id ĐÃ CÓ SẴN
+  // trong POSTS (từ lần quét Thư viện nội dung), nên tự tính lại cho mọi bài được.
+  // CỘNG TỔNG mọi loại cảm xúc trong "summary" (không map riêng Like/Love/Haha... theo
+  // ID để tránh đoán sai tên field — chỉ cần TỔNG cho công thức ER, không cần tách loại).
+  // QUAN TRỌNG: server ghi ĐÈ nguyên cột "metrics" mỗi lần upsert (không tự gộp) — nên
+  // MUTATE thẳng vào object đang có trong POSTS (đã có reach/viewers/engagement/comments
+  // từ lần quét trước) rồi gửi lại NGUYÊN DÒNG, tránh mất dữ liệu cũ.
+  W.SHBCL_fetchAllPostReactions = async function (reqIndex) {
+    reqIndex = reqIndex || 0;
+    var tmpl = LAST_POST_RESPONSES[reqIndex];
+    if (!tmpl || typeof tmpl.body !== 'string') { log('⚠️ Chưa có mẫu request — bấm mở chi tiết 1 bài (thấy Cảm xúc dưới bài) rồi gõ SHBCL_lastPostReactions() để xác nhận trước, sau đó gọi lại lệnh này.'); return; }
+    if (!POSTS.length) { log('⚠️ POSTS đang rỗng trong phiên này — cuộn qua Thư viện nội dung (hoặc bấm "🔄 Quét trang này") để nạp danh sách bài trước, rồi gọi lại.'); return; }
+    log('SHBCL_fetchAllPostReactions: sẽ lấy Cảm xúc chi tiết cho ' + POSTS.length + ' bài (không rê chuột, không cần bấm tay)...');
+    var ok = 0, fail = 0;
+    for (var i = 0; i < POSTS.length; i++) {
+      var row = POSTS[i], pid = row.post_id;
+      if (!pid || !/^\d+$/.test(pid)) { fail++; continue; }
+      try {
+        var feedbackTargetID = btoa('feedback:' + pid);
+        var newVars = { feedbackTargetID: feedbackTargetID, reactionID: '1635855486666999', scale: 1 };
+        var newBody = tmpl.body.replace(/variables=[^&]*/, 'variables=' + encodeURIComponent(JSON.stringify(newVars)));
+        var res = await fetch(tmpl.url, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: newBody });
+        var text = await res.text();
+        var j = null; try { j = JSON.parse(text); } catch (e) {}
+        var summary = j && j.data && j.data.node && j.data.node.top_reactions && j.data.node.top_reactions.summary;
+        if (!Array.isArray(summary)) { fail++; continue; }
+        var total = summary.reduce(function (t, s) { return t + (s.reaction_count || 0); }, 0);
+        row.metrics = row.metrics || {};
+        row.metrics.reaction_total = total; // gộp vào object đang có sẵn — KHÔNG tạo object mới, tránh mất field cũ
+        enqueue('bài ' + pid + ' (cảm xúc)', [row]); // gửi lại NGUYÊN DÒNG (đủ reach/viewers/engagement/comments)
+        ok++;
+      } catch (e) { fail++; }
+      badge();
+      await sleep(500); // giãn cách nhẹ tránh gọi dồn dập bị Facebook chặn tạm
+    }
+    log('✅ SHBCL_fetchAllPostReactions: xong — ' + ok + ' bài lấy được Cảm xúc, ' + fail + ' bài lỗi/bỏ qua (post_id không hợp lệ hoặc request lỗi).');
+  };
+
   function tryParse(text, reqUrl, reqBody) {
     text = String(text || '');
     maybeCapturePostDetail(text, reqUrl, reqBody);
