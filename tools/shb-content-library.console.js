@@ -349,7 +349,31 @@
     enqueue('page metrics', payload);
   }
 
-  function tryParse(text) {
+  // Rê chuột giả lập tooltip KHÔNG đáng tin cậy (isTrusted:false — nhiều chart không
+  // coi là tương tác thật nên không lazy-load thêm). Thay vì đoán mù, GIỮ LẠI request
+  // GraphQL THẬT (url + body) mỗi lần response chứa TimeSeries — để sau này REPLAY lại
+  // request đó (đổi biến ngày) mà không cần rê chuột nữa. Dùng: SHBCL_lastRequests().
+  var LAST_TS_REQUESTS = [];
+  function rememberRequest(url, body, hadSeries) {
+    if (!hadSeries) return;
+    LAST_TS_REQUESTS.unshift({ url: url, body: body, ts: Date.now() });
+    if (LAST_TS_REQUESTS.length > 8) LAST_TS_REQUESTS.length = 8;
+  }
+  W.SHBCL_lastRequests = function () {
+    if (!LAST_TS_REQUESTS.length) { log('⚠️ Chưa bắt được request nào chứa TimeSeries — quét trang (rê chuột/bấm nút) ít nhất 1 lần rồi gọi lại.'); return []; }
+    LAST_TS_REQUESTS.forEach(function (r, i) {
+      var varsStr = '';
+      try { varsStr = decodeURIComponent(String(r.body || '').split('&').filter(function (p) { return /^variables=/.test(p); })[0] || '').replace(/^variables=/, ''); } catch (e) {}
+      log('── request #' + i + ' (' + new Date(r.ts).toLocaleTimeString() + ') ──');
+      log('url:', r.url);
+      log('variables (JSON):', varsStr || '(không tìm thấy field "variables" trong body — có thể payload dùng cấu trúc khác, xem body thô)');
+      log('body thô (600 ký tự đầu):', String(r.body || '').slice(0, 600));
+    });
+    log('⚠️ TRƯỚC KHI gửi log này cho ai: xoá bớt phần "fb_dtsg"/cookie nếu có trong body (token phiên đăng nhập) — chỉ cần giữ lại phần "variables" là đủ để phân tích cấu trúc ngày tháng.');
+    return LAST_TS_REQUESTS;
+  };
+
+  function tryParse(text, reqUrl, reqBody) {
     text = String(text || '');
     var hasLib = text.indexOf('prodash_content_library') > -1;
     var hasPage = /professional_dashboard/.test(location.pathname) &&
@@ -363,6 +387,8 @@
       if (hasLib) scanJson(j);
       if (hasPage) { extractMetrics(j, pageAcc); grabSeriesByPath(j, pageAcc); }
     });
+    var hadSeries = hasPage && Object.keys(pageAcc.series).length > 0;
+    rememberRequest(reqUrl, reqBody, hadSeries);
     if (hasPage && (Object.keys(pageAcc.metrics).length || Object.keys(pageAcc.series).length)) sendPage(pageAcc);
   }
 
@@ -370,8 +396,9 @@
   var of = W.fetch;
   if (of) {
     W.fetch = function () {
+      var url = arguments[0], init = arguments[1] || {};
       var p = of.apply(this, arguments);
-      try { p.then(function (r) { try { r.clone().text().then(tryParse); } catch (e) {} }); } catch (e) {}
+      try { p.then(function (r) { try { r.clone().text().then(function (t) { tryParse(t, String(url), init.body); }); } catch (e) {} }); } catch (e) {}
       return p;
     };
   }
@@ -381,9 +408,10 @@
   if (XHR && XHR.prototype) {
     var oo = XHR.prototype.open, os = XHR.prototype.send;
     XHR.prototype.open = function (m, u) { this.__shbUrl = u; return oo.apply(this, arguments); };
-    XHR.prototype.send = function () {
+    XHR.prototype.send = function (body) {
       var x = this;
-      x.addEventListener('load', function () { try { tryParse(x.responseText); } catch (e) {} });
+      x.__shbBody = body;
+      x.addEventListener('load', function () { try { tryParse(x.responseText, x.__shbUrl, x.__shbBody); } catch (e) {} });
       return os.apply(this, arguments);
     };
   }
