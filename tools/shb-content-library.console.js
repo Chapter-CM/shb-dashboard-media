@@ -750,9 +750,18 @@
       var link = findSidebarLink(label);
       if (!link) { log('⚠️ Không tìm thấy tab "' + label + '" — bỏ qua, tự làm tay tab này (đứng ở tab đó rồi gõ SHBCL_fetchFullRange("' + startISO + '","' + endISO + '")).'); continue; }
       log('➡️  [' + (i + 1) + '/' + tabs.length + '] Chuyển sang tab "' + label + '"...');
-      var beforeCount = LAST_TS_REQUESTS.length;
       link.click();
       await sleep(1800); // đợi SPA đổi route + gọi API đầu tiên của tab mới
+      // Thư viện nội dung là danh sách PHÂN TRANG KIỂU CUỘN (infinite-scroll) — KHÁC hẳn
+      // các tab biểu đồ theo ngày (không có "Tuỳ chỉnh"/request TimeSeries để replay).
+      // Cuộn nhiều lượt để Facebook tự lazy-load hết toàn bộ bài thay vì chỉ lấy đúng số
+      // bài tải sẵn lúc mới vào tab (nguyên nhân quét thiếu bài so với tổng Facebook báo).
+      if (label === 'Thư viện nội dung') {
+        log('📜  Tab "' + label + '" là danh sách cuộn — tự cuộn nhiều lượt để tải hết bài...');
+        for (var s = 0; s < 4; s++) await autoScrollOnce(2500);
+        continue;
+      }
+      var beforeCount = LAST_TS_REQUESTS.length;
       if (!rangeMatches(wantRange)) {
         log('⏸️  Tab "' + label + '" rơi về mặc định (Facebook tự reset khi chuyển tab) — chờ bạn chọn lại "Tuỳ chỉnh" ' + startISO + ' → ' + endISO + '...');
         await waitForDateFix(label, wantRange);
