@@ -93,14 +93,31 @@ function mapSupabase(rows, snaps) {
   // lives: chưa ingest qua fetch.js (live_videos) — để trống, section tự hiện empty-state.
   return { posts: posts, series: series, lives: [], page: { followers: followers, name: 'SHB Fanpage' }, groupPosts: mapGroupPosts(groupRows), live: true };
 }
+// Ánh xạ CHÍNH XÁC theo giá trị THẬT của field business_content_type (xác nhận qua
+// SHBCL_postTypes() 20/07/2026: MULTI_IMAGE, SINGLE_IMAGE, FB_SHORTS_VIDEO, TEXT,
+// MULTI_MEDIA — trước đó dùng regex khớp chuỗi con bị sai 2 chỗ: FB_SHORTS_VIDEO
+// (Reels) bị /VIDEO/ bắt nhầm thành "Video" thường; MULTI_MEDIA không khớp gì cả nên
+// rơi vào mặc định "Text" sai hoàn toàn. Match CHÍNH XÁC trước, regex chỉ còn làm lưới
+// dự phòng cho giá trị chưa từng gặp (Facebook có thể thêm loại mới).
+var POST_TYPE_MAP = {
+  MULTI_IMAGE: 'Ảnh', SINGLE_IMAGE: 'Ảnh', ALBUM: 'Ảnh',
+  MULTI_MEDIA: 'Ảnh',
+  FB_SHORTS_VIDEO: 'Reel', REELS_VIDEO: 'Reel',
+  VIDEO: 'Video', NATIVE_VIDEO: 'Video',
+  LIVE_VIDEO: 'Livestream', LIVE: 'Livestream',
+  LINK: 'Link', SHARED_LINK: 'Link', SHARE: 'Link',
+  TEXT: 'Text', STATUS: 'Text'
+};
 function gpType(t, title) {
   // Livestream cũ bị Facebook xoá video sau 60 ngày -> post_type về TEXT. Nhận lại theo chữ.
   if (/livestream|live\s*stream|phát trực tiếp|\[live\]/i.test(String(title || ''))) return 'Livestream';
   t = String(t || '').toUpperCase();
+  if (POST_TYPE_MAP[t]) return POST_TYPE_MAP[t];
+  // Dự phòng cho giá trị lạ/chưa gặp — khớp lỏng theo chuỗi con.
   if (/LIVE/.test(t)) return 'Livestream';
-  if (/REEL/.test(t)) return 'Reel';
+  if (/REEL|SHORTS/.test(t)) return 'Reel';
   if (/VIDEO/.test(t)) return 'Video';
-  if (/MULTI_IMAGE|PHOTO|IMAGE|ALBUM/.test(t)) return 'Ảnh';
+  if (/IMAGE|PHOTO|ALBUM|MEDIA/.test(t)) return 'Ảnh';
   if (/LINK|SHARE/.test(t)) return 'Link';
   return 'Text';
 }
