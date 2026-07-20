@@ -108,18 +108,22 @@ var POST_TYPE_MAP = {
   LINK: 'Link', SHARED_LINK: 'Link', SHARE: 'Link',
   TEXT: 'Text', STATUS: 'Text'
 };
+// Livestream cũ: Facebook TỰ XOÁ video sau 60 ngày, post_type thật bị mất (về TEXT) —
+// chỉ trường hợp DUY NHẤT này phải nhận lại qua tiêu đề, vì Facebook không còn field
+// nào khác chứa thông tin đó nữa. reliable=false nghĩa là Lượt xem/Người xem của bài
+// này KHÔNG còn đáng tin (Facebook cũng xoá luôn số liệu gắn với video đã xoá).
+function isRecoveredLivestream(rawType, title) {
+  var real = POST_TYPE_MAP[String(rawType || '').toUpperCase()];
+  if (real === 'Livestream') return false; // Facebook vẫn còn field thật, đáng tin
+  return /livestream|live\s*stream|phát trực tiếp|\[live\]/i.test(String(title || ''));
+}
+// Định dạng: CHỈ khớp CHÍNH XÁC theo field business_content_type thật của Facebook
+// (POST_TYPE_MAP) — không còn đoán theo regex/chuỗi con. Giá trị lạ chưa gặp → "Khác"
+// (hiện rõ ra để phát hiện, thay vì âm thầm đoán sai như trước).
 function gpType(t, title) {
-  // Livestream cũ bị Facebook xoá video sau 60 ngày -> post_type về TEXT. Nhận lại theo chữ.
-  if (/livestream|live\s*stream|phát trực tiếp|\[live\]/i.test(String(title || ''))) return 'Livestream';
+  if (isRecoveredLivestream(t, title)) return 'Livestream';
   t = String(t || '').toUpperCase();
-  if (POST_TYPE_MAP[t]) return POST_TYPE_MAP[t];
-  // Dự phòng cho giá trị lạ/chưa gặp — khớp lỏng theo chuỗi con.
-  if (/LIVE/.test(t)) return 'Livestream';
-  if (/REEL|SHORTS/.test(t)) return 'Reel';
-  if (/VIDEO/.test(t)) return 'Video';
-  if (/IMAGE|PHOTO|ALBUM|MEDIA/.test(t)) return 'Ảnh';
-  if (/LINK|SHARE/.test(t)) return 'Link';
-  return 'Text';
+  return POST_TYPE_MAP[t] || 'Khác';
 }
 function gpTopic(msg) { var m = String(msg || '').match(/#(\w+)/); return m ? m[1] : 'Group'; }
 // Map 1 fb_group_posts -> shape post chuẩn. Chỉ có tổng engagement -> reactions ≈ engagement - comments,
@@ -137,7 +141,11 @@ function groupAsPosts(rows) {
       react: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
       comments: cmt, replies: 0, pageReplies: 0, shares: 0, clicks: 0, firstCommentMin: 0,
       video: null, vel: { h1: 0, h3: 0, h6: 0, h24: 0 }, isGroup: true, engRaw: eng,
-      pm: r.metrics || {}   // tất cả chỉ số per-post (impression, net_follow, video_view_*, ...)
+      pm: r.metrics || {},   // tất cả chỉ số per-post (impression, net_follow, video_view_*, ...)
+      // Livestream nhận lại qua tiêu đề (video đã bị Facebook xoá sau 60 ngày) → Lượt
+      // xem/Người xem không còn đáng tin → ER/Tỉ lệ tiếp cận của bài này hiện "—" thay vì
+      // số bịa ra (đã thấy thực tế: ER 800%, Tỉ lệ tiếp cận 4010% — vô nghĩa).
+      staleViews: isRecoveredLivestream(r.post_type, r.title)
     };
   });
 }
@@ -802,7 +810,7 @@ function heroRow(d,cur,prev,ser){
   var reachSum=sumPm(cur,'viewers');                                   // Lượt tiếp cận (chỉ số riêng dashboard) = Σ người xem mọi nội dung, KỂ CẢ TRÙNG LẶP — KHÔNG phải Reach chuẩn (unique) của Facebook
   var reachRatio=viewsVal?pc(Math.min(999,reachSum/viewsVal*100)):0;   // Tỉ lệ tiếp cận (nội bộ) = Lượt tiếp cận ÷ Lượt xem
   var reachArc=Math.min(100,reachRatio);                               // vòng cung = tỉ lệ tiếp cận nội bộ (0–100)
-  var gauge='<div class="gauge-card" data-tip="Số to = tổng Lượt xem theo ngày hoạt động ('+nf(viewsVal)+'). Vòng cung = chỉ số nội bộ dashboard \'Tỉ lệ tiếp cận\' = Lượt tiếp cận (Σ người xem CÓ TRÙNG) ÷ Lượt xem ('+reachRatio+'%) — KHÔNG phải Reach chuẩn Facebook, chỉ dùng theo dõi xu hướng nội bộ."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(reachArc,100,nfk(viewsVal),'Tiếp cận '+reachRatio+'%')+'</div><div class="gc-sub">'+(vDelta?vDelta+' so kỳ trước · ':'')+'Tỉ lệ tiếp cận '+reachRatio+'% · '+s.nPosts+' bài</div></div>';
+  var gauge='<div class="gauge-card" data-tip="Số to = Lượt xem theo ngày hoạt động. Vòng cung = tỉ lệ tiếp cận nội bộ dashboard ('+reachRatio+'%), không phải Reach chuẩn Facebook."><div class="gc-h">Tổng Lượt xem'+(viewsAct!=null?actTag:'')+'</div><div class="gauge-wrap">'+gaugeBig(reachArc,100,nfk(viewsVal),'Tiếp cận '+reachRatio+'%')+'</div><div class="gc-sub">'+(vDelta?vDelta+' so kỳ trước · ':'')+'Tỉ lệ tiếp cận '+reachRatio+'% · '+s.nPosts+' bài</div></div>';
   var engDelta=(!cFil)?seriesDelta(PS.interactions):'';
   // ── ER = (Cảm xúc + Chia sẻ) ÷ Lượt xem — theo yêu cầu 20/07/2026 (KHÔNG tính bình luận).
   // Tính theo TỪNG BÀI đang lọc (per-post), vì Facebook không cấp chuỗi "reactions/shares
@@ -842,12 +850,12 @@ function heroRow(d,cur,prev,ser){
   }
   var engWarn=engMiss?' · <span class="ksub-down">⚠ thiếu '+engMiss+' ngày</span>':'';
   var k=[
-    card('Lượt tương tác',tnum(engV),(engDelta?engDelta+' so kỳ trước':'tổng tương tác kỳ này')+engWarn,engAct!=null?('Tổng tương tác theo NGÀY HOẠT ĐỘNG (engagement_time_series) trong khoảng lọc — chuẩn Facebook. Số phụ = so kỳ liền trước.'+(engMiss?' ⚠ Chuỗi interactions đang THIẾU '+engMiss+' ngày so với chuỗi views trong khoảng này — số đang hụt so với Facebook. Vào tab Lượt tương tác, chọn đúng khoảng ngày rồi bấm "🔄 Quét trang này" để quét bù.':'')):'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{spark:spkEng}),
-    card('ER (Engagement Rate)',erAct+'%',(erDelta?erDelta+' so kỳ trước · ':'')+erSub,'ER = (Cảm xúc Like/Love/Haha/Wow/Sad/Angry + Chia sẻ) ÷ Lượt xem — KHÔNG tính bình luận. Chỉ tính được cho bài tách riêng được Cảm xúc/Chia sẻ (nguồn Trang); bài nguồn Group hiện ra 0% vì thiếu dữ liệu này.',{spark:spkEr}),
-    card('Lượt tiếp cận',tnum(reachSum),(reachDelta?reachDelta+' so kỳ trước · ':'')+'tỉ lệ tiếp cận '+reachRatio+'%','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem.',{spark:spkReach}),
-    card('Người xem',tnum(viewersV),(viewerDelta?viewerDelta+' so kỳ trước · ':'')+'duy nhất · cấp trang','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{spark:spkViews}),
-    card('Lượt hiển thị',tnum(impV),(impDelta?impDelta+' so kỳ trước · ':'')+'tổng từ các bài','Tổng số lần hiển thị (impressions), CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc. KHÁC Lượt xem.',{spark:spkImp}),
-    card('Bình luận',tnum(cmtV),(cmtDelta?cmtDelta+' so kỳ trước · ':'')+'tổng từ các bài','Tổng bình luận CỘNG DỒN từ các nội dung (per-post). Lọc theo bài/loại thì chỉ cộng các nội dung đang lọc.',{spark:spkCmt})
+    card('Lượt tương tác',tnum(engV),(engDelta?engDelta+' so kỳ trước':'tổng tương tác kỳ này')+engWarn,engAct!=null?('Tổng tương tác Facebook báo cho trang, theo ngày hoạt động.'+(engMiss?' ⚠ Thiếu '+engMiss+' ngày dữ liệu — quét bù ở tab Lượt tương tác.':'')):'Quét lại tab Lượt tương tác để có số này.',{spark:spkEng}),
+    card('ER (Engagement Rate)',erAct+'%',(erDelta?erDelta+' so kỳ trước · ':'')+erSub,'(Cảm xúc + Chia sẻ) ÷ Lượt xem, không tính bình luận. Cần quét Cảm xúc chi tiết mới có số.',{spark:spkEr}),
+    card('Lượt tiếp cận',tnum(reachSum),(reachDelta?reachDelta+' so kỳ trước · ':'')+'tỉ lệ tiếp cận '+reachRatio+'%','Chỉ số riêng dashboard: tổng người xem mọi bài, TÍNH CẢ TRÙNG. Không phải Reach chuẩn Facebook.',{spark:spkReach}),
+    card('Người xem',tnum(viewersV),(viewerDelta?viewerDelta+' so kỳ trước · ':'')+'duy nhất · cấp trang','Người xem duy nhất cấp trang — lấy từ tab Lượt xem trên Facebook.',{spark:spkViews}),
+    card('Lượt hiển thị',tnum(impV),(impDelta?impDelta+' so kỳ trước · ':'')+'tổng từ các bài','Số lần nội dung hiển thị trên màn hình — khác Lượt xem (không tính lượt xem thật).',{spark:spkImp}),
+    card('Bình luận',tnum(cmtV),(cmtDelta?cmtDelta+' so kỳ trước · ':'')+'tổng từ các bài','Tổng bình luận, cộng dồn từ các bài trong kỳ.',{spark:spkCmt})
   ].join('');
   var topType=(d.byType&&d.byType[0])?d.byType[0].name:'', topProj=(d.byProject&&d.byProject[0])?d.byProject[0].name:'';
   var summary='<div class="so" style="margin-top:16px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:15px">💡</span><div>Kỳ này: <b>'+nf(viewsVal)+'</b> lượt xem'+(vDelta?' ('+vDelta+' so kỳ trước)':'')+' · <b>'+nf(engV)+'</b> lượt tương tác · ER <b>'+erAct+'%</b>'+(erAct>=TARGET_ER?' ✓ đạt mục tiêu':' (mục tiêu '+TARGET_ER+'%)')+'.'+(topType?' Định dạng <b>'+esc(topType)+'</b>'+(topProj&&topProj!=='Khác'?' &amp; dự án <b>'+esc(topProj)+'</b>':'')+' hiệu quả nhất — ưu tiên sản xuất.':'')+'</div></div>';
@@ -857,12 +865,6 @@ function sumKey(posts,k){var t=0;posts.forEach(function(p){if(k==='reactions')t+
 function sumPm(posts,k){var t=0;posts.forEach(function(p){if(p.pm&&typeof p.pm[k]==='number')t+=p.pm[k];});return t;}
 function pmv(p,k){return (p&&p.pm&&typeof p.pm[k]==='number')?p.pm[k]:0;}
 function pViews(p){return pmv(p,'views')||pmv(p,'reach')||p.views||0;}
-// ER theo NGÀY HOẠT ĐỘNG = tương tác(ngày) ÷ lượt xem(ngày) × 100.
-function dailyER(){
-  var PS=(DATA.pageInsights&&DATA.pageInsights.series)||{},vm={};
-  (PS.views||[]).forEach(function(p){vm[p.ms]=p.value;});
-  return (PS.interactions||[]).map(function(p){var v=vm[p.ms];return v?{ms:p.ms,value:Math.round(p.value/v*1000)/10}:null;}).filter(Boolean).sort(function(a,b){return a.ms-b.ms;});
-}
 // Gom 1 chỉ số per-post theo NGÀY ĐĂNG (tôn trọng lọc thời gian + lọc chéo).
 function dailyByPost(metricFn){
   var F=_filter||{},m={};
@@ -888,11 +890,13 @@ function heroChart(d,ser){
     note=' <span style="font-size:10px;color:var(--faint);font-weight:600;text-transform:none;letter-spacing:0">· theo ngày ĐĂNG (đang lọc)</span>';
   } else if(_metric==='views'){daily=(PS.views||[]).filter(function(p){return inWin(p.ms);});note=actNote('Lượt xem');}
   else if(_metric==='eng'){daily=(PS.interactions||[]).filter(function(p){return inWin(p.ms);});note=actNote('Lượt tương tác');}
-  else {daily=dailyER().filter(function(p){return inWin(p.ms);});note=actNote('ER %');}  // ER theo ngày = tương tác/lượt xem
-  var chart=daily&&daily.length?pageDailyChart(daily,_metric==='er'?'%':'')
-    :'<div class="nd" style="padding:30px 16px;text-align:center">Chưa có chuỗi theo ngày hoạt động cho chỉ số này.'+(_metric==='eng'||_metric==='er'?'<br><span style="font-size:11.5px">Quét lại trang <b>Lượt tương tác</b> (bấm nút "🔄 Quét trang này" trên ô SHB) để lấy engagement_time_series.</span>':'')+'</div>';
+  // Cảm xúc: Facebook không cấp chuỗi "cảm xúc theo ngày" ở cấp trang — cộng theo NGÀY
+  // ĐĂNG từ dữ liệu per-post (giống nhánh cFil ở trên), luôn dùng cách này bất kể có lọc.
+  else {daily=dailyByPost(reactCountOf).filter(function(p){return inWin(p.ms);});note=' <span style="font-size:10px;color:var(--faint);font-weight:600;text-transform:none;letter-spacing:0">· Cảm xúc theo ngày ĐĂNG</span>';}
+  var chart=daily&&daily.length?pageDailyChart(daily,'')
+    :'<div class="nd" style="padding:30px 16px;text-align:center">Chưa có chuỗi theo ngày hoạt động cho chỉ số này.'+(_metric==='eng'?'<br><span style="font-size:11.5px">Quét lại trang <b>Lượt tương tác</b> (bấm nút "🔄 Quét trang này" trên ô SHB) để lấy engagement_time_series.</span>':'')+'</div>';
   return '<div class="hero-chart"><div class="hc-head"><div class="hc-title" data-tip="Xu hướng theo NGÀY CÓ HOẠT ĐỘNG (không phải ngày đăng) — chuẩn Facebook.">Xu hướng theo thời gian'+note+'</div>'
-    +'<div class="metric-toggle"><button class="'+(_metric==='views'?'on':'')+'" onclick="setMetric(\'views\')">Lượt xem</button><button class="'+(_metric==='eng'?'on':'')+'" onclick="setMetric(\'eng\')">Tương tác</button><button class="'+(_metric==='er'?'on':'')+'" onclick="setMetric(\'er\')">ER %</button></div></div>'
+    +'<div class="metric-toggle"><button class="'+(_metric==='views'?'on':'')+'" onclick="setMetric(\'views\')">Lượt xem</button><button class="'+(_metric==='eng'?'on':'')+'" onclick="setMetric(\'eng\')">Tương tác</button><button class="'+(_metric==='er'?'on':'')+'" onclick="setMetric(\'er\')">Cảm xúc</button></div></div>'
     +chart+'</div>';
 }
 function timingPanel(d){
@@ -949,15 +953,19 @@ function contentSection(d){
     render:function(r){var p=r.p,vw=pViews(p),eng=r.eng,er=r.er,cx=reactCountOf(p);
       var tier=(er||0)>=(d.sum.erRate||0)*1.2?'hot':(er||0)>=(d.sum.erRate||0)*.8?'warm':'cold';
       var erBarW=Math.min(100,_maxErAll>0?er/_maxErAll*100:0).toFixed(0);
-      return '<tr onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer'+(isSel("post",p.id)?';background:var(--accent-bg)':'')+'" data-tip="Bấm để lọc TOÀN dashboard theo bài này (bấm lại để bỏ)"><td class="pin"><div class="ptitle"><button class="drill-toggle" onclick="event.stopPropagation();toggleDrill(\''+p.id+'\',this)" data-tip="Xem chi tiết bài viết">▾</button><span class="tdot '+tier+'"></span><div><div class="pt-main">'+postLink(p,p.msg.slice(0,50))+'</div><div class="pt-sub">'+esc(p.topic||p.type)+'</div></div></div></td>'
+      // Livestream nhận lại qua tiêu đề (video đã bị Facebook xoá sau 60 ngày) → Lượt
+      // xem không còn đáng tin → ẩn ER/Tỉ lệ tiếp cận (số bịa ra, không mang ý nghĩa gì).
+      var erCell=p.staleViews?'<span class="erc" data-tip="Video đã bị Facebook xoá (Livestream >60 ngày) — Lượt xem không còn đáng tin nên không tính ER"><b>—</b></span>':'<span class="erc"><b>'+er+'%</b><span class="erbar2"><i style="width:'+erBarW+'%"></i></span></span>';
+      var vrateCell=p.staleViews?'—':(vw?pc(pmv(p,'viewers')/vw*100)+'%':'—');
+      return '<tr onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer'+(isSel("post",p.id)?';background:var(--accent-bg)':'')+'" data-tip="Bấm để lọc TOÀN dashboard theo bài này (bấm lại để bỏ)"><td class="pin"><div class="ptitle"><button class="drill-toggle" onclick="event.stopPropagation();toggleDrill(\''+p.id+'\',this)" data-tip="Xem chi tiết bài viết">▾</button><span class="tdot '+tier+'"></span><div><div class="pt-main">'+postLink(p,p.msg.slice(0,50))+'</div><div class="pt-sub">'+esc(p.topic||p.type)+(p.staleViews?' · <span style="color:var(--warn)">⚠ video đã bị xoá</span>':'')+'</div></div></div></td>'
         +'<td class="num">'+(p.ts?fmtDay(p.ts):'—')+'</td>'
         +'<td onclick="event.stopPropagation();setFilter(\'type\',\''+jsq(p.type)+'\')" style="cursor:pointer" data-tip="Bấm để lọc chéo theo loại này"><span class="pill '+(isSel("type",p.type)?'p-good':'p-neutral')+'">'+esc(p.type)+'</span></td>'
         +'<td class="num">'+nf(vw)+'</td><td class="num">'+nf(pmv(p,'viewers'))+'</td>'
         +'<td class="num">'+nf(pmv(p,'impression'))+'</td><td class="num">'+nf(eng)+'</td>'
         +'<td class="num">'+nf(cx)+'</td>'
         +'<td class="num">'+nf(pmv(p,'comment')||p.comments)+'</td>'
-        +'<td class="num"><span class="erc"><b>'+er+'%</b><span class="erbar2"><i style="width:'+erBarW+'%"></i></span></span></td>'
-        +'<td class="num">'+(vw?pc(pmv(p,'viewers')/vw*100)+'%':'—')+'</td></tr>'
+        +'<td class="num">'+erCell+'</td>'
+        +'<td class="num">'+vrateCell+'</td></tr>'
         +'<tr class="drill" id="dr-'+p.id+'" style="display:none"><td colspan="11"><div class="drill-in">'
         +'<div class="dd">Đăng lúc<b>'+fmtTime(p.ts)+'</b></div><div class="dd">Chủ đề<b>'+esc(p.topic)+'</b></div>'
         +(p.engRaw!=null
@@ -995,7 +1003,7 @@ function contentSection(d){
     return '<section id="s-content">'+tabs+'<div class="panel" id="tbl-'+id+'">'
       +searchBox(id,'Tìm bài viết / chủ đề…')
       +'<div class="tw"><table><thead><tr><th class="pin">Bài viết</th>'
-      +th(id,'ts','Đăng','Sắp theo ngày đăng')+'<th data-tip="Định dạng — bấm ô để lọc chéo">Loại</th>'+th(id,'views','Lượt xem','Số lần nội dung được xem')+th(id,'vw','Người xem','Người xem duy nhất')+th(id,'imp','Lượt hiển thị','Số lần hiển thị trên màn hình')+th(id,'eng','Lượt tương tác','Tổng tương tác Facebook báo cho bài (engagement)')+th(id,'cx','Cảm xúc','Tổng Like/Love/Haha/Wow/Sad/Angry/Care — cần quét chi tiết (SHBCL_fetchAllPostReactions), 0 nếu chưa quét')+th(id,'cmt','Bình luận')+th(id,'er','ER','(Cảm xúc + Chia sẻ) ÷ Lượt xem')+th(id,'vrate','Tỉ lệ tiếp cận','Tỉ lệ tiếp cận = Người xem ÷ Lượt xem của bài')
+      +th(id,'ts','Đăng','Sắp theo ngày đăng')+'<th data-tip="Định dạng theo Facebook — bấm để lọc chéo">Loại</th>'+th(id,'views','Lượt xem','Số lần xem, kể cả xem lại')+th(id,'vw','Người xem','Người xem duy nhất')+th(id,'imp','Lượt hiển thị','Số lần hiển thị trên màn hình')+th(id,'eng','Lượt tương tác','Tổng tương tác Facebook báo cho bài')+th(id,'cx','Cảm xúc','Tổng Like/Love/Haha/Wow/Sad/Angry/Care — cần quét chi tiết mới có số')+th(id,'cmt','Bình luận')+th(id,'er','ER','(Cảm xúc + Chia sẻ) ÷ Lượt xem')+th(id,'vrate','Tỉ lệ tiếp cận','Người xem ÷ Lượt xem của bài')
       +'</tr></thead><tbody id="tb-'+id+'"></tbody></table></div><div class="pager" id="pg-'+id+'"></div></div></section>';
   } else {
     var vid='posts-vid';
@@ -1068,13 +1076,13 @@ function dictSection(){
     ['Lượt xem (Views)','Số lần nội dung được xem, kể cả xem lại nhiều lần.'],
     ['Người xem (Viewers)','Số người DUY NHẤT đã xem — một người xem nhiều lần chỉ tính 1.'],
     ['Lượt hiển thị (Impressions)','Số lần nội dung hiển thị trên màn hình, kể cả khi không được xem thật.'],
-    ['Lượt tương tác (Engagement)','Chỉ số "engagement" tổng hợp Facebook trả về cho bài/trang (Cảm xúc + Bình luận + Chia sẻ + tương tác khác Facebook không tách riêng). Khớp số Facebook hiển thị đầu trang "Lượt tương tác".'],
-    ['Cảm xúc (Reactions)','Tổng Like/Love/Haha/Wow/Sad/Angry/Care của bài — cần quét chi tiết từng bài (SHBCL_fetchAllPostReactions), ra 0% nếu chưa quét.'],
+    ['Lượt tương tác (Engagement)','Chỉ số "engagement" Facebook trả về cho bài/trang — khớp số Facebook hiển thị.'],
+    ['Cảm xúc (Reactions)','Tổng Like/Love/Haha/Wow/Sad/Angry/Care — cần quét chi tiết mới có số.'],
     ['Bình luận (Comments)','Số bình luận trên bài.'],
-    ['Chia sẻ (Shares)','Số lượt chia sẻ bài — chỉ có với bài nguồn Trang, bài nguồn Group Facebook không cấp số này.'],
-    ['ER (Engagement Rate)','(Cảm xúc + Chia sẻ) ÷ Lượt xem · mục tiêu '+TARGET_ER+'% — KHÔNG tính bình luận.'],
-    ['Lượt tiếp cận','Chỉ số RIÊNG của dashboard = Σ Người xem của mọi bài trong kỳ, TÍNH CẢ TRÙNG LẶP. KHÔNG phải Reach chuẩn (duy nhất) của Facebook — chỉ dùng theo dõi xu hướng nội bộ, không so trực tiếp với số trên Công cụ chuyên nghiệp.'],
-    ['Tỉ lệ tiếp cận','Chỉ số riêng của dashboard = Lượt tiếp cận ÷ Lượt xem — cũng không phải Reach Rate chuẩn Facebook.'],
+    ['Chia sẻ (Shares)','Số lượt chia sẻ — chỉ có ở bài nguồn Trang, Group không cấp số này.'],
+    ['ER (Engagement Rate)','(Cảm xúc + Chia sẻ) ÷ Lượt xem · mục tiêu '+TARGET_ER+'%.'],
+    ['Lượt tiếp cận','Chỉ số riêng dashboard: Σ người xem mọi bài, TÍNH CẢ TRÙNG. Không phải Reach chuẩn Facebook.'],
+    ['Tỉ lệ tiếp cận','Chỉ số riêng dashboard: Lượt tiếp cận ÷ Lượt xem. Không phải Reach Rate chuẩn Facebook.'],
     ['Người theo dõi thực (Net Follow)','Số người theo dõi tăng RÒNG (theo mới − hủy theo dõi) nhờ một bài.'],
     ['Xem ≥3 giây / ≥1 phút','Số lượt xem video đạt tối thiểu 3 giây / 1 phút.'],
     ['Thời gian xem trung bình','Thời lượng trung bình mỗi người đã xem video.'],
