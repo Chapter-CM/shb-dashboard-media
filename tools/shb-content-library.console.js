@@ -110,6 +110,11 @@
   var sent = {}; // chống gom trùng trong cùng phiên
   var POSTS = [];  // bộ đệm bài viết đã gom
   var PAGES = [];  // bộ đệm page-level metrics đã gom
+  // Nhớ lại Cảm xúc chi tiết đã lấy được (post_id -> tổng), TÁCH RIÊNG khỏi POSTS —
+  // để nếu quét lại Thư viện nội dung SAU KHI đã lấy Cảm xúc (vd bấm "🚀 Quét toàn bộ"
+  // lần 2 trong cùng phiên), object bài viết MỚI dựng lại từ Content Library (không có
+  // field này) vẫn tự được gộp lại, KHÔNG bị ghi đè mất Cảm xúc đã lấy trước đó.
+  var REACTION_TOTALS = {};
 
   // ── COVERAGE: đếm chính xác đã phủ đủ ngày nào trong khoảng đang chọn chưa —
   // KHÔNG đoán mò như quét chuột giả, mà tính toán thật từ dữ liệu đã bắt được.
@@ -323,6 +328,9 @@
     lib.edges.forEach(function (e) {
       var row = mapNode(e && e.node);
       if (!row) return;
+      // Gộp lại Cảm xúc đã lấy trước đó (nếu có) — tránh mất dữ liệu khi Content Library
+      // tự tải lại (reach/engagement đổi nhẹ khiến key dedup khác đi, coi là "bài mới").
+      if (REACTION_TOTALS[row.post_id] != null) row.metrics.reaction_total = REACTION_TOTALS[row.post_id];
       var key = row.post_id + ':' + row.reach + ':' + row.engagement;
       if (sent[key]) return; sent[key] = 1;
       rows.push(row);
@@ -463,6 +471,7 @@
         var total = summary.reduce(function (t, s) { return t + (s.reaction_count || 0); }, 0);
         row.metrics = row.metrics || {};
         row.metrics.reaction_total = total; // gộp vào object đang có sẵn — KHÔNG tạo object mới, tránh mất field cũ
+        REACTION_TOTALS[pid] = total; // nhớ lại cho các lần Content Library tự tải lại sau này trong phiên
         enqueue('bài ' + pid + ' (cảm xúc)', [row]); // gửi lại NGUYÊN DÒNG (đủ reach/viewers/engagement/comments)
         ok++;
       } catch (e) { fail++; }
@@ -704,8 +713,14 @@
         '<div style="margin-top:8px;text-align:right"><button id="shb-cl-datewait-btn" style="background:linear-gradient(90deg,#e11d2a,#fb7427);color:#fff;border:0;border-radius:6px;padding:5px 12px;font:12px system-ui;cursor:pointer">✅ Đã chọn xong — Quét tab này</button></div>';
       document.body.appendChild(ov);
       var poll = setInterval(function () { if (rangeMatches(want)) finish(); }, 800); // tự đóng ngay khi phát hiện đã khớp, khỏi cần bấm
+      // An toàn: nếu không ai bấm/chọn lại trong 3 phút (vd bấm nút rồi đi làm việc khác),
+      // TỰ BỎ QUA tab này thay vì treo cả quy trình "🚀 Quét toàn bộ" mãi mãi.
+      var timeout = setTimeout(function () {
+        log('⏱️  Chờ quá lâu ở tab "' + label + '" — tự bỏ qua tab này để tiếp tục các tab còn lại.');
+        finish();
+      }, 180000);
       function finish() {
-        clearInterval(poll);
+        clearInterval(poll); clearTimeout(timeout);
         var el = document.getElementById('shb-cl-datewait'); if (el) el.remove();
         resolve();
       }
