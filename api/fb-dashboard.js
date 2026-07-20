@@ -114,7 +114,12 @@ var POST_TYPE_MAP = {
 // này KHÔNG còn đáng tin (Facebook cũng xoá luôn số liệu gắn với video đã xoá).
 function isRecoveredLivestream(rawType, title) {
   var real = POST_TYPE_MAP[String(rawType || '').toUpperCase()];
-  if (real === 'Livestream') return false; // Facebook vẫn còn field thật, đáng tin
+  // CHỈ áp dụng khi field thật đã MẤT (rỗng hoặc rơi về "Text" — đúng dấu hiệu Facebook
+  // xoá video sau 60 ngày). Bài có định dạng thật hợp lệ khác (Ảnh/Video/Reel/Link) dù
+  // tiêu đề có nhắc "livestream"/"trực tiếp" vẫn GIỮ NGUYÊN định dạng thật, không bị gán
+  // nhầm — đây chính là lỗi trước đó: bài thông báo/minigame nhắc livestream trong tiêu
+  // đề bị đổi nhầm thành Livestream + mất luôn ER/Tỉ lệ tiếp cận dù dữ liệu vẫn còn nguyên.
+  if (real && real !== 'Text') return false;
   return /livestream|live\s*stream|phát trực tiếp|\[live\]/i.test(String(title || ''));
 }
 // Định dạng: CHỈ khớp CHÍNH XÁC theo field business_content_type thật của Facebook
