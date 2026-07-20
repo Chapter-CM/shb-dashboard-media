@@ -229,9 +229,21 @@
       ' | ✅' + okCount + (failCount ? ' ❌' + failCount : '') + (QUEUE.length ? ' | chờ gửi: ' + QUEUE.length : '') +
       ' <button id="shb-cl-sweep-btn" style="margin-left:6px;background:linear-gradient(90deg,#e11d2a,#fb7427);' +
       'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🔄 Quét trang này</button>' +
+      ' <button id="shb-cl-fetchall-btn" style="margin-left:4px;background:linear-gradient(90deg,#0a7cff,#00c853);' +
+      'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer;font-weight:600" ' +
+      'title="KHUYÊN DÙNG: tự chuyển qua tất cả tab Insight, REPLAY request thật (không rê chuột) — chuẩn nhất, ít thao tác tay nhất. Chọn đúng Tuỳ chỉnh trước khi bấm.">⚡ Quét chuẩn (khuyên dùng)</button>' +
+      ' <button id="shb-cl-sweep-btn" style="margin-left:6px;background:linear-gradient(90deg,#e11d2a,#fb7427);' +
+      'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer" ' +
+      'title="Cách cũ (rê chuột giả lập) — đường lui nếu Quét chuẩn không replay được">🔄 Quét trang này</button>' +
       ' <button id="shb-cl-sweepall-btn" style="margin-left:4px;background:#1877f2;' +
       'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer" ' +
-      'title="Tự chuyển qua Lượt xem/Thu nhập/Lượt tương tác/Đối tượng/Nhắn tin/Thư viện nội dung và quét từng tab">🌐 Quét tất cả tab</button>';
+      'title="Cách cũ (rê chuột giả lập) qua tất cả tab — đường lui nếu Quét chuẩn không replay được">🌐 Quét tất cả tab (cũ)</button>';
+    var btnFetchAll = document.getElementById('shb-cl-fetchall-btn');
+    if (btnFetchAll) btnFetchAll.onclick = function (ev) {
+      ev.stopPropagation();
+      btnFetchAll.disabled = true; btnFetchAll.textContent = '⏳ đang quét chuẩn...';
+      W.SHBCL_fetchAllTabs().then(function () { btnFetchAll.disabled = false; btnFetchAll.textContent = '⚡ Quét chuẩn (khuyên dùng)'; });
+    };
     var btn = document.getElementById('shb-cl-sweep-btn');
     if (btn) btn.onclick = function (ev) {
       ev.stopPropagation();
@@ -242,7 +254,7 @@
     if (btnAll) btnAll.onclick = function (ev) {
       ev.stopPropagation();
       btnAll.disabled = true; btnAll.textContent = '⏳ đang quét tất cả tab...';
-      W.SHBCL_sweepAllTabs().then(function () { btnAll.disabled = false; btnAll.textContent = '🌐 Quét tất cả tab'; });
+      W.SHBCL_sweepAllTabs().then(function () { btnAll.disabled = false; btnAll.textContent = '🌐 Quét tất cả tab (cũ)'; });
     };
   }
 
@@ -633,11 +645,49 @@
     }
     log('✅ SHBCL_sweepAllTabs: xong tất cả tab — tổng đã gom: ' + POSTS.length + ' bài, ' + PAGES.length + ' page. Gõ SHBCL_coverage() để xem coverage từng chỉ số.');
   };
-  log('KHUYÊN DÙNG (chắc ăn nhất, không rê chuột, không sót ngày): mở tab Insight cần lấy, đợi chart tải xong 1 lần, ' +
-      'rồi gõ SHBCL_fetchFullRange("2025-12-01","2026-07-20") — tự chia nhỏ khoảng ngày và GỌI LẠI ĐÚNG request thật của Facebook ' +
-      'cho từng đoạn, không cần rê chuột/không phụ thuộc chart hiển thị. Gõ SHBCL_lastRequests() để xem request đã bắt được trước khi gọi. ' +
-      'Cách cũ (rê chuột giả lập, kém tin cậy hơn) vẫn còn: bấm nút "🔄 Quét trang này" trên ô SHB (hoặc gõ SHBCL_sweep()/SHBCL_sweepAllTabs()). ' +
-      'Gõ SHBCL_coverage() bất kỳ lúc nào để xem báo cáo hiện tại.');
+
+  // ── LỆNH DUY NHẤT KHUYÊN DÙNG — gộp "tự chuyển qua từng tab" + "replay request
+  // thật" thành 1 bước: KHÔNG rê chuột ở đâu cả, tự phủ đủ toàn bộ ngày cho MỌI tab
+  // Insight. Việc tay duy nhất còn lại: chọn lại "Tuỳ chỉnh" khi Facebook tự reset về
+  // 28 ngày lúc chuyển tab (hành vi của chính Facebook, không sửa được từ script).
+  W.SHBCL_fetchAllTabs = async function (chunkDays, tabs) {
+    chunkDays = chunkDays || 30;
+    tabs = tabs || INSIGHT_TABS;
+    var wantRange = parseUrlRange();
+    if (!wantRange) { log('⚠️ Hãy chọn "Tuỳ chỉnh" đúng khoảng ngày cần TRÊN TAB HIỆN TẠI trước, rồi gọi lại SHBCL_fetchAllTabs().'); return; }
+    var startISO = iso(new Date(wantRange.start)), endISO = iso(new Date(wantRange.end));
+    log('SHBCL_fetchAllTabs: khoảng ' + startISO + ' → ' + endISO + ', đi qua ' + tabs.length + ' tab, REPLAY request thật cho từng tab (không rê chuột)...');
+    for (var i = 0; i < tabs.length; i++) {
+      var label = tabs[i];
+      var link = findSidebarLink(label);
+      if (!link) { log('⚠️ Không tìm thấy tab "' + label + '" — bỏ qua, tự làm tay tab này (đứng ở tab đó rồi gõ SHBCL_fetchFullRange("' + startISO + '","' + endISO + '")).'); continue; }
+      log('➡️  [' + (i + 1) + '/' + tabs.length + '] Chuyển sang tab "' + label + '"...');
+      var beforeCount = LAST_TS_REQUESTS.length;
+      link.click();
+      await sleep(1800); // đợi SPA đổi route + gọi API đầu tiên của tab mới
+      if (!rangeMatches(wantRange)) {
+        log('⏸️  Tab "' + label + '" rơi về mặc định (Facebook tự reset khi chuyển tab) — chờ bạn chọn lại "Tuỳ chỉnh" ' + startISO + ' → ' + endISO + '...');
+        await waitForDateFix(label, wantRange);
+        await sleep(1200); // đợi chart vẽ lại + request đầu tiên của khoảng ngày mới chạy xong
+      }
+      // Đợi có request MỚI (khác lượt trước) rồi mới replay — tránh dùng nhầm request cũ của tab trước.
+      var waited = 0;
+      while (LAST_TS_REQUESTS.length === beforeCount && waited < 6000) { await sleep(300); waited += 300; }
+      if (LAST_TS_REQUESTS.length === beforeCount) { log('⚠️ Không bắt được request mới ở tab "' + label + '" — bỏ qua, tự làm tay tab này.'); continue; }
+      await W.SHBCL_fetchFullRange(startISO, endISO, chunkDays, 0);
+    }
+    coverageReport(false);
+    badge();
+    log('✅ SHBCL_fetchAllTabs: XONG TẤT CẢ TAB — tổng đã gom: ' + POSTS.length + ' bài, ' + PAGES.length + ' page. Gõ SHBCL_coverage() xem chi tiết từng chỉ số.');
+  };
+
+  log('KHUYÊN DÙNG (chuẩn nhất, ít thao tác tay nhất): chọn đúng khoảng "Tuỳ chỉnh" cần lấy, rồi gõ SHBCL_fetchAllTabs() — ' +
+      'TỰ ĐỘNG chuyển qua tất cả tab Insight (Lượt xem/Thu nhập/Lượt tương tác/Đối tượng/Nhắn tin/Thư viện nội dung), ' +
+      'REPLAY đúng request thật của từng tab để phủ đủ toàn bộ khoảng ngày — không rê chuột đâu cả. ' +
+      'Duy nhất cần bấm tay: nút "✅ Đã chọn xong" mỗi khi Facebook tự reset ngày lúc chuyển tab. ' +
+      'Muốn làm riêng 1 tab: gõ SHBCL_fetchFullRange("2025-12-01","2026-07-20") khi đang đứng ở tab đó. ' +
+      'Gõ SHBCL_coverage() bất kỳ lúc nào để xem báo cáo hiện tại. ' +
+      '(Cách rê chuột cũ SHBCL_sweep()/SHBCL_sweepAllTabs() vẫn còn làm đường lui nếu 1 tab nào đó không replay được.)');
 
   openBridge(); // mở cửa sổ bridge ngay (nếu bị chặn popup: bấm ô SHB góc dưới phải)
   badge();
