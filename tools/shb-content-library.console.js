@@ -229,9 +229,12 @@
       b.onclick = openBridge;
       document.body.appendChild(b);
     }
-    // Chỉ 2 nút — KHÔNG bắt nhớ nhiều lệnh: "🚀 Quét toàn bộ" làm hết mọi việc trong 1
-    // lần bấm; "⋯ Cách khác" gom các lệnh cũ/lẻ vào 1 menu xổ xuống, chỉ cần khi cần
-    // gỡ lỗi/làm riêng 1 phần (không dùng hàng ngày).
+    // Rút gọn giao diện (20/07/2026, theo yêu cầu bớt nút): "🚀 Quét toàn bộ" làm hết
+    // mọi việc trong 1 lần bấm — dùng cái này hàng ngày. "⋯ Cách khác" xổ ra đúng 2 nút
+    // phụ (chỉ quét tab / chỉ lấy Cảm xúc) cho lúc cần làm riêng 1 phần. Đã BỎ HẲN 2 nút
+    // rê chuột cũ (kém tin cậy hơn cách replay, chưa từng cần dùng tới trong thực tế) —
+    // 2 lệnh SHBCL_sweep()/SHBCL_sweepAllTabs() vẫn còn trong code, gõ tay được khi
+    // thực sự cần (rất hiếm), chỉ không còn hiện nút để đỡ rối giao diện.
     b.innerHTML = '<b style="color:#e11d2a">SHB</b> gom: ' + POSTS.length + ' bài · ' + PAGES.length + ' page | ' +
       (bridgeReady ? '🟢 đã nối' : '🔴 <u>bấm để nối bridge</u>') +
       ' | ✅' + okCount + (failCount ? ' ❌' + failCount : '') + (QUEUE.length ? ' | chờ gửi: ' + QUEUE.length : '') +
@@ -243,9 +246,7 @@
       'title="Các lệnh lẻ/cũ — chỉ cần khi gỡ lỗi, không cần dùng hàng ngày">⋯ Cách khác</button>' +
       '<div id="shb-cl-more-menu" style="display:none;margin-top:6px;text-align:right">' +
       '<button id="shb-cl-fetchall-btn" style="background:#0a7cff;color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer" title="Chỉ quét tab Insight, KHÔNG lấy Cảm xúc chi tiết">⚡ Chỉ quét tab</button> ' +
-      '<button id="shb-cl-reactall-btn" style="background:#00c853;color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer" title="Chỉ lấy Cảm xúc chi tiết cho bài đã có sẵn trong POSTS">😀 Chỉ lấy Cảm xúc</button> ' +
-      '<button id="shb-cl-sweep-btn" style="background:linear-gradient(90deg,#e11d2a,#fb7427);color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🔄 Quét trang này (rê chuột)</button> ' +
-      '<button id="shb-cl-sweepall-btn" style="background:#1877f2;color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🌐 Quét tất cả tab (rê chuột)</button>' +
+      '<button id="shb-cl-reactall-btn" style="background:#00c853;color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer" title="Chỉ lấy Cảm xúc chi tiết cho bài đã có sẵn trong POSTS">😀 Chỉ lấy Cảm xúc</button>' +
       '</div>';
     var btnRunAll = document.getElementById('shb-cl-runall-btn');
     if (btnRunAll) btnRunAll.onclick = function (ev) {
@@ -266,18 +267,6 @@
       ev.stopPropagation();
       btnReactAll.disabled = true; btnReactAll.textContent = '⏳ đang lấy Cảm xúc...';
       W.SHBCL_fetchAllPostReactions().then(function () { btnReactAll.disabled = false; btnReactAll.textContent = '😀 Chỉ lấy Cảm xúc'; });
-    };
-    var btn = document.getElementById('shb-cl-sweep-btn');
-    if (btn) btn.onclick = function (ev) {
-      ev.stopPropagation();
-      btn.disabled = true; btn.textContent = '⏳ đang quét...';
-      W.SHBCL_sweep().then(function () { btn.disabled = false; btn.textContent = '🔄 Quét trang này (rê chuột)'; });
-    };
-    var btnAll = document.getElementById('shb-cl-sweepall-btn');
-    if (btnAll) btnAll.onclick = function (ev) {
-      ev.stopPropagation();
-      btnAll.disabled = true; btnAll.textContent = '⏳ đang quét tất cả tab...';
-      W.SHBCL_sweepAllTabs().then(function () { btnAll.disabled = false; btnAll.textContent = '🌐 Quét tất cả tab (rê chuột)'; });
     };
   }
 
