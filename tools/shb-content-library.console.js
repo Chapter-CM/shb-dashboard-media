@@ -208,6 +208,19 @@
     return rows;
   };
 
+  // Chẩn đoán: liệt kê MỌI giá trị THẬT của field "post_type" (business_content_type
+  // của Facebook) đã bắt được trong POSTS, kèm số bài mỗi loại — để đối chiếu với 6
+  // loại chuẩn Facebook hiện (Reels/Live/Ảnh/Liên kết/Văn bản/Tin) và viết bảng ánh xạ
+  // ĐÚNG 1:1 thay vì đoán bằng regex khớp chuỗi con.
+  W.SHBCL_postTypes = function () {
+    var agg = {};
+    POSTS.forEach(function (p) { var t = p.post_type || '(rỗng)'; agg[t] = (agg[t] || 0) + 1; });
+    var rows = Object.keys(agg).map(function (k) { return { post_type: k, soBai: agg[k] }; }).sort(function (a, b) { return b.soBai - a.soBai; });
+    console.table(rows);
+    log('SHBCL_postTypes: ' + rows.length + ' giá trị post_type khác nhau đã bắt được trong ' + POSTS.length + ' bài. Đối chiếu với "Loại bài viết" trên Facebook (Reels/Live/Ảnh/Liên kết/Văn bản/Tin) rồi gửi bảng này để lập ánh xạ chính xác.');
+    return rows;
+  };
+
   // Xuất toàn bộ dữ liệu đã gom (chuỗi JSON) — dùng: copy(SHBCL_export())
   // (đường lui khi bridge chưa deploy/không mở được)
   W.SHBCL_export = function () {
