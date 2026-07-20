@@ -224,27 +224,44 @@
       b.onclick = openBridge;
       document.body.appendChild(b);
     }
+    // Chỉ 2 nút — KHÔNG bắt nhớ nhiều lệnh: "🚀 Quét toàn bộ" làm hết mọi việc trong 1
+    // lần bấm; "⋯ Cách khác" gom các lệnh cũ/lẻ vào 1 menu xổ xuống, chỉ cần khi cần
+    // gỡ lỗi/làm riêng 1 phần (không dùng hàng ngày).
     b.innerHTML = '<b style="color:#e11d2a">SHB</b> gom: ' + POSTS.length + ' bài · ' + PAGES.length + ' page | ' +
       (bridgeReady ? '🟢 đã nối' : '🔴 <u>bấm để nối bridge</u>') +
       ' | ✅' + okCount + (failCount ? ' ❌' + failCount : '') + (QUEUE.length ? ' | chờ gửi: ' + QUEUE.length : '') +
-      ' <button id="shb-cl-fetchall-btn" style="margin-left:6px;background:linear-gradient(90deg,#0a7cff,#00c853);' +
+      ' <button id="shb-cl-runall-btn" style="margin-left:6px;background:linear-gradient(90deg,#0a7cff,#00c853);' +
       'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer;font-weight:600" ' +
-      'title="KHUYÊN DÙNG: tự chuyển qua tất cả tab Insight, REPLAY request thật (không rê chuột) — chuẩn nhất, ít thao tác tay nhất. Chọn đúng Tuỳ chỉnh trước khi bấm.">⚡ Quét chuẩn</button>' +
+      'title="Làm HẾT trong 1 lần bấm: quét mọi tab Insight (replay, không rê chuột) + tự lấy Cảm xúc chi tiết cho toàn bộ bài. Chọn đúng Tuỳ chỉnh trước khi bấm.">🚀 Quét toàn bộ</button>' +
       ' <button id="shb-cl-more-btn" style="margin-left:4px;background:#333;' +
       'color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer" ' +
-      'title="Cách cũ (rê chuột giả lập) — đường lui nếu Quét chuẩn không replay được">⋯ Cách khác</button>' +
+      'title="Các lệnh lẻ/cũ — chỉ cần khi gỡ lỗi, không cần dùng hàng ngày">⋯ Cách khác</button>' +
       '<div id="shb-cl-more-menu" style="display:none;margin-top:6px;text-align:right">' +
+      '<button id="shb-cl-fetchall-btn" style="background:#0a7cff;color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer" title="Chỉ quét tab Insight, KHÔNG lấy Cảm xúc chi tiết">⚡ Chỉ quét tab</button> ' +
+      '<button id="shb-cl-reactall-btn" style="background:#00c853;color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer" title="Chỉ lấy Cảm xúc chi tiết cho bài đã có sẵn trong POSTS">😀 Chỉ lấy Cảm xúc</button> ' +
       '<button id="shb-cl-sweep-btn" style="background:linear-gradient(90deg,#e11d2a,#fb7427);color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🔄 Quét trang này (rê chuột)</button> ' +
       '<button id="shb-cl-sweepall-btn" style="background:#1877f2;color:#fff;border:0;border-radius:6px;padding:3px 8px;font:11px system-ui;cursor:pointer">🌐 Quét tất cả tab (rê chuột)</button>' +
       '</div>';
-    var btnFetchAll = document.getElementById('shb-cl-fetchall-btn');
-    if (btnFetchAll) btnFetchAll.onclick = function (ev) {
+    var btnRunAll = document.getElementById('shb-cl-runall-btn');
+    if (btnRunAll) btnRunAll.onclick = function (ev) {
       ev.stopPropagation();
-      btnFetchAll.disabled = true; btnFetchAll.textContent = '⏳ đang quét chuẩn...';
-      W.SHBCL_fetchAllTabs().then(function () { btnFetchAll.disabled = false; btnFetchAll.textContent = '⚡ Quét chuẩn'; });
+      btnRunAll.disabled = true; btnRunAll.textContent = '⏳ đang quét toàn bộ...';
+      W.SHBCL_runAll().then(function () { btnRunAll.disabled = false; btnRunAll.textContent = '🚀 Quét toàn bộ'; });
     };
     var btnMore = document.getElementById('shb-cl-more-btn'), menu = document.getElementById('shb-cl-more-menu');
     if (btnMore) btnMore.onclick = function (ev) { ev.stopPropagation(); menu.style.display = menu.style.display === 'none' ? 'block' : 'none'; };
+    var btnFetchAll = document.getElementById('shb-cl-fetchall-btn');
+    if (btnFetchAll) btnFetchAll.onclick = function (ev) {
+      ev.stopPropagation();
+      btnFetchAll.disabled = true; btnFetchAll.textContent = '⏳ đang quét...';
+      W.SHBCL_fetchAllTabs().then(function () { btnFetchAll.disabled = false; btnFetchAll.textContent = '⚡ Chỉ quét tab'; });
+    };
+    var btnReactAll = document.getElementById('shb-cl-reactall-btn');
+    if (btnReactAll) btnReactAll.onclick = function (ev) {
+      ev.stopPropagation();
+      btnReactAll.disabled = true; btnReactAll.textContent = '⏳ đang lấy Cảm xúc...';
+      W.SHBCL_fetchAllPostReactions().then(function () { btnReactAll.disabled = false; btnReactAll.textContent = '😀 Chỉ lấy Cảm xúc'; });
+    };
     var btn = document.getElementById('shb-cl-sweep-btn');
     if (btn) btn.onclick = function (ev) {
       ev.stopPropagation();
@@ -752,13 +769,30 @@
     log('✅ SHBCL_fetchAllTabs: XONG TẤT CẢ TAB — tổng đã gom: ' + POSTS.length + ' bài, ' + PAGES.length + ' page. Gõ SHBCL_coverage() xem chi tiết từng chỉ số.');
   };
 
-  log('KHUYÊN DÙNG (chuẩn nhất, ít thao tác tay nhất): chọn đúng khoảng "Tuỳ chỉnh" cần lấy, rồi gõ SHBCL_fetchAllTabs() — ' +
-      'TỰ ĐỘNG chuyển qua tất cả tab Insight (Lượt xem/Thu nhập/Lượt tương tác/Đối tượng/Nhắn tin/Thư viện nội dung), ' +
-      'REPLAY đúng request thật của từng tab để phủ đủ toàn bộ khoảng ngày — không rê chuột đâu cả. ' +
-      'Duy nhất cần bấm tay: nút "✅ Đã chọn xong" mỗi khi Facebook tự reset ngày lúc chuyển tab. ' +
-      'Muốn làm riêng 1 tab: gõ SHBCL_fetchFullRange("2025-12-01","2026-07-20") khi đang đứng ở tab đó. ' +
-      'Gõ SHBCL_coverage() bất kỳ lúc nào để xem báo cáo hiện tại. ' +
-      '(Cách rê chuột cũ SHBCL_sweep()/SHBCL_sweepAllTabs() vẫn còn làm đường lui nếu 1 tab nào đó không replay được.)');
+  // ── LỆNH DUY NHẤT — gộp TẤT CẢ các bước thành 1 nút, khỏi phải nhớ nhiều lệnh:
+  // (1) quét hết mọi tab Insight bằng replay (SHBCL_fetchAllTabs), (2) tự lấy luôn Cảm
+  // xúc chi tiết cho toàn bộ bài NẾU đã có mẫu request (đã bấm mở 1 bài ít nhất 1 lần
+  // trong phiên này). Việc tay DUY NHẤT còn lại của cả quy trình: (a) bấm "Đã chọn xong"
+  // khi Facebook tự reset ngày lúc đổi tab, (b) lần đầu mỗi phiên cần bấm mở 1 bài xem
+  // Cảm xúc 1 lần cho script có mẫu — mọi lần chạy SAU trong CÙNG phiên không cần nữa.
+  W.SHBCL_runAll = async function () {
+    log('🚀 SHBCL_runAll: bắt đầu quét TOÀN BỘ (tất cả tab Insight + Cảm xúc chi tiết từng bài)...');
+    await W.SHBCL_fetchAllTabs();
+    if (LAST_POST_RESPONSES.length) {
+      log('➡️  Tiếp tục lấy Cảm xúc chi tiết cho toàn bộ bài...');
+      await W.SHBCL_fetchAllPostReactions();
+    } else {
+      log('⚠️  CHƯA lấy được Cảm xúc chi tiết bài viết — vào tab Thư viện nội dung, bấm mở 1 bài BẤT KỲ (thấy Cảm xúc dưới bài, KHÔNG phải dưới bình luận) 1 LẦN, rồi bấm nút "🚀 Quét toàn bộ" lại — các lần sau trong CÙNG phiên này sẽ tự động, không cần bấm nữa.');
+    }
+    log('✅ SHBCL_runAll: XONG TOÀN BỘ.');
+  };
+
+  log('KHUYÊN DÙNG (1 nút duy nhất, ít thao tác tay nhất): chọn đúng khoảng "Tuỳ chỉnh" cần lấy, ' +
+      'bấm nút "🚀 Quét toàn bộ" trên ô SHB (hoặc gõ SHBCL_runAll()) — tự quét mọi tab Insight bằng replay ' +
+      '(không rê chuột) VÀ tự lấy Cảm xúc chi tiết cho toàn bộ bài trong 1 lần bấm. ' +
+      'Việc tay duy nhất còn lại: (a) bấm "✅ Đã chọn xong" khi Facebook tự reset ngày lúc đổi tab, ' +
+      '(b) LẦN ĐẦU mỗi phiên (mở bookmark lại) cần bấm mở 1 bài xem Cảm xúc 1 lần trước khi bấm nút — chạy lại trong cùng phiên thì không cần nữa. ' +
+      'Gõ SHBCL_coverage() bất kỳ lúc nào để xem báo cáo hiện tại.');
 
   openBridge(); // mở cửa sổ bridge ngay (nếu bị chặn popup: bấm ô SHB góc dưới phải)
   badge();
