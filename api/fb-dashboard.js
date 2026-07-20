@@ -141,7 +141,15 @@ function buildPageInsights(rows) {
       // — 2 chỉ số khác hẳn "views_time_series" — gây dồn nhầm chung 1 rổ, ngày nào bắt
       // trước (dù là video_view=0) chặn mất giá trị views thật, làm tổng bị hụt so với
       // số Facebook tự hiện).
-      var norm = /^interactions?(_|$)/.test(key) ? 'interactions' : /^followers?(_|$)/.test(key) ? 'followers' : /^views?(_|$)/.test(key) ? 'views' : key;
+      // 20/07/2026: tên field ĐOÁN trước đây "interactions_time_series" SAI — xác nhận
+      // qua SHBCL_seriesKeys() trên đúng tab "Lượt tương tác": Facebook trả về field tên
+      // thật là "engagement_time_series" (không hề có field nào tên "interactions...").
+      // Đây là nguyên nhân THẬT gây hụt số so với Facebook: field cũ đoán sai không khớp
+      // được request nào, seriesMap.interactions không có gì, dashboard rơi về fallback
+      // cộng-dồn-theo-bài chỉ tính Cảm xúc+Bình luận+Chia sẻ (~10.655, hẹp hơn con số đầu
+      // trang Facebook 49.159). Giữ cả 2 tên (interactions VÀ engagement) cho chắc, phòng
+      // trường hợp Facebook đổi lại/dùng tên khác nhau tuỳ vùng.
+      var norm = /^(interactions?|engagement)(_|$)/.test(key) ? 'interactions' : /^followers?(_|$)/.test(key) ? 'followers' : /^views?(_|$)/.test(key) ? 'views' : key;
       if (!byDay[norm]) byDay[norm] = {};
       pts.forEach(function (p) { var ms = new Date(p.start_time).getTime(); if (ms && byDay[norm][ms] === undefined) byDay[norm][ms] = p.value || 0; });
     });
@@ -798,7 +806,7 @@ function heroRow(d,cur,prev,ser){
   }
   var engWarn=engMiss?' · <span class="ksub-down">⚠ thiếu '+engMiss+' ngày</span>':'';
   var k=[
-    card('Lượt tương tác',tnum(engV),(engDelta?engDelta+' so kỳ trước':'tổng tương tác kỳ này')+engWarn,engAct!=null?('Tổng tương tác theo NGÀY HOẠT ĐỘNG (interactions_time_series) trong khoảng lọc — chuẩn Facebook. Số phụ = so kỳ liền trước.'+(engMiss?' ⚠ Chuỗi interactions đang THIẾU '+engMiss+' ngày so với chuỗi views trong khoảng này — số đang hụt so với Facebook. Vào tab Lượt tương tác, chọn đúng khoảng ngày rồi bấm "🔄 Quét trang này" để quét bù.':'')):'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{spark:spkEng}),
+    card('Lượt tương tác',tnum(engV),(engDelta?engDelta+' so kỳ trước':'tổng tương tác kỳ này')+engWarn,engAct!=null?('Tổng tương tác theo NGÀY HOẠT ĐỘNG (engagement_time_series) trong khoảng lọc — chuẩn Facebook. Số phụ = so kỳ liền trước.'+(engMiss?' ⚠ Chuỗi interactions đang THIẾU '+engMiss+' ngày so với chuỗi views trong khoảng này — số đang hụt so với Facebook. Vào tab Lượt tương tác, chọn đúng khoảng ngày rồi bấm "🔄 Quét trang này" để quét bù.':'')):'Tổng tương tác. Quét lại trang Lượt tương tác để có số theo ngày hoạt động.',{spark:spkEng}),
     card('ER (Engagement Rate)',erAct+'%',(erDelta?erDelta+' so kỳ trước · ':'')+erSub,'Tỉ lệ tương tác = Lượt tương tác ÷ Lượt xem. Chỉ số chất lượng quan trọng nhất.',{spark:spkEr}),
     card('Lượt tiếp cận',tnum(reachSum),(reachDelta?reachDelta+' so kỳ trước · ':'')+'tỉ lệ tiếp cận '+reachRatio+'%','Tổng người xem của TẤT CẢ nội dung, KỂ CẢ TRÙNG LẶP (Σ người xem mỗi bài). Tỉ lệ tiếp cận = Lượt tiếp cận ÷ Lượt xem.',{spark:spkReach}),
     card('Người xem',tnum(viewersV),(viewerDelta?viewerDelta+' so kỳ trước · ':'')+'duy nhất · cấp trang','Người xem DUY NHẤT cấp trang (unique) — mỗi người 1 lần. Khác Lượt tiếp cận (cộng dồn kể cả trùng).',{spark:spkViews}),
@@ -846,7 +854,7 @@ function heroChart(d,ser){
   else if(_metric==='eng'){daily=(PS.interactions||[]).filter(function(p){return inWin(p.ms);});note=actNote('Lượt tương tác');}
   else {daily=dailyER().filter(function(p){return inWin(p.ms);});note=actNote('ER %');}  // ER theo ngày = tương tác/lượt xem
   var chart=daily&&daily.length?pageDailyChart(daily,_metric==='er'?'%':'')
-    :'<div class="nd" style="padding:30px 16px;text-align:center">Chưa có chuỗi theo ngày hoạt động cho chỉ số này.'+(_metric==='eng'||_metric==='er'?'<br><span style="font-size:11.5px">Quét lại trang <b>Lượt tương tác</b> (bấm nút "🔄 Quét trang này" trên ô SHB) để lấy interactions_time_series.</span>':'')+'</div>';
+    :'<div class="nd" style="padding:30px 16px;text-align:center">Chưa có chuỗi theo ngày hoạt động cho chỉ số này.'+(_metric==='eng'||_metric==='er'?'<br><span style="font-size:11.5px">Quét lại trang <b>Lượt tương tác</b> (bấm nút "🔄 Quét trang này" trên ô SHB) để lấy engagement_time_series.</span>':'')+'</div>';
   return '<div class="hero-chart"><div class="hc-head"><div class="hc-title" data-tip="Xu hướng theo NGÀY CÓ HOẠT ĐỘNG (không phải ngày đăng) — chuẩn Facebook.">Xu hướng theo thời gian'+note+'</div>'
     +'<div class="metric-toggle"><button class="'+(_metric==='views'?'on':'')+'" onclick="setMetric(\'views\')">Lượt xem</button><button class="'+(_metric==='eng'?'on':'')+'" onclick="setMetric(\'eng\')">Tương tác</button><button class="'+(_metric==='er'?'on':'')+'" onclick="setMetric(\'er\')">ER %</button></div></div>'
     +chart+'</div>';
