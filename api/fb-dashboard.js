@@ -691,7 +691,6 @@ function process(posts){
   });
   var rt=reactTotal(sum.react)||sum.reactSum;
   sum.reactions=sum.reactSum||rt;
-  sum.engRate=sum.views?pc(sum.eng/sum.views*100):0;
   // ER chuẩn hoá (Cảm xúc + Chia sẻ) ÷ Lượt xem — dùng làm mốc so sánh cho bảng/tier.
   sum.erRate=sum.views?pc((sum.reactSum+sum.shares)/sum.views*100):0;
   sum.clickRate=sum.views?pc(sum.clicks/sum.views*100):0;
@@ -1226,7 +1225,10 @@ function executive(d,cur,prev){
   var cFil=Object.keys(_filter||{}).some(function(k){return _filter[k];});
   var viewsV=(!cFil&&PS.views&&PS.views.length)?sumSeries(PS.views):s.views;
   var engVv=(!cFil&&PS.interactions&&PS.interactions.length)?sumSeries(PS.interactions):s.eng;
-  var erV=viewsV?pc(engVv/viewsV*100):s.engRate;
+  // 28/07/2026: bỏ fallback engRate kiểu cũ (gồm cả bình luận) — dùng erRate
+  // (Cảm xúc+Chia sẻ)÷Views cho nhất quán với phần còn lại của dashboard khi
+  // không có chuỗi Page Insights cấp trang để dùng (bị filter/chưa quét).
+  var erV=viewsV?pc(engVv/viewsV*100):s.erRate;
   var head='<div class="exec-h"><div style="font-size:11.5px;opacity:.85;letter-spacing:.06em;text-transform:uppercase;margin-bottom:22px">Báo cáo truyền thông Facebook · CM Team · '+now+'</div><div class="exec-k">'
     +'<div class="exec-kp"><div class="v">'+erV+'%</div><div class="l">Tỷ lệ tương tác cấp trang (Tương tác ÷ Lượt xem)</div></div>'
     +'<div class="exec-kp"><div class="v">'+nf(viewsV)+'</div><div class="l">Lượt xem</div></div>'
