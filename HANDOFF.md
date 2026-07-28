@@ -1,4 +1,20 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 20/07/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 28/07/2026)
+
+## ✅ 28/07 — Audit tổng 3 dashboard + đồng bộ Jira/portal từ GitLab + đề xuất nâng cấp UI/UX — USER QUYẾT ĐỊNH TẠM DỪNG, không có việc gì khẩn cần làm ngay
+
+**Bối cảnh:** User yêu cầu kiểm tra lại toàn bộ 3 dashboard (Facebook/Email/Leader), xác minh các fix đã claim trong HANDOFF còn hiệu lực không, tìm bug mới, và đề xuất nâng cấp UI/UX để chọn.
+
+**Đã làm:**
+1. **Xác minh lại toàn bộ fix claim trong HANDOFF 20/07 bằng cách đọc trực tiếp code** (không tin suông ghi chú) — xác nhận: field `engagement_time_series`, ER mới `(Cảm xúc+Chia sẻ)÷Views`, định dạng bài (`POST_TYPE_MAP`), gauge Email đồng bộ `gArc()`, thẻ "Người xem" đã bỏ — **tất cả đều đúng như ghi chú, không có gì rơi rớt**.
+2. **Sửa 1 chỗ ER kiểu cũ còn sót** (`api/fb-dashboard.js`, hàm `executive()`): bỏ `sum.engRate` (eng/views gồm cả bình luận) chỉ dùng làm fallback khi thiếu Page Insights cấp trang — đổi sang `sum.erRate` (Cảm xúc+Chia sẻ)/Views cho nhất quán. 2/3 chỗ khác mà HANDOFF từng liệt kê là "còn nợ" (dòng insight tự động, Top 5 leader-dashboard) hoá ra **đã tự động dùng ER mới từ trước** — ghi chú HANDOFF 20/07 bị lỗi thời ở điểm này, đã sửa xong hoàn toàn.
+3. **Đối chiếu file GitHub ↔ GitLab** (user gửi zip tải từ GitLab `main`): xác nhận 3 file dashboard chính + toàn bộ file lõi backend **giống hệt 100%** giữa 2 nơi — không có gì cần đồng bộ về hướng dashboard. Phát hiện 6 file phụ (Jira portal: `EXCEL_SCHEMA.js`, `INDEX_PATCH.js`, `sync.jira-original.js`, `Dockerfile`, `SETUP_GUIDE.md`, `DEVOPS_NOTES.md`) có trên GitLab nhưng thiếu trên GitHub — đã copy qua, commit, merge (PR #99 trên GitHub, đã merge xong). `public/` không copy vì cả thư mục bị `.gitignore` (chủ ý, không track).
+4. **Đề xuất nâng cấp UI/UX mới** (nghiên cứu dựa trên kiến thức nền, không fetch mạng — sandbox không có Internet): data confidence badge cho `genMock()` fallback, donut content-type/follower còn thiếu (data đã có), anomaly flag >2σ, ngưỡng cảnh báo tự đặt, cohort compare Email, tách `lib/shared-ui.js` dùng chung, test suite `node --test`... **User xem xong, quyết định KHÔNG thấy cần làm gì ngay — tạm dừng, để tính sau.**
+
+**Kết luận phiên này:** codebase hiện tại đang ở trạng thái ổn định, không có bug khẩn/regression nào phát hiện thêm ngoài 1 chỗ ER nhỏ đã sửa. Không có việc gì bắt buộc phải làm ngay.
+
+**Việc đầu tiên phiên sau:** hỏi user có muốn triển khai mục nào trong danh sách đề xuất UI/UX ở mục này không (xem lại nếu cần: data confidence badge / donut content-type / ngưỡng cảnh báo tự đặt là 3 mục effort thấp nhất được xếp hạng ưu tiên). Nếu vẫn chưa, không cần chủ động nhắc lại — chỉ tiếp tục khi user chủ động yêu cầu.
+
+---
 
 ## 🔧 20/07 — Fix hàng loạt: Lượt tương tác hụt số, quy trình quét tự động, ER/định dạng đúng chuẩn Facebook, gauge Email — nhánh `claude/luot-tuong-tac-sai-gym1kg`
 
