@@ -1,4 +1,74 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 17/07/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 20/07/2026)
+
+## 🔧 20/07 — Fix hàng loạt: Lượt tương tác hụt số, quy trình quét tự động, ER/định dạng đúng chuẩn Facebook, gauge Email — nhánh `claude/luot-tuong-tac-sai-gym1kg`
+
+**Bối cảnh:** User báo "Lượt tương tác" trên dashboard (10.655) lệch xa số Facebook tự hiện (49.159).
+Điều tra ra hàng loạt vấn đề gốc rễ, không phải 1 lỗi đơn lẻ — sửa xong tất cả trong phiên này.
+
+### Nguyên nhân gốc + đã sửa (theo thứ tự phát hiện)
+
+1. **Field tên sai**: code đoán field cấp trang là `interactions_time_series` — SAI. Xác nhận thật
+   qua công cụ chẩn đoán mới `SHBCL_seriesKeys()`: tên field thật Facebook trả về là
+   **`engagement_time_series`**. `buildPageInsights()` trong `api/fb-dashboard.js` giờ nhận cả 2 tên.
+2. **Quét thiếu ngày mà không cảnh báo**: `coverageReport()` cũ chỉ đếm chuỗi khớp `/view/`, đứng ở
+   tab Lượt tương tác luôn báo 0%/bỏ qua. Giờ đếm coverage theo TỪNG HỌ chỉ số (views/interactions/
+   followers…) riêng biệt.
+3. **Cách rê chuột giả lập không đáng tin cậy** (`isTrusted:false`, Facebook hay lờ đi) → thay hẳn
+   bằng kỹ thuật **REPLAY request GraphQL thật**: bắt request thật Facebook gọi (`SHBCL_lastRequests()`
+   /`SHBCL_lastPostReactions()`), chỉ đổi biến ngày/`feedbackTargetID` rồi tự `fetch()` lại
+   (`SHBCL_fetchRange()`/`SHBCL_fetchFullRange()`/`SHBCL_fetchAllPostReactions()`) — không rê chuột,
+   không phụ thuộc chart đang hiển thị, không sót ngày.
+4. **Thư viện nội dung (danh sách bài) là kiểu cuộn riêng, Facebook giới hạn số trang tải mỗi lần mở
+   component** — xác nhận qua thực tế (cuộn tay thật cũng bị dừng, chỉ thoát tab đi/về mới tải thêm).
+   `scrapeContentLibraryFully()` tự động hoá đúng thao tác đó (nhảy tab đi/về nhiều vòng).
+5. **Gộp mọi bước thành 1 nút** `SHBCL_runAll()` ("🚀 Quét toàn bộ" trên badge) — quét mọi tab Insight
+   + tự lấy Cảm xúc chi tiết toàn bộ bài trong 1 lần bấm. Badge rút gọn chỉ còn 2 nút (nút cũ rê chuột
+   dọn vào menu "⋯ Cách khác" cho gỡ lỗi). Có `showBigWarning()` hiện cảnh báo TO trên màn hình khi
+   dừng sớm vì thiếu điều kiện (tránh hiểu lầm "nút chạy xong" dù chưa làm gì) và try/catch từng tab
+   (lỗi 1 tab không còn làm sập cả quy trình).
+6. **Cảm xúc chi tiết theo từng bài**: xác nhận field thật `top_reactions:{"count":N,"summary":[...]}`
+   (khác `top_reactions:{"edges":[...]}` của BÌNH LUẬN — đã lọc chặt tránh nhầm). `reaction_total`
+   ghi vào cột `metrics` (jsonb) của `fb_group_posts`, MERGE vào object đang có trước khi gửi lại
+   (tránh ghi đè mất `reach`/`viewers`/`engagement` cũ — bug thật đã gặp và vá bằng `REACTION_TOTALS`
+   bộ nhớ tạm trong phiên).
+7. **ER đổi định nghĩa** theo yêu cầu: `(Cảm xúc + Chia sẻ) ÷ Lượt xem`, KHÔNG tính bình luận. Khôi
+   phục lại ER + thêm cột "Cảm xúc" trong mọi bảng (Tất cả bài, Phân tích theo định dạng, Dự án).
+8. **Định dạng bài viết sai 2 chỗ** (`FB_SHORTS_VIDEO`→nhầm "Video" thay vì "Reel", `MULTI_MEDIA`→rơi
+   vào mặc định "Text" sai) — xác nhận giá trị thật qua `SHBCL_postTypes()`, dùng `POST_TYPE_MAP` khớp
+   CHÍNH XÁC (không còn regex đoán chuỗi con). Cũng fix bug ăn theo: bài chỉ NHẮC "livestream" trong
+   tiêu đề (không phải livestream thật) từng bị đổi nhầm định dạng + mất ER — giờ chỉ áp dụng khi
+   field thật đã MẤT (rỗng/về "Text"), không áp dụng khi đã có định dạng thật hợp lệ khác.
+9. **2 Livestream có video bị Facebook xoá sau 60 ngày** → Lượt xem còn quá nhỏ khiến ER/Tỉ lệ tiếp
+   cận bịa ra số vô nghĩa (800%, 4010%) — giờ hiện "—" cho 2 chỉ số này ở đúng bài bị ảnh hưởng
+   (cờ `staleViews`), kèm nhãn "⚠ video đã bị xoá".
+10. **Thẻ "Người xem"**: xác nhận trực tiếp trên Facebook — tab Lượt xem KHÔNG có thẻ "Người xem"
+    (unique viewers) nào cả, field `viewers` đang dùng không rõ nguồn gốc thật → **bỏ hẳn**, thay bằng
+    thẻ "Lượt cảm xúc" (đã có dữ liệu thật, đáng tin hơn).
+11. **`api/leader-dashboard.js`** (trang Tóm tắt lãnh đạo) là code TÁCH BIỆT hoàn toàn khỏi
+    `fb-dashboard.js`, vẫn dùng công thức ER cũ (gồm bình luận) — đã đồng bộ lại theo định nghĩa mới,
+    thêm fetch cột `metrics` từ `fb_group_posts` để lấy `reaction_total` thật.
+12. **Gauge (vòng tròn) bị khuyết ở tab Email**: `email-dashboard.js` có hàm `gArc()` viết KHÁC (và
+    sai hướng vẽ/sweep-flag) so với bản đúng trong `fb-dashboard.js` — đồng bộ lại dùng chung công thức.
+13. Viết lại toàn bộ tooltip/"Từ điển chỉ số" ngắn gọn, đúng chuẩn Facebook, ghi rõ chỉ số nào là
+    riêng của dashboard (Lượt tiếp cận, Tỉ lệ tiếp cận) để không so nhầm với số Facebook.
+
+### Công cụ chẩn đoán mới thêm vào `tools/shb-content-library.console.js` (giữ lại dùng về sau)
+`SHBCL_seriesKeys()`, `SHBCL_postTypes()`, `SHBCL_lastRequests()`, `SHBCL_lastPostReactions()` — dùng
+khi nghi ngờ 1 số nào đó sai, để xem đúng tên field/giá trị THẬT Facebook trả về thay vì đoán mù.
+
+### Việc còn để ngỏ / có thể làm tiếp
+- Nguồn field `viewers` (đã bỏ thẻ "Người xem") chưa xác định lại được từ tab nào — nếu sau này cần
+  khôi phục, phải chẩn đoán bằng `SHBCL_seriesKeys()`/tương tự trên đúng tab, không đoán lại.
+- 3 chỗ còn dùng ER kiểu cũ (engagement/views, không phải reactions-only) chưa đồng bộ vì là khái
+  niệm khác: dòng insight tự động, bảng Top 5 "Tóm tắt lãnh đạo" phần điều hành, CSV export — hỏi
+  user có muốn thống nhất luôn không trước khi đụng vào.
+- Donut "Theo loại nội dung"/"Theo loại tương tác"/"Theo người theo dõi vs chưa theo dõi" (Facebook có
+  sẵn, dữ liệu đã ingest vào PAGES qua `extractMetrics`) CHƯA build thành widget trên dashboard.
+- Tab "Thu nhập" mới có placeholder tự dò field tên gợi ý doanh thu — chưa quét/xác nhận field thật.
+- File `GITLAB_COPY_LIST.md` cần cập nhật danh sách file cần đồng bộ đợt 20/07 (nhiều file hơn bản
+  ghi cũ — `api/fb-dashboard.js`, `api/leader-dashboard.js`, `api/email-dashboard.js`).
+
+---
 
 ## 🔧 17/07 tối — Audit đầy đủ cấu trúc dữ liệu Facebook (mọi field dashboard đọc) — 2 fix xong, 2 việc còn thiếu cần quét thêm
 

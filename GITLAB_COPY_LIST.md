@@ -1,7 +1,36 @@
 # Danh sách file cần copy sang `cm-dashboard` (nhánh `main`)
 
-> Cập nhật 14/07/2026 — **3 file** cần đồng bộ.
-> Nguồn nằm trong repo GitHub `shb-dashboard-media`, nhánh `claude/loving-planck-y6lw57`.
+> Cập nhật 20/07/2026 — **1 file mới** cần đồng bộ (fix Lượt tương tác hụt số),
+> nguồn nhánh `claude/luot-tuong-tac-sai-gym1kg`. Danh sách 14/07 giữ bên dưới
+> nếu chưa đồng bộ đợt đó.
+
+## Đợt 20/07 — fix "Lượt tương tác" hụt so với Facebook
+
+| # | Nguồn (repo này) | Đích (`cm-dashboard`) | Lý do |
+|---|---|---|---|
+| 1 | `api/fb-dashboard.js` | `api/fb-dashboard.js` | Thẻ KPI Lượt tương tác hiện cảnh báo "⚠ thiếu N ngày" khi chuỗi interactions_time_series quét sót ngày (nguyên nhân số hụt 10.655 vs 49.159 Facebook) |
+
+2 file `tools/shb-content-library.console.js` + `tools/shb-bookmarklet.txt`
+cũng đổi đợt này nhưng chạy TRỰC TIẾP trên trình duyệt (dán Console/Bookmark),
+KHÔNG deploy lên GitLab — chỉ cần dùng bản mới trong repo này khi quét.
+
+Lệnh copy + push (Command Prompt):
+
+```
+copy /Y %USERPROFILE%\Downloads\gitlab-sync\fb-dashboard.js %USERPROFILE%\cm-dashboard\api\fb-dashboard.js
+cd %USERPROFILE%\cm-dashboard
+findstr /C:"engMiss" api\fb-dashboard.js
+git add api/fb-dashboard.js
+git commit -m "Them canh bao thieu ngay cho KPI Luot tuong tac (chuoi interactions quet sot ngay lam tong hut so voi Facebook)"
+git push origin main
+```
+
+`findstr` phải ra kết quả (xác nhận copy thật). Push xong job `sync_data` tự
+bake lại `public/index.html` — không cần copy HTML tay.
+
+---
+
+## Đợt 14/07 (cũ — bỏ qua nếu đã đồng bộ)
 
 ## 3 file cần copy (nguồn → đích trong `cm-dashboard`)
 

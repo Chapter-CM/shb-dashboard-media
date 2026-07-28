@@ -60,14 +60,17 @@ function fetchFbPosts(){
   if(!dbClient.isEnabled()&&(!process.env.SUPABASE_URL||!process.env.SUPABASE_SERVICE_KEY))return Promise.resolve(genMockPosts());
   return Promise.all([
     fbGet('/rest/v1/fb_posts?select=post_id,created_time,views,like_count,love_count,haha_count,wow_count,sad_count,angry_count,comments,shares,message,topic&order=created_time.desc&limit=800'),
-    fbGet('/rest/v1/fb_group_posts?select=post_id,created_time,reach,engagement,comments,title&order=created_time.desc&limit=500'),
+    fbGet('/rest/v1/fb_group_posts?select=post_id,created_time,reach,engagement,comments,title,metrics&order=created_time.desc&limit=500'),
   ]).then(function(r){
     var pagePosts=r[0]||[];
     var groupPosts=(r[1]||[]).map(function(g){
       var eng=g.engagement||0,cmt=g.comments||0;
+      // Ưu tiên Cảm xúc THẬT (metrics.reaction_total, quét qua SHBCL_fetchAllPostReactions —
+      // khớp logic fb-dashboard.js reactCountOf()); fallback về xấp xỉ eng-cmt cho bài chưa quét.
+      var rt=(g.metrics&&typeof g.metrics.reaction_total==='number')?g.metrics.reaction_total:0;
       return {
         post_id:'g_'+g.post_id, created_time:g.created_time, views:g.reach||0,
-        like_count:Math.max(0,eng-cmt), love_count:0, haha_count:0, wow_count:0, sad_count:0, angry_count:0,
+        like_count:rt>0?rt:Math.max(0,eng-cmt), love_count:0, haha_count:0, wow_count:0, sad_count:0, angry_count:0,
         comments:cmt, shares:0, message:g.title||'(không có nội dung)', topic:'',
       };
     });
@@ -114,6 +117,10 @@ function pc(n){return (Math.round(n*10)/10);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function norm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d');}
 function fmtCamp(c){return (c||'').replace(/-/g,' ').replace(/\b\w/g,function(x){return x.toUpperCase();});}
+// ER = (Cảm xúc + Chia sẻ) ÷ Lượt xem — KHÔNG tính bình luận (khớp định nghĩa mới trong
+// fb-dashboard.js). "eng" (dùng cho cột/KPI "Lượt tương tác" hiển thị) vẫn CỘNG bình luận
+// như cũ vì đó là tổng tương tác Facebook báo, khác hẳn công thức ER.
+function reactSumOf(p){return (p.like_count||0)+(p.love_count||0)+(p.haha_count||0)+(p.wow_count||0)+(p.sad_count||0)+(p.angry_count||0)+(p.shares||0);}
 var PROJECTS=[
   ['SAHA Next Gen',['saha next gen','next gen','nextgen']],['SAHA Branch',['saha branch']],['SHB SAHA App',['saha app']],
   ['SSP',['ssp']],['KPI',['kpi']],['ALM',['alm']],['EGP',['egp']],
@@ -143,11 +150,12 @@ function fbAgg(posts,days,dailyViews){
   var now=Date.now(),cutNow=days>0?now-days*864e5:0,cutPrev=days>0?cutNow-days*864e5:0;
   function sumDaily(lo,hi){var t=0;(dailyViews||[]).forEach(function(p){if(p.ms>lo&&p.ms<=hi)t+=p.value;});return t;}
   function win(lo,hi){
-    var viewsPerPost=0,eng=0,n=0;
+    var viewsPerPost=0,eng=0,reactSum=0,n=0;
     posts.forEach(function(p){var t=+new Date(p.created_time);if(!(t>lo&&t<=hi))return;n++;viewsPerPost+=p.views||0;
-      eng+=(p.like_count||0)+(p.love_count||0)+(p.haha_count||0)+(p.wow_count||0)+(p.sad_count||0)+(p.angry_count||0)+(p.comments||0)+(p.shares||0);});
+      eng+=(p.like_count||0)+(p.love_count||0)+(p.haha_count||0)+(p.wow_count||0)+(p.sad_count||0)+(p.angry_count||0)+(p.comments||0)+(p.shares||0);
+      reactSum+=reactSumOf(p);});
     var views=(dailyViews&&dailyViews.length)?sumDaily(lo,hi):viewsPerPost;
-    return {views:views,eng:eng,n:n,er:views>0?pc(eng/views*100):0};
+    return {views:views,eng:eng,n:n,er:views>0?pc(reactSum/views*100):0};
   }
   return {cur:win(cutNow,now),prev:win(cutPrev,cutNow)};
 }
@@ -200,8 +208,8 @@ function crossover(posts,logs,days){
   var now=Date.now(),cutNow=days>0?now-days*864e5:0;
   var fbMap={};
   posts.forEach(function(p){var t=+new Date(p.created_time);if(!(t>cutNow&&t<=now))return;var proj=projectOf(p.message,p.topic);if(proj==='Khác')return;
-    var k=norm(proj);if(!fbMap[k])fbMap[k]={name:proj,views:0,eng:0,n:0};
-    fbMap[k].views+=p.views||0;fbMap[k].eng+=(p.like_count||0)+(p.love_count||0)+(p.haha_count||0)+(p.wow_count||0)+(p.sad_count||0)+(p.angry_count||0)+(p.comments||0)+(p.shares||0);fbMap[k].n++;});
+    var k=norm(proj);if(!fbMap[k])fbMap[k]={name:proj,views:0,eng:0,reactSum:0,n:0};
+    fbMap[k].views+=p.views||0;fbMap[k].eng+=(p.like_count||0)+(p.love_count||0)+(p.haha_count||0)+(p.wow_count||0)+(p.sad_count||0)+(p.angry_count||0)+(p.comments||0)+(p.shares||0);fbMap[k].reactSum+=reactSumOf(p);fbMap[k].n++;});
   var emMap={};
   logs.forEach(function(l){var t=+new Date(l.timestamp);if(!(t>cutNow&&t<=now))return;if(!l.initiative)return;
     var k=norm(l.initiative);if(!emMap[k])emMap[k]={name:l.initiative,sent:{},opened:{}};
@@ -210,7 +218,7 @@ function crossover(posts,logs,days){
   Object.keys(fbMap).forEach(function(k){
     if(!emMap[k])return;
     var e=emMap[k],f=fbMap[k],sN=Object.keys(e.sent).length,oN=Object.keys(e.opened).length;
-    rows.push({name:f.name,emailReach:sN>0?Math.round(oN/sN*100):null,emailSent:sN,fbViews:f.views,fbER:f.views>0?pc(f.eng/f.views*100):0,fbPosts:f.n});
+    rows.push({name:f.name,emailReach:sN>0?Math.round(oN/sN*100):null,emailSent:sN,fbViews:f.views,fbER:f.views>0?pc(f.reactSum/f.views*100):0,fbPosts:f.n});
   });
   rows.sort(function(a,b){return b.fbViews-a.fbViews;});
   return rows;
@@ -221,7 +229,7 @@ function topFbPosts(posts,days){
   var now=Date.now(),cut=days>0?now-days*864e5:0;
   return posts.filter(function(p){var t=+new Date(p.created_time);return t>cut&&t<=now;})
     .map(function(p){var eng=(p.like_count||0)+(p.love_count||0)+(p.haha_count||0)+(p.wow_count||0)+(p.sad_count||0)+(p.angry_count||0)+(p.comments||0)+(p.shares||0);
-      return {msg:p.message||'(không có nội dung)',views:p.views||0,eng:eng,er:p.views>0?pc(eng/p.views*100):0};})
+      return {msg:p.message||'(không có nội dung)',views:p.views||0,eng:eng,er:p.views>0?pc(reactSumOf(p)/p.views*100):0};})
     .sort(function(a,b){return b.eng-a.eng;}).slice(0,5);
 }
 /* ── Top 5 chiến dịch Email theo tỉ lệ mở trong kỳ ── */
