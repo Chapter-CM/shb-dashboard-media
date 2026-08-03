@@ -1,11 +1,21 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.15
+' SHB CM Campaign Tracker v4.16
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.15
+'   - Bo FlushOutbox ep GIUA vong lap (cu 200 mail/lan, them tu v4.13). Lenh
+'     nay block dong cho toi khi gui xong het qua mang, nen dang bien "tao
+'     mail" (CPU/COM) va "gui qua mang" (I/O) thanh 1 chuoi noi tiep thay vi
+'     de chung chay song song (Outlook thuong tu gui nen trong luc macro van
+'     dang ban tao cac mail tiep theo, neu "Send immediately when connected"
+'     dang bat trong Outlook Options). Chi con giu FlushOutbox O CUOI (sau khi
+'     tao xong toan bo) - van dam bao khong mail nao bi ket cho lich dong bo
+'     dinh ky, nhung khong con lam macro cho giua chung nua.
 '
 ' CHANGES vs v4.14
 '   - Full mode: tao 1 ban "sach" (baseMail, khong recipient) MOT LAN truoc vong
@@ -78,7 +88,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.15"
+Private Const VER       As String = "4.16"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -262,12 +272,13 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
     Dim sentOK As Long:   sentOK = 0
     Dim sentFail As Long: sentFail = 0
     ' v4.13: bo khoang nghi cung 2s/50 - khong co gioi han throttle tu Exchange
-    ' noi bo SHB nen khong can. Thay vao do ep Send/Receive dinh ky de mail roi
-    ' Outbox ngay thay vi cho chu ky dong bo mac dinh cua Outlook (co the vai
-    ' phut) - day moi la nguyen nhan chinh khien nguoi nhan nhan mail cham/lech
-    ' nhau, khong phai toc do vong lap tao mail.
-    Const FLUSH_EVERY As Long = 200
-
+    ' noi bo SHB nen khong can.
+    ' v4.16: bo luon FlushOutbox EP GIUA vong lap (moi 200 mail) - lenh nay
+    ' block dong (cho mang gui xong) nen serialize hoa "tao mail" va "gui qua
+    ' mang" thanh 1 chuoi noi tiep, lam TONG thoi gian macro chay lau hon thay
+    ' vi de Outlook tu gui nen (background) song song luc macro dang tao cac
+    ' mail tiep theo. Chi con FlushOutbox O CUOI vong lap (sau khi tao xong het)
+    ' de dam bao khong co mail nao bi ket cho lich Send/Receive dinh ky.
     PrgShow campName, nLst
 
     ' v4.15: tao 1 ban "sach" (khong recipient) duy nhat truoc vong lap, thay vi
@@ -348,10 +359,6 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
                  "&loc=" & UrlEnc(eLoc)
 
         DoEvents
-
-        If (i + 1) Mod FLUSH_EVERY = 0 And i < nLst - 1 Then
-            FlushOutbox
-        End If
 
         GoTo NextPerson
 
