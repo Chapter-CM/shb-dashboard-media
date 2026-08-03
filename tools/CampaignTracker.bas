@@ -1,11 +1,18 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.17
+' SHB CM Campaign Tracker v4.18
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.17
+'   - Muc tieu chot lai la nguoi nhan CUOI CUNG nhan duoc SOM NHAT co the (khong
+'     phai dong bo tuyet doi nua) - dong bo hoa (v4.17) ban chat la GIU mail lai
+'     nen luon lam nguoi nhan DAU cho lau hon, khong giup nguoi nhan cuoi nhanh
+'     hon. Doi InputBox dong bo hoa thanh TUY CHON, mac dinh de trong (khong
+'     dong bo) - chi bat khi nguoi dung chu dong nhap so phut.
 '
 ' CHANGES vs v4.16
 '   - Them DONG BO PHAT HANH qua MailItem.DeferredDeliveryTime (Full mode). Van
@@ -98,7 +105,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.17"
+Private Const VER       As String = "4.18"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -298,15 +305,17 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
     ' LAI moi mail, chi phat cho nguoi nhan dung vao moc gio do, bat ke mail
     ' toi server som hay muon hon trong luc macro dang chay. Day la co che
     ' server-side, khong phu thuoc toc do client/macro.
-    Dim defMin As Double: defMin = nLst / 100#      ' uoc luong ~100 mail/phut submit
-    If defMin < 5 Then defMin = 5
-    If defMin > 60 Then defMin = 60
+    ' v4.18: mac dinh KHONG dong bo (de trong) - dong bo (giu mail lai roi phat
+    ' cung luc) luon lam nguoi nhan DAU phai cho THEM (toi tan moc gio hen), di
+    ' nguoc voi muc tieu "toi nguoi nhan CUOI nhanh nhat". Chi bat khi nguoi
+    ' dung chu dong go so phut vao, khong goi y san mot con so nao ca.
     Dim relTxt As String
-    relTxt = InputBox("Dong bo hoa phat hanh: TAT CA " & nLst & " mail se duoc Exchange" & vbCrLf & _
-                       "giu lai va phat CUNG LUC sau bao nhieu phut ke tu bay gio?" & vbCrLf & _
-                       "(can du thoi gian de macro tao/submit xong toan bo danh sach truoc moc nay - " & vbCrLf & _
-                       "de trong hoac 0 = KHONG dong bo, gui ngay khi tung mail san sang nhu cu)", _
-                       "SHB Tracker - Dong bo phat hanh", Format(defMin, "0"))
+    relTxt = InputBox("Dong bo hoa phat hanh (TUY CHON): TAT CA " & nLst & " mail se duoc Exchange" & vbCrLf & _
+                       "giu lai va phat CUNG LUC sau bao nhieu phut ke tu bay gio?" & vbCrLf & vbCrLf & _
+                       "Luu y: dong bo se lam nguoi nhan DAU TIEN phai cho LAU HON (den dung moc" & vbCrLf & _
+                       "gio hen), khong giup nguoi nhan CUOI nhanh hon. Neu muon nguoi nhan cuoi cung" & vbCrLf & _
+                       "nhan duoc SOM NHAT co the, de TRONG va bam OK (khuyen nghi).", _
+                       "SHB Tracker - Dong bo phat hanh (tuy chon)", "")
     Dim releaseAt As Date, useRelease As Boolean
     If Len(Trim(relTxt)) > 0 And Val(relTxt) > 0 Then
         useRelease = True
