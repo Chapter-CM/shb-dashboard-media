@@ -1,11 +1,23 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.12
+' SHB CM Campaign Tracker v4.13
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.12 (toi uu thoi gian gui hang loat - Full mode)
+'   - Bo khoang nghi cung "2s sau moi 50 mail": Exchange noi bo SHB khong co
+'     gioi han throttle cho tai khoan gui macro nay, nen khong can nghi -
+'     truoc day cu 50 nguoi lai dung 2s vo ich, voi vai nghin nguoi cong don
+'     thanh vai phut cho khong.
+'   - Them FlushOutbox (Application.GetNamespace("MAPI").SendAndReceive False)
+'     goi dinh ky sau moi 200 mail va sau khi vong lap ket thuc: ep Outlook day
+'     mail ra khoi Outbox ngay lap tuc thay vi cho chu ky Send/Receive theo lich
+'     mac dinh (co the vai phut). Day la nguyen nhan chinh khien nguoi nhan dau
+'     va nguoi nhan cuoi trong danh sach lech nhau nhieu, khong phai toc do
+'     vong lap tao ban sao mail.
 '
 ' CHANGES vs v4.11
 '   - Doi TRACK_URL sang Ingress public rieng (anh Nam tao 15/07):
@@ -43,7 +55,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.12"
+Private Const VER       As String = "4.13"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -198,7 +210,12 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
 
     Dim sentOK As Long:   sentOK = 0
     Dim sentFail As Long: sentFail = 0
-    Const BATCH As Long = 50
+    ' v4.13: bo khoang nghi cung 2s/50 - khong co gioi han throttle tu Exchange
+    ' noi bo SHB nen khong can. Thay vao do ep Send/Receive dinh ky de mail roi
+    ' Outbox ngay thay vi cho chu ky dong bo mac dinh cua Outlook (co the vai
+    ' phut) - day moi la nguyen nhan chinh khien nguoi nhan nhan mail cham/lech
+    ' nhau, khong phai toc do vong lap tao mail.
+    Const FLUSH_EVERY As Long = 200
 
     Dim i As Long
     For i = 0 To nLst - 1
@@ -274,9 +291,8 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
 
         DoEvents
 
-        If (i + 1) Mod BATCH = 0 And i < nLst - 1 Then
-            Dim tEnd As Date: tEnd = Now + TimeSerial(0, 0, 2)
-            Do While Now < tEnd: DoEvents: Loop
+        If (i + 1) Mod FLUSH_EVERY = 0 And i < nLst - 1 Then
+            FlushOutbox
         End If
 
         GoTo NextPerson
@@ -292,12 +308,27 @@ FailItem:
 NextPerson:
     Next i
 
+    ' Ep gui het nhung gi con trong Outbox ngay lap tuc (khong cho lich Send/Receive)
+    FlushOutbox
+
     ' Flush: wait 3s for async HTTP requests to complete
     Dim flushEnd As Date: flushEnd = Now + TimeSerial(0, 0, 3)
     Do While Now < flushEnd: DoEvents: Loop
 
     MsgBox "Hoan thanh!" & vbCrLf & "Thanh cong: " & sentOK & vbCrLf & "Loi: " & sentFail, _
            vbInformation, "SHB Tracker v" & VER
+End Sub
+
+
+' ================================================================
+' FLUSH OUTBOX - ep Outlook gui ngay nhung item dang cho trong Outbox,
+' thay vi cho chu ky Send/Receive dinh ky (mac dinh co the vai phut) ->
+' rut ngan do lech thoi gian nhan giua nguoi dau va nguoi cuoi trong danh sach.
+' ================================================================
+Private Sub FlushOutbox()
+    On Error Resume Next
+    Application.GetNamespace("MAPI").SendAndReceive False
+    On Error GoTo 0
 End Sub
 
 
