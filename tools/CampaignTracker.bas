@@ -1,11 +1,21 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.16
+' SHB CM Campaign Tracker v4.17
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.16
+'   - Them DONG BO PHAT HANH qua MailItem.DeferredDeliveryTime (Full mode). Van
+'     de nguoi dung thuc su quan tam KHONG PHAI toc do macro chay nhanh, ma la
+'     tat ca nguoi nhan phai nhan CUNG MOT THOI DIEM du mail duoc submit len
+'     server trai deu trong luc macro chay (vai phut). Hoi 1 moc gio (phut ke
+'     tu bay gio), dat CUNG mot DeferredDeliveryTime cho toan bo danh sach ->
+'     Exchange GIU LAI moi mail va chi phat cung luc dung moc gio do - co che
+'     server-side, khong phu thuoc client/macro chay nhanh hay cham. De trong/
+'     0 = giu hanh vi cu (gui ngay khi tung mail san sang).
 '
 ' CHANGES vs v4.15
 '   - Bo FlushOutbox ep GIUA vong lap (cu 200 mail/lan, them tu v4.13). Lenh
@@ -88,7 +98,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.16"
+Private Const VER       As String = "4.17"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -279,6 +289,30 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
     ' vi de Outlook tu gui nen (background) song song luc macro dang tao cac
     ' mail tiep theo. Chi con FlushOutbox O CUOI vong lap (sau khi tao xong het)
     ' de dam bao khong co mail nao bi ket cho lich Send/Receive dinh ky.
+
+    ' v4.17: DONG BO PHAT HANH qua DeferredDeliveryTime. Van de thuc su nguoi
+    ' dung quan tam KHONG PHAI toc do macro chay nhanh - ma la TAT CA nguoi
+    ' nhan phai nhan duoc CUNG MOT THOI DIEM du mail duoc tao/submit len server
+    ' trai deu trong suot qua trinh macro chay (co the vai phut). Dat CUNG MOT
+    ' moc gio DeferredDeliveryTime cho toan bo 3500 mail -> Exchange server GIU
+    ' LAI moi mail, chi phat cho nguoi nhan dung vao moc gio do, bat ke mail
+    ' toi server som hay muon hon trong luc macro dang chay. Day la co che
+    ' server-side, khong phu thuoc toc do client/macro.
+    Dim defMin As Double: defMin = nLst / 100#      ' uoc luong ~100 mail/phut submit
+    If defMin < 5 Then defMin = 5
+    If defMin > 60 Then defMin = 60
+    Dim relTxt As String
+    relTxt = InputBox("Dong bo hoa phat hanh: TAT CA " & nLst & " mail se duoc Exchange" & vbCrLf & _
+                       "giu lai va phat CUNG LUC sau bao nhieu phut ke tu bay gio?" & vbCrLf & _
+                       "(can du thoi gian de macro tao/submit xong toan bo danh sach truoc moc nay - " & vbCrLf & _
+                       "de trong hoac 0 = KHONG dong bo, gui ngay khi tung mail san sang nhu cu)", _
+                       "SHB Tracker - Dong bo phat hanh", Format(defMin, "0"))
+    Dim releaseAt As Date, useRelease As Boolean
+    If Len(Trim(relTxt)) > 0 And Val(relTxt) > 0 Then
+        useRelease = True
+        releaseAt = Now + TimeSerial(0, CLng(Val(relTxt)), 0)
+    End If
+
     PrgShow campName, nLst
 
     ' v4.15: tao 1 ban "sach" (khong recipient) duy nhat truoc vong lap, thay vi
@@ -341,6 +375,7 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         m.Recipients.Add rcpt
         m.HTMLBody = thisHTML
         m.DeleteAfterSubmit = True
+        If useRelease Then m.DeferredDeliveryTime = releaseAt
         m.send
         Set m = Nothing
         sentOK = sentOK + 1
@@ -387,8 +422,13 @@ NextPerson:
     Dim flushEnd As Date: flushEnd = Now + TimeSerial(0, 0, 3)
     Do While Now < flushEnd: DoEvents: Loop
 
-    MsgBox "Hoan thanh!" & vbCrLf & "Thanh cong: " & sentOK & vbCrLf & "Loi: " & sentFail, _
-           vbInformation, "SHB Tracker v" & VER
+    Dim doneMsg As String
+    doneMsg = "Hoan thanh!" & vbCrLf & "Thanh cong: " & sentOK & vbCrLf & "Loi: " & sentFail
+    If useRelease Then
+        doneMsg = doneMsg & vbCrLf & vbCrLf & "Tat ca mail se duoc Exchange phat hanh CUNG LUC vao: " & _
+                  Format(releaseAt, "hh:nn:ss dd/mm/yyyy")
+    End If
+    MsgBox doneMsg, vbInformation, "SHB Tracker v" & VER
 End Sub
 
 
