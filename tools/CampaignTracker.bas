@@ -18,6 +18,11 @@ Option Explicit
 '     mac dinh (co the vai phut). Day la nguyen nhan chinh khien nguoi nhan dau
 '     va nguoi nhan cuoi trong danh sach lech nhau nhieu, khong phai toc do
 '     vong lap tao ban sao mail.
+'   - Them popup tien do (modeless, khong chan vong lap gui) hien "Da gui X / Y,
+'     Thanh cong.. Loi.." trong Full mode, tu dong dong khi xong. Can UserForm
+'     "frmProgress" (co Label ten "lblStatus") trong VBA project - xem huong dan
+'     tao form o CUOI FILE NAY. Neu chua tao form, macro van chay gui mail binh
+'     thuong, chi khong co popup (Prg* tu bo qua khi khong tim thay form).
 '
 ' CHANGES vs v4.11
 '   - Doi TRACK_URL sang Ingress public rieng (anh Nam tao 15/07):
@@ -61,6 +66,12 @@ Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
 Private m_Bag(0 To 399) As Object
 Private m_BagN           As Long
+
+' Popup tien do (modeless) - late-bound qua UserForms.Add nen KHONG can compile-time
+' reference toi frmProgress. Neu form "frmProgress" chua duoc tao trong VBA project
+' (xem huong dan tao form o cuoi file), cac Sub Prg* se tu bo qua (On Error Resume
+' Next), macro van chay gui mail binh thuong, chi la khong co popup hien tien do.
+Private g_Prg As Object
 
 ' ================================================================
 ' PUBLIC: SendCampaign
@@ -217,6 +228,8 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
     ' nhau, khong phai toc do vong lap tao mail.
     Const FLUSH_EVERY As Long = 200
 
+    PrgShow campName, nLst
+
     Dim i As Long
     For i = 0 To nLst - 1
         ' Parse combined entry: smtp~role~dept~loc
@@ -306,10 +319,12 @@ FailItem:
         Resume NextPerson
 
 NextPerson:
+        PrgUpdate sentOK, sentFail, nLst
     Next i
 
     ' Ep gui het nhung gi con trong Outbox ngay lap tuc (khong cho lich Send/Receive)
     FlushOutbox
+    PrgHide
 
     ' Flush: wait 3s for async HTTP requests to complete
     Dim flushEnd As Date: flushEnd = Now + TimeSerial(0, 0, 3)
@@ -328,6 +343,43 @@ End Sub
 Private Sub FlushOutbox()
     On Error Resume Next
     Application.GetNamespace("MAPI").SendAndReceive False
+    On Error GoTo 0
+End Sub
+
+
+' ================================================================
+' POPUP TIEN DO (modeless) - can UserForm "frmProgress" voi mot Label ten
+' "lblStatus" ben trong (huong dan tao o cuoi file). Dung UserForms.Add
+' (late-bound) thay vi "New frmProgress" de file .bas nay van chay/compile
+' duoc ke ca khi ai do chua tao form - luc do Prg* chi lang le khong lam gi.
+' ================================================================
+Private Sub PrgShow(campName As String, total As Long)
+    On Error Resume Next
+    Set g_Prg = Nothing
+    Set g_Prg = VBA.UserForms.Add("frmProgress")
+    If g_Prg Is Nothing Then Exit Sub
+    g_Prg.Caption = "SHB Tracker - Dang gui"
+    g_Prg.Controls("lblStatus").Caption = _
+        "Chien dich: " & campName & vbCrLf & "Dang gui: 0 / " & total
+    g_Prg.Show vbModeless
+    DoEvents
+    On Error GoTo 0
+End Sub
+
+Private Sub PrgUpdate(sentOK As Long, sentFail As Long, total As Long)
+    On Error Resume Next
+    If g_Prg Is Nothing Then Exit Sub
+    g_Prg.Controls("lblStatus").Caption = _
+        "Dang gui: " & (sentOK + sentFail) & " / " & total & vbCrLf & _
+        "Thanh cong: " & sentOK & "   Loi: " & sentFail
+    DoEvents
+    On Error GoTo 0
+End Sub
+
+Private Sub PrgHide()
+    On Error Resume Next
+    If Not g_Prg Is Nothing Then Unload g_Prg
+    Set g_Prg = Nothing
     On Error GoTo 0
 End Sub
 
@@ -594,3 +646,32 @@ Public Sub CleanCampaignCopies()
     Next i
     MsgBox "Da don dep ban copy cu.", vbInformation, "SHB Tracker v" & VER
 End Sub
+
+
+' ================================================================
+' HUONG DAN TAO UserForm "frmProgress" (chi lam 1 lan, ~2 phut)
+' Popup tien do (PrgShow/PrgUpdate/PrgHide o tren) can form nay de hien thi.
+' UserForm khong the dua vao file .bas thuan text (co phan du lieu nhi phan
+' .frx do VBA tu sinh) nen phai tao thu cong trong VBA Editor:
+'
+'   1. Mo VBA Editor (Alt+F11) > trong Project Explorer, chuot phai vao
+'      project cua ban (vd VbaProject.OTM) > Insert > UserForm.
+'   2. Nhan F4 mo cua so Properties cua form vua tao, doi:
+'        (Name)   = frmProgress
+'        Caption  = SHB Tracker
+'        Width    = 260   (don vi points, co the chinh sau)
+'        Height   = 100
+'   3. Tu hop cong cu (Toolbox), keo 1 Label vao giua form. Nhan F4, doi:
+'        (Name)   = lblStatus
+'        Caption  = (de trong, code se tu dien luc chay)
+'        AutoSize = False
+'        WordWrap = True
+'        Width/Height = phu kin form (vd 240 x 70)
+'   4. Ctrl+S de luu lai (VBA se tu sinh file frmProgress.frx kem theo,
+'      khong can dong gi them).
+'   5. Chay lai SendCampaign nhu binh thuong - popup se tu hien khi vao
+'      Full mode va tu dong dong khi gui xong.
+'
+' Neu bo qua buoc nay, macro van hoat dong binh thuong, chi khong co popup
+' hien tien do (Prg* tu bat loi va bo qua qua On Error Resume Next).
+' ================================================================
