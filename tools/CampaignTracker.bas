@@ -1,11 +1,22 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.14
+' SHB CM Campaign Tracker v4.15
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.14
+'   - Full mode: tao 1 ban "sach" (baseMail, khong recipient) MOT LAN truoc vong
+'     lap thay vi Copy() thang tu draft (co the con nguyen recipient cu) roi xoa
+'     lai tung recipient trong TUNG vong lap - tranh chi phi xoa recipient cong
+'     don khi draft goc co san nhieu recipient va n lon.
+'   - Luu y quan trong ve toc do gui hang loat: nut that co ban van la TONG DUNG
+'     LUONG du lieu phai truyen qua Exchange = (dung luong 1 email) x (so nguoi
+'     nhan), vi moi ban copy mang nguyen anh nhung rieng. Email nang vai MB x
+'     3500 nguoi = hang chuc GB - khong co toi uu code nao thay the duoc viec
+'     giam dung luong anh/chuyen sang host anh qua URL thay vi nhung inline.
 '
 ' CHANGES vs v4.13
 '   - Them canh bao dung luong SOM (truoc khi hoi che do gui): .Send() qua VBA
@@ -67,7 +78,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.14"
+Private Const VER       As String = "4.15"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -259,6 +270,16 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
 
     PrgShow campName, nLst
 
+    ' v4.15: tao 1 ban "sach" (khong recipient) duy nhat truoc vong lap, thay vi
+    ' Copy() thang tu draft (co the con nguyen recipient cu tren To) roi xoa lai
+    ' tung recipient MOI VONG LAP - voi draft co san nhieu recipient (vd dan DL
+    ' cu chua don), viec xoa lap lai nay co the cong don rat ton kem khi n lon.
+    Dim baseMail As MailItem: Set baseMail = draft.Copy
+    Dim bj As Long
+    For bj = baseMail.Recipients.Count To 1 Step -1
+        baseMail.Recipients.Item(bj).Delete
+    Next bj
+
     Dim i As Long
     For i = 0 To nLst - 1
         ' Parse combined entry: smtp~role~dept~loc
@@ -304,12 +325,7 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         Dim m As MailItem
         On Error GoTo FailItem
 
-        Set m = draft.Copy
-
-        Dim j As Long
-        For j = m.Recipients.Count To 1 Step -1
-            m.Recipients.Item(j).Delete
-        Next j
+        Set m = baseMail.Copy
 
         m.Recipients.Add rcpt
         m.HTMLBody = thisHTML
@@ -354,6 +370,11 @@ NextPerson:
     ' Ep gui het nhung gi con trong Outbox ngay lap tuc (khong cho lich Send/Receive)
     FlushOutbox
     PrgHide
+
+    On Error Resume Next
+    baseMail.Delete
+    On Error GoTo 0
+    Set baseMail = Nothing
 
     ' Flush: wait 3s for async HTTP requests to complete
     Dim flushEnd As Date: flushEnd = Now + TimeSerial(0, 0, 3)
