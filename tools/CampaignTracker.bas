@@ -1,11 +1,18 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.13
+' SHB CM Campaign Tracker v4.14
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.13
+'   - Them canh bao dung luong SOM (truoc khi hoi che do gui): .Send() qua VBA
+'     bo qua buoc Outlook tu nen anh khi bam Send tay, nen email nang (>3.5MB)
+'     de bi Exchange tu choi vi vuot han muc (thuong 4MB) - phat hien luc nay
+'     thay vi giua chung gui hang nghin ban. Khong tu nen anh bang VBA (khong
+'     co API COM on dinh cho viec nay) - chi canh bao va huong dan nen truoc.
 '
 ' CHANGES vs v4.12 (toi uu thoi gian gui hang loat - Full mode)
 '   - Bo khoang nghi cung "2s sau moi 50 mail": Exchange noi bo SHB khong co
@@ -60,7 +67,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.13"
+Private Const VER       As String = "4.14"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -95,6 +102,28 @@ Public Sub SendCampaign()
         Exit Sub
     End If
     Dim draft As MailItem: Set draft = raw
+
+    ' v4.14: canh bao dung luong SOM - .Send() qua VBA/COM bo qua buoc tu dong
+    ' nen anh ma Outlook chi lam khi bam nut Send tay (UI pipeline). Neu khong
+    ' canh bao truoc, Full mode se gui hang nghin ban roi moi phat hien loi
+    ' "vuot han muc 4MB" cho TAT CA nguoi nhan giua chung. Kiem tra som + huong
+    ' dan nen anh, thay vi co gang tu nen anh bang VBA (khong on dinh/khong co
+    ' API COM dang tin cay cho viec nay, de tao ket qua khong luong truoc duoc
+    ' tren may cong ty).
+    Const SIZE_WARN_BYTES As Double = 3500000  ' ~3.5MB - gan han thuong gap la 4MB
+    If draft.Size > SIZE_WARN_BYTES Then
+        Dim szMB As Double: szMB = draft.Size / 1024# / 1024#
+        Dim szAns As Integer
+        szAns = MsgBox("Email nay dung luong " & Format(szMB, "0.0") & " MB (gom anh nhung)." & vbCrLf & vbCrLf & _
+                        "Luu y: gui qua macro (Send() bang VBA) KHONG tu dong nen anh nhu khi" & vbCrLf & _
+                        "ban bam nut Send tay tren giao dien - nen de nguyen kha nang bi Exchange" & vbCrLf & _
+                        "tu choi (han muc pho bien 4MB) cho TAT CA nguoi nhan trong danh sach." & vbCrLf & vbCrLf & _
+                        "Khuyen nghi: nen/resize anh trong noi dung email TRUOC khi gui hang loat" & vbCrLf & _
+                        "(vi du dua ve duoi ~1MB), hoac host anh o URL rieng thay vi nhung inline." & vbCrLf & vbCrLf & _
+                        "Van muon tiep tuc gui nhu hien tai?", _
+                        vbYesNo + vbExclamation, "Canh bao dung luong - SHB Tracker v" & VER)
+        If szAns = vbNo Then Exit Sub
+    End If
 
     ' Campaign metadata via InputBox
     Dim campName As String, squad As String, mType As String, prevTxt As String
