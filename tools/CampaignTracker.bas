@@ -1,11 +1,18 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.17
+' SHB CM Campaign Tracker v4.18
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.17
+'   - Fix RecallCampaign khong tim thay mail: SendCampaign luu CMSlug qua
+'     MakeSlug() (ascii-lowercase-gach-ngang), nhung RecallCampaign truoc do so
+'     khop y nguyen chuoi nguoi dung go (co dau/hoa/khoang trang) nen khong bao
+'     gio trung. Gio RecallCampaign tu chay slug nguoi dung nhap qua MakeSlug()
+'     truoc khi so khop - go ten chien dich nguyen ban hay slug deu duoc.
 '
 ' CHANGES vs v4.16
 '   - Fix "Khong tim thay cua so mail dang mo" trong RecallCampaign kieu replace:
@@ -90,7 +97,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.17"
+Private Const VER       As String = "4.18"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -630,11 +637,12 @@ Public Sub RecallCampaign()
     Set preOpenDraft = Application.ActiveInspector.CurrentItem
     On Error GoTo 0
 
-    Dim slug As String
-    slug = InputBox("Nhap slug campaign can Recall (xem trong MsgBox xac nhan luc gui, vd: dao-tao-q3-2026):", _
-                    "SHB Tracker - Recall")
-    If Len(Trim(slug)) = 0 Then Exit Sub
-    slug = Trim(slug)
+    Dim slugRaw As String
+    slugRaw = InputBox("Nhap ten/slug campaign can Recall (xem trong MsgBox xac nhan luc gui - " & _
+                       "co the nhap y nguyen ten chien dich hoac slug, vd: dao-tao-q3-2026):", _
+                       "SHB Tracker - Recall")
+    If Len(Trim(slugRaw)) = 0 Then Exit Sub
+    Dim slug As String: slug = MakeSlug(Trim(slugRaw))
 
     Dim modeAns As Integer
     modeAns = MsgBox("Chon kieu Recall cho campaign '" & slug & "':" & vbCrLf & vbCrLf & _
