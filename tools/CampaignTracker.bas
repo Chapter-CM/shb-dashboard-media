@@ -13,7 +13,7 @@ Option Explicit
 '     Recall. Neu muon Recall phai lam thu cong tung mail rat mat cong voi so luong lon.
 '   - Fix: DeleteAfterSubmit bo di, moi mail sau khi gui duoc file vao folder rieng
 '     "CM Campaigns Sent" (duoi Inbox) qua SaveSentMessageFolder, kem UserProperties
-'     CM_Slug / CM_EID de sau nay loc lai dung campaign.
+'     CMSlug / CMEID de sau nay loc lai dung campaign.
 '   - Them macro moi RecallCampaign(): nhap slug campaign can recall, chon kieu
 '     (giong 2 lua chon cua Outlook: "Delete unread copies" hoac "Delete unread
 '     copies and replace with a new message"), roi tu dong loop toan bo mail cua
@@ -280,10 +280,10 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         m.HTMLBody = thisHTML
 
         ' Tag campaign info truc tiep vao mail de RecallCampaign() loc lai duoc sau nay
-        m.UserProperties.Add "CM_Slug", olText
-        m.UserProperties("CM_Slug").Value = slug
-        m.UserProperties.Add "CM_EID", olText
-        m.UserProperties("CM_EID").Value = eid
+        m.UserProperties.Add "CMSlug", olText
+        m.UserProperties("CMSlug").Value = slug
+        m.UserProperties.Add "CMEID", olText
+        m.UserProperties("CMEID").Value = eid
 
         If Not sentFolder Is Nothing Then m.SaveSentMessageFolder = sentFolder
         m.DeleteAfterSubmit = False
@@ -644,7 +644,7 @@ Public Sub RecallCampaign()
         If TypeName(itm) = "MailItem" Then
             Dim itmSlug As String: itmSlug = ""
             On Error Resume Next
-            itmSlug = itm.UserProperties("CM_Slug").Value
+            itmSlug = itm.UserProperties("CMSlug").Value
             On Error GoTo 0
             If itmSlug = slug Then
                 matched = matched + 1
