@@ -1,11 +1,18 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.14
+' SHB CM Campaign Tracker v4.15
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.14
+'   - RecallCampaign() kieu "replace": truoc chi bam OK dialog voi noi dung
+'     mac dinh cua Outlook. Gio hoi Subject + Body thay the 1 LAN cho ca
+'     campaign truoc khi chay batch, roi voi tung mail se tu lay cua so soan
+'     thu thay the ma Outlook mo ra (qua ActiveInspector), ghi de dung
+'     Subject/Body do va tu Send - khong can bam tay tung cai trong 3000 mail.
 '
 ' CHANGES vs v4.13
 '   - Fix "You don't have appropriate permission to perform this operation"
@@ -69,7 +76,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.14"
+Private Const VER       As String = "4.15"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -613,6 +620,17 @@ Public Sub RecallCampaign()
     If modeAns = vbCancel Then Exit Sub
     Dim doReplace As Boolean: doReplace = (modeAns = vbNo)
 
+    Dim replSubject As String, replBody As String
+    If doReplace Then
+        replSubject = InputBox("Tieu de mail thay the (ap dung cho ca campaign):", _
+                               "SHB Tracker - Recall", "[Thu hoi] ")
+        If Len(Trim(replSubject)) = 0 Then Exit Sub
+        replBody = InputBox("Noi dung mail thay the (text thuong, ap dung cho ca campaign):", _
+                            "SHB Tracker - Recall", _
+                            "Chung toi xin thu hoi email truoc do. Vui long bo qua email cu.")
+        If Len(Trim(replBody)) = 0 Then Exit Sub
+    End If
+
     Dim sentFolder As folder
     Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
     If sentFolder Is Nothing Then
@@ -635,7 +653,7 @@ Public Sub RecallCampaign()
             On Error GoTo 0
             If itmSlug = slug Then
                 matched = matched + 1
-                If RecallOneItem(itm, doReplace) Then
+                If RecallOneItem(itm, doReplace, replSubject, replBody) Then
                     recalled = recalled + 1
                 Else
                     failed = failed + 1
@@ -668,8 +686,16 @@ End Sub
 ' nhan dialog bang SendKeys (Outlook Object Model khong co API recall
 ' khong-dialog). Mac dinh dialog chon san "Delete unread copies";
 ' neu doReplace=True se Tab xuong chon "...and replace" roi Enter.
+'
+' Khi doReplace=True, sau khi xac nhan dialog Outlook se tu mo 1 cua
+' so soan thu MOI (ban copy cua mail goc, editable) - ham nay lay
+' cua so do qua ActiveInspector, ghi de Subject/Body bang noi dung
+' thay the do nguoi dung nhap, roi tu Send - khong can nguoi dung
+' bam tay tung cai.
 ' ================================================================
-Private Function RecallOneItem(itm As Object, doReplace As Boolean) As Boolean
+Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
+                                Optional replSubject As String = "", _
+                                Optional replBody As String = "") As Boolean
     On Error GoTo Fail
 
     Dim act As Object
@@ -697,6 +723,26 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean) As Boolean
 
     Dim tEnd2 As Date: tEnd2 = Now + TimeSerial(0, 0, 1)
     Do While Now < tEnd2: DoEvents: Loop
+
+    If doReplace Then
+        ' Outlook vua mo cua so soan mail thay the - lay va gui no
+        Dim tEnd3 As Date: tEnd3 = Now + TimeSerial(0, 0, 2)
+        Do While Now < tEnd3: DoEvents: Loop
+
+        Dim replInsp As Object
+        Set replInsp = Application.ActiveInspector
+        If Not replInsp Is Nothing Then
+            Dim replMail As Object
+            Set replMail = replInsp.CurrentItem
+            If Not replMail Is Nothing Then
+                If replMail.Class = olMail Then
+                    replMail.Subject = replSubject
+                    replMail.Body = replBody
+                    replMail.send
+                End If
+            End If
+        End If
+    End If
 
     RecallOneItem = True
     Exit Function
