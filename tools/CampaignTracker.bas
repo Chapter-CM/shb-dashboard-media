@@ -218,6 +218,7 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
 
     Dim sentOK As Long:   sentOK = 0
     Dim sentFail As Long: sentFail = 0
+    Dim failDiag As String: failDiag = ""
     Const BATCH As Long = 50
 
     Dim sentFolder As folder
@@ -314,6 +315,9 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
 
 FailItem:
         sentFail = sentFail + 1
+        If Len(failDiag) < 1000 Then
+            failDiag = failDiag & vbCrLf & "  - " & rcpt & ": #" & Err.Number & " " & Err.Description
+        End If
         On Error Resume Next
         If Not m Is Nothing Then m.Delete
         Set m = Nothing
@@ -327,8 +331,10 @@ NextPerson:
     Dim flushEnd As Date: flushEnd = Now + TimeSerial(0, 0, 3)
     Do While Now < flushEnd: DoEvents: Loop
 
-    MsgBox "Hoan thanh!" & vbCrLf & "Thanh cong: " & sentOK & vbCrLf & "Loi: " & sentFail, _
-           vbInformation, "SHB Tracker v" & VER
+    Dim doneMsg As String
+    doneMsg = "Hoan thanh!" & vbCrLf & "Thanh cong: " & sentOK & vbCrLf & "Loi: " & sentFail
+    If sentFail > 0 Then doneMsg = doneMsg & vbCrLf & vbCrLf & "Chi tiet loi:" & failDiag
+    MsgBox doneMsg, vbInformation, "SHB Tracker v" & VER
 End Sub
 
 
