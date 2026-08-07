@@ -1,11 +1,18 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.21
+' SHB CM Campaign Tracker v4.22
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.21
+'   - Fix kieu "replace" thuc te van chi Delete (khong replace): phim {TAB} day
+'     focus RA KHOI nhom radio button truoc khi bam {DOWN}, nen Down khong doi
+'     duoc lua chon radio (van la "Delete unread copies" mac dinh) - Enter chi
+'     xac nhan dung option cu. Bo {TAB}, chi con {DOWN}~ vi focus da nam san
+'     tren nhom radio ngay khi dialog mo (khong can Tab toi).
 '
 ' CHANGES vs v4.20
 '   - Fix dialog "Message Recall" van hien len doi bam OK tay cho tung mail thay
@@ -118,7 +125,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.21"
+Private Const VER       As String = "4.22"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -794,7 +801,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     ' xep hang san. Neu SendKeys o SAU ExecuteMso (nhu ban dau) se bi treo vi
     ' ExecuteMso khong bao gio return de chay toi dong SendKeys do.
     If doReplace Then
-        SendKeys "{TAB}{DOWN}~", False
+        SendKeys "{DOWN}~", False
     Else
         SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
     End If
