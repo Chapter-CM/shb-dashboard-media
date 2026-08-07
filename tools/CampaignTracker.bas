@@ -1,11 +1,19 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.19
+' SHB CM Campaign Tracker v4.20
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.19
+'   - Fix "Khong tim thay action 'Recall'": "Recall This Message" la lenh Ribbon
+'     (Fluent UI idMso "RecallThisMessage"), KHONG nam trong MailItem.Actions
+'     (chi co Reply/ReplyAll/Forward...) nen lan tim truoc luon that bai. Doi
+'     sang itm.Display() de mo cua so mail can recall, roi goi lenh qua
+'     Inspector.CommandBars.ExecuteMso("RecallThisMessage"). Dong cua so lai
+'     sau khi xu ly xong (olDiscard) de khong lam tran man hinh voi 3000 cua so.
 '
 ' CHANGES vs v4.18
 '   - RecallCampaign bao "Loi: 1" nhung khong noi ro tai sao. Them errMsg ByRef
@@ -102,7 +110,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.19"
+Private Const VER       As String = "4.20"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -738,10 +746,13 @@ End Sub
 
 ' ================================================================
 ' RECALL ONE ITEM
-' Kich hoat action "Recall This Message" cua Outlook va tu dong xac
-' nhan dialog bang SendKeys (Outlook Object Model khong co API recall
-' khong-dialog). Mac dinh dialog chon san "Delete unread copies";
-' neu doReplace=True se Tab xuong chon "...and replace" roi Enter.
+' "Recall This Message" la lenh Ribbon (Fluent UI), KHONG nam trong
+' MailItem.Actions (do chi co Reply/ReplyAll/Forward...). Phai mo
+' mail (Display) roi goi lenh Ribbon qua CommandBars.ExecuteMso, sau
+' do tu dong xac nhan dialog bang SendKeys (Outlook Object Model
+' khong co API recall khong-dialog). Mac dinh dialog chon san "Delete
+' unread copies"; neu doReplace=True se Tab xuong chon "...and
+' replace" roi Enter.
 '
 ' Khi doReplace=True, sau khi xac nhan dialog Outlook se tu mo 1 cua
 ' so soan thu MOI (ban copy cua mail goc, editable) - ham nay lay
@@ -755,23 +766,32 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
                                 Optional ByRef errMsg As String = "") As Boolean
     On Error GoTo Fail
 
-    Dim act As Object
-    Dim found As Boolean: found = False
-    Dim a As Object
-    For Each a In itm.Actions
-        If InStr(1, a.Name, "Recall", vbTextCompare) > 0 Then
-            Set act = a
-            found = True
-            Exit For
-        End If
-    Next a
-    If Not found Then
-        errMsg = "Khong tim thay action 'Recall' (mail co the khong phai gui qua Exchange, " & _
-                 "hoac nguoi gui khong con quyen recall)."
+    ' Mo mail can recall ra cua so rieng de co the goi lenh Ribbon "RecallThisMessage"
+    itm.Display
+
+    Dim tOpen As Date: tOpen = Now + TimeSerial(0, 0, 1)
+    Do While Now < tOpen: DoEvents: Loop
+
+    Dim readInsp As Object
+    Set readInsp = Application.ActiveInspector
+    If readInsp Is Nothing Then
+        errMsg = "Khong mo duoc cua so mail can recall."
         GoTo FailNoErrObj
     End If
 
-    act.Execute
+    On Error Resume Next
+    readInsp.CommandBars.ExecuteMso "RecallThisMessage"
+    Dim ExecErr As Long: ExecErr = Err.Number
+    Dim ExecDesc As String: ExecDesc = Err.Description
+    On Error GoTo Fail
+    If ExecErr <> 0 Then
+        On Error Resume Next
+        readInsp.Close olDiscard
+        On Error GoTo Fail
+        errMsg = "ExecuteMso 'RecallThisMessage' loi #" & ExecErr & " " & ExecDesc & _
+                 " (mail co the khong phai gui qua Exchange, hoac nguoi gui khong con quyen recall)."
+        GoTo FailNoErrObj
+    End If
 
     ' Cho dialog "Message Recall" xuat hien roi tu dong xac nhan
     Dim tEnd As Date: tEnd = Now + TimeSerial(0, 0, 1)
@@ -805,11 +825,18 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         End If
     End If
 
+    On Error Resume Next
+    readInsp.Close olDiscard
+    On Error GoTo 0
+
     RecallOneItem = True
     Exit Function
 
 Fail:
     errMsg = "#" & Err.Number & " " & Err.Description
+    On Error Resume Next
+    If Not readInsp Is Nothing Then readInsp.Close olDiscard
+    On Error GoTo 0
 FailNoErrObj:
     RecallOneItem = False
 End Function
