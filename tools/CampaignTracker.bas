@@ -1,11 +1,30 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.12
+' SHB CM Campaign Tracker v4.13
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.12
+'   - Van de: Full mode gui 3000 mail rieng (1 mail/nguoi) voi DeleteAfterSubmit=True
+'     -> khong luu ban copy nao ca -> KHONG THE Recall vi khong co gi de mo ra bam
+'     Recall. Neu muon Recall phai lam thu cong tung mail rat mat cong voi so luong lon.
+'   - Fix: DeleteAfterSubmit bo di, moi mail sau khi gui duoc file vao folder rieng
+'     "CM Campaigns Sent" (duoi Inbox) qua SaveSentMessageFolder, kem UserProperties
+'     CM_Slug / CM_EID de sau nay loc lai dung campaign.
+'   - Them macro moi RecallCampaign(): nhap slug campaign can recall, chon kieu
+'     (giong 2 lua chon cua Outlook: "Delete unread copies" hoac "Delete unread
+'     copies and replace with a new message"), roi tu dong loop toan bo mail cua
+'     campaign do trong folder "CM Campaigns Sent" va thuc hien recall cho tung cai
+'     - khong phai mo tay tung mail nua.
+'   - LUU Y: Outlook khong co API "recall am tham" khong dialog trong Object Model
+'     chuan. RecallCampaign dung Actions("Recall-This-Message(C)").Execute + SendKeys
+'     de tu dong bam dialog xac nhan cho tung mail. Cach nay hoat dong tot nhung van
+'     phu thuoc UI dialog cua Outlook (locale/version) - da test tren Outlook Desktop
+'     VN. Recall chi thanh cong voi nguoi nhan noi bo Exchange, dung Outlook Desktop,
+'     va CHUA doc mail - day la gioi han cua Exchange, khong phai cua macro nay.
 '
 ' CHANGES vs v4.11
 '   - Doi TRACK_URL sang Ingress public rieng (anh Nam tao 15/07):
@@ -43,9 +62,10 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.12"
+Private Const VER       As String = "4.13"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
+Private Const SENT_FOLDER_NAME As String = "CM Campaigns Sent"
 
 Private m_Bag(0 To 399) As Object
 Private m_BagN           As Long
@@ -200,6 +220,9 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
     Dim sentFail As Long: sentFail = 0
     Const BATCH As Long = 50
 
+    Dim sentFolder As folder
+    Set sentFolder = GetOrCreateFolder(SENT_FOLDER_NAME)
+
     Dim i As Long
     For i = 0 To nLst - 1
         ' Parse combined entry: smtp~role~dept~loc
@@ -254,7 +277,15 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
 
         m.Recipients.Add rcpt
         m.HTMLBody = thisHTML
-        m.DeleteAfterSubmit = True
+
+        ' Tag campaign info truc tiep vao mail de RecallCampaign() loc lai duoc sau nay
+        m.UserProperties.Add "CM_Slug", olText
+        m.UserProperties("CM_Slug").Value = slug
+        m.UserProperties.Add "CM_EID", olText
+        m.UserProperties("CM_EID").Value = eid
+
+        If Not sentFolder Is Nothing Then m.SaveSentMessageFolder = sentFolder
+        m.DeleteAfterSubmit = False
         m.send
         Set m = Nothing
         sentOK = sentOK + 1
@@ -545,6 +576,141 @@ Private Function MakeSlug(s As String) As String
     Do While Len(res) > 0 And Right(res, 1) = "-": res = Left(res, Len(res) - 1): Loop
     If Len(res) = 0 Then res = "campaign"
     MakeSlug = res
+End Function
+
+
+' ================================================================
+' GET OR CREATE FOLDER (duoi Inbox cua mailbox mac dinh)
+' ================================================================
+Private Function GetOrCreateFolder(folderName As String) As folder
+    On Error Resume Next
+    Dim parent As folder
+    Set parent = Application.Session.GetDefaultFolder(olFolderInbox)
+    Dim f As folder
+    Set f = parent.folders(folderName)
+    If f Is Nothing Then Set f = parent.folders.Add(folderName)
+    Set GetOrCreateFolder = f
+    On Error GoTo 0
+End Function
+
+
+' ================================================================
+' PUBLIC: RecallCampaign
+' Tu dong recall toan bo mail cua 1 campaign (theo slug) da gui qua
+' Full mode, thay vi phai mo tay tung mail trong 3000 mail.
+'
+' Gioi han (do Exchange, khong phai do macro):
+'   - Chi recall duoc mail gui noi bo cung to chuc Exchange.
+'   - Nguoi nhan phai dang dung Outlook Desktop (khong phai Web/Mobile).
+'   - Mail phai CHUA duoc mo doc.
+' ================================================================
+Public Sub RecallCampaign()
+
+    Dim slug As String
+    slug = InputBox("Nhap slug campaign can Recall (xem trong MsgBox xac nhan luc gui, vd: dao-tao-q3-2026):", _
+                    "SHB Tracker - Recall")
+    If Len(Trim(slug)) = 0 Then Exit Sub
+    slug = Trim(slug)
+
+    Dim modeAns As Integer
+    modeAns = MsgBox("Chon kieu Recall cho campaign '" & slug & "':" & vbCrLf & vbCrLf & _
+                     "YES = Delete unread copies of this message" & vbCrLf & _
+                     "NO  = Delete unread copies AND replace with a new message" & vbCrLf & _
+                     "CANCEL = Huy", vbYesNoCancel + vbQuestion, "SHB Tracker - Recall")
+    If modeAns = vbCancel Then Exit Sub
+    Dim doReplace As Boolean: doReplace = (modeAns = vbNo)
+
+    Dim sentFolder As folder
+    Set sentFolder = GetOrCreateFolder(SENT_FOLDER_NAME)
+    If sentFolder Is Nothing Then
+        MsgBox "Khong tim thay folder '" & SENT_FOLDER_NAME & "'.", vbExclamation, "SHB Tracker - Recall"
+        Exit Sub
+    End If
+
+    Dim matched As Long: matched = 0
+    Dim recalled As Long: recalled = 0
+    Dim failed As Long: failed = 0
+
+    Dim itm As Object
+    Dim i As Long
+    For i = sentFolder.Items.Count To 1 Step -1
+        Set itm = sentFolder.Items(i)
+        If TypeName(itm) = "MailItem" Then
+            Dim itmSlug As String: itmSlug = ""
+            On Error Resume Next
+            itmSlug = itm.UserProperties("CM_Slug").Value
+            On Error GoTo 0
+            If itmSlug = slug Then
+                matched = matched + 1
+                If RecallOneItem(itm, doReplace) Then
+                    recalled = recalled + 1
+                Else
+                    failed = failed + 1
+                End If
+                DoEvents
+            End If
+        End If
+    Next i
+
+    If matched = 0 Then
+        MsgBox "Khong tim thay mail nao cua campaign '" & slug & "' trong folder '" & _
+               SENT_FOLDER_NAME & "'." & vbCrLf & _
+               "(Chi cac campaign gui SAU khi cap nhat macro v" & VER & " moi duoc luu lai de recall.)", _
+               vbExclamation, "SHB Tracker - Recall"
+        Exit Sub
+    End If
+
+    MsgBox "Hoan thanh Recall cho campaign '" & slug & "'!" & vbCrLf & _
+           "Tim thay  : " & matched & vbCrLf & _
+           "Da recall : " & recalled & vbCrLf & _
+           "Loi       : " & failed & vbCrLf & vbCrLf & _
+           "Luu y: Recall chi thanh cong voi nguoi nhan noi bo, dung Outlook Desktop, " & _
+           "va chua doc mail - day la gioi han cua Exchange.", _
+           vbInformation, "SHB Tracker - Recall"
+End Sub
+
+
+' ================================================================
+' RECALL ONE ITEM
+' Kich hoat action "Recall This Message" cua Outlook va tu dong xac
+' nhan dialog bang SendKeys (Outlook Object Model khong co API recall
+' khong-dialog). Mac dinh dialog chon san "Delete unread copies";
+' neu doReplace=True se Tab xuong chon "...and replace" roi Enter.
+' ================================================================
+Private Function RecallOneItem(itm As Object, doReplace As Boolean) As Boolean
+    On Error GoTo Fail
+
+    Dim act As Object
+    Dim found As Boolean: found = False
+    Dim a As Object
+    For Each a In itm.Actions
+        If InStr(1, a.Name, "Recall", vbTextCompare) > 0 Then
+            Set act = a
+            found = True
+            Exit For
+        End If
+    Next a
+    If Not found Then GoTo Fail
+
+    act.Execute
+
+    ' Cho dialog "Message Recall" xuat hien roi tu dong xac nhan
+    Dim tEnd As Date: tEnd = Now + TimeSerial(0, 0, 1)
+    Do While Now < tEnd: DoEvents: Loop
+
+    If doReplace Then
+        SendKeys "{TAB}{DOWN}", True
+    End If
+    SendKeys "~", True   ' Enter = OK
+
+    Dim tEnd2 As Date: tEnd2 = Now + TimeSerial(0, 0, 1)
+    Do While Now < tEnd2: DoEvents: Loop
+
+    RecallOneItem = True
+    Exit Function
+
+Fail:
+    RecallOneItem = False
 End Function
 
 
