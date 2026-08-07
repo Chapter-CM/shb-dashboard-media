@@ -1,24 +1,31 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.13
+' SHB CM Campaign Tracker v4.14
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
 '
+' CHANGES vs v4.13
+'   - Fix "You don't have appropriate permission to perform this operation"
+'     (#-2147024891) khi gui Full mode: SaveSentMessageFolder vao folder con tu
+'     tao duoi Inbox bi Exchange chan (policy noi bo). Bo han buoc tao folder
+'     rieng - gio moi mail sau khi gui duoc luu vao Sent Items MAC DINH (chi bo
+'     DeleteAfterSubmit, khong doi noi luu), van giu UserProperties CMSlug/CMEID
+'     de RecallCampaign() loc lai dung campaign trong Sent Items.
+'
 ' CHANGES vs v4.12
 '   - Van de: Full mode gui 3000 mail rieng (1 mail/nguoi) voi DeleteAfterSubmit=True
 '     -> khong luu ban copy nao ca -> KHONG THE Recall vi khong co gi de mo ra bam
 '     Recall. Neu muon Recall phai lam thu cong tung mail rat mat cong voi so luong lon.
-'   - Fix: DeleteAfterSubmit bo di, moi mail sau khi gui duoc file vao folder rieng
-'     "CM Campaigns Sent" (duoi Inbox) qua SaveSentMessageFolder, kem UserProperties
-'     CMSlug / CMEID de sau nay loc lai dung campaign.
+'   - Fix: DeleteAfterSubmit bo di de Outlook tu luu ban copy vao Sent Items, kem
+'     UserProperties CMSlug / CMEID de sau nay loc lai dung campaign.
 '   - Them macro moi RecallCampaign(): nhap slug campaign can recall, chon kieu
 '     (giong 2 lua chon cua Outlook: "Delete unread copies" hoac "Delete unread
 '     copies and replace with a new message"), roi tu dong loop toan bo mail cua
-'     campaign do trong folder "CM Campaigns Sent" va thuc hien recall cho tung cai
-'     - khong phai mo tay tung mail nua.
+'     campaign do trong Sent Items va thuc hien recall cho tung cai - khong phai
+'     mo tay tung mail nua.
 '   - LUU Y: Outlook khong co API "recall am tham" khong dialog trong Object Model
 '     chuan. RecallCampaign dung Actions("Recall-This-Message(C)").Execute + SendKeys
 '     de tu dong bam dialog xac nhan cho tung mail. Cach nay hoat dong tot nhung van
@@ -62,10 +69,9 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.13"
+Private Const VER       As String = "4.14"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
-Private Const SENT_FOLDER_NAME As String = "CM Campaigns Sent"
 
 Private m_Bag(0 To 399) As Object
 Private m_BagN           As Long
@@ -221,9 +227,6 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
     Dim failDiag As String: failDiag = ""
     Const BATCH As Long = 50
 
-    Dim sentFolder As folder
-    Set sentFolder = GetOrCreateFolder(SENT_FOLDER_NAME)
-
     Dim i As Long
     For i = 0 To nLst - 1
         ' Parse combined entry: smtp~role~dept~loc
@@ -285,7 +288,6 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         m.UserProperties.Add "CMEID", olText
         m.UserProperties("CMEID").Value = eid
 
-        If Not sentFolder Is Nothing Then m.SaveSentMessageFolder = sentFolder
         m.DeleteAfterSubmit = False
         m.send
         Set m = Nothing
@@ -586,21 +588,6 @@ End Function
 
 
 ' ================================================================
-' GET OR CREATE FOLDER (duoi Inbox cua mailbox mac dinh)
-' ================================================================
-Private Function GetOrCreateFolder(folderName As String) As folder
-    On Error Resume Next
-    Dim parent As folder
-    Set parent = Application.Session.GetDefaultFolder(olFolderInbox)
-    Dim f As folder
-    Set f = parent.folders(folderName)
-    If f Is Nothing Then Set f = parent.folders.Add(folderName)
-    Set GetOrCreateFolder = f
-    On Error GoTo 0
-End Function
-
-
-' ================================================================
 ' PUBLIC: RecallCampaign
 ' Tu dong recall toan bo mail cua 1 campaign (theo slug) da gui qua
 ' Full mode, thay vi phai mo tay tung mail trong 3000 mail.
@@ -627,9 +614,9 @@ Public Sub RecallCampaign()
     Dim doReplace As Boolean: doReplace = (modeAns = vbNo)
 
     Dim sentFolder As folder
-    Set sentFolder = GetOrCreateFolder(SENT_FOLDER_NAME)
+    Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
     If sentFolder Is Nothing Then
-        MsgBox "Khong tim thay folder '" & SENT_FOLDER_NAME & "'.", vbExclamation, "SHB Tracker - Recall"
+        MsgBox "Khong tim thay folder Sent Items.", vbExclamation, "SHB Tracker - Recall"
         Exit Sub
     End If
 
@@ -659,8 +646,7 @@ Public Sub RecallCampaign()
     Next i
 
     If matched = 0 Then
-        MsgBox "Khong tim thay mail nao cua campaign '" & slug & "' trong folder '" & _
-               SENT_FOLDER_NAME & "'." & vbCrLf & _
+        MsgBox "Khong tim thay mail nao cua campaign '" & slug & "' trong Sent Items." & vbCrLf & _
                "(Chi cac campaign gui SAU khi cap nhat macro v" & VER & " moi duoc luu lai de recall.)", _
                vbExclamation, "SHB Tracker - Recall"
         Exit Sub
