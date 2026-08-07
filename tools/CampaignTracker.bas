@@ -1,11 +1,19 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.20
+' SHB CM Campaign Tracker v4.21
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.20
+'   - Fix dialog "Message Recall" van hien len doi bam OK tay cho tung mail thay
+'     vi tu dong: ExecuteMso("RecallThisMessage") mo dialog o dang MODAL nen
+'     BLOCK luon VBA - dong SendKeys viet SAU ExecuteMso (nhu v4.20) khong bao
+'     gio chay toi vi ExecuteMso chua tra ve. Doi thu tu: SendKeys (Wait:=False,
+'     dua phim vao hang doi input cua Windows) truoc, roi moi goi ExecuteMso -
+'     dialog vua mo len se tu nhan dung phim da xep hang, khong can bam tay.
 '
 ' CHANGES vs v4.19
 '   - Fix "Khong tim thay action 'Recall'": "Recall This Message" la lenh Ribbon
@@ -110,7 +118,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.20"
+Private Const VER       As String = "4.21"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -779,6 +787,18 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         GoTo FailNoErrObj
     End If
 
+    ' QUAN TRONG: ExecuteMso mo dialog "Message Recall" o dang MODAL, nghia la
+    ' dong lenh nay se BI CHAN (khong return) cho toi khi dialog duoc dong. Vi
+    ' vay phai SendKeys TRUOC (dua phim vao hang doi input cua Windows) roi moi
+    ' goi ExecuteMso - luc do dialog vua mo len se tu "an" phai nhung phim da
+    ' xep hang san. Neu SendKeys o SAU ExecuteMso (nhu ban dau) se bi treo vi
+    ' ExecuteMso khong bao gio return de chay toi dong SendKeys do.
+    If doReplace Then
+        SendKeys "{TAB}{DOWN}~", False
+    Else
+        SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
+    End If
+
     On Error Resume Next
     readInsp.CommandBars.ExecuteMso "RecallThisMessage"
     Dim ExecErr As Long: ExecErr = Err.Number
@@ -792,15 +812,6 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
                  " (mail co the khong phai gui qua Exchange, hoac nguoi gui khong con quyen recall)."
         GoTo FailNoErrObj
     End If
-
-    ' Cho dialog "Message Recall" xuat hien roi tu dong xac nhan
-    Dim tEnd As Date: tEnd = Now + TimeSerial(0, 0, 1)
-    Do While Now < tEnd: DoEvents: Loop
-
-    If doReplace Then
-        SendKeys "{TAB}{DOWN}", True
-    End If
-    SendKeys "~", True   ' Enter = OK
 
     Dim tEnd2 As Date: tEnd2 = Now + TimeSerial(0, 0, 1)
     Do While Now < tEnd2: DoEvents: Loop
