@@ -7,6 +7,46 @@ Option Explicit
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
 '
+' ================================================================
+' TODO / HANDOFF - RecallCampaign() con VAN DE CHUA XONG (tinh den v4.22):
+'   Test thuc te: MsgBox bao "Tim thay: 1, Da recall: 1, Loi: 0" (tuc RecallOneItem
+'   tra ve True, khong loi) nhung THUC TE khong co gi xay ra - khong dialog Recall
+'   nao xuat hien, khong co "Message Recall Success/Failure" notification, mail
+'   goc khong bi xoa/thay the, cung khong co mail thay the nao duoc gui.
+'
+'   Nguyen nhan nghi ngo: ky thuat "SendKeys (Wait:=False) truoc, ExecuteMso sau"
+'   (v4.21) chi la GIAI PHAP DOAN THOI DIEM (race condition) - phim duoc dua vao
+'   hang doi input truoc khi dialog "Message Recall" thuc su duoc tao, nhung
+'   Windows KHONG dam bao dialog se nhan dung phim do (co the bi Outlook "nuot"
+'   truoc, hoac dialog chua kip tao/focus khi phim den). Ket qua: co luc hoat
+'   dong (nhu lan test replace voi 2 mail thay the thanh cong truoc do), co luc
+'   ExecuteMso chay xong ma KHONG THUC SU mo duoc dialog/trigger duoc gi ca (vi
+'   du neu Recall command dang bi disable tren ribbon luc do, ExecuteMso co the
+'   silent no-op ma khong bao loi) - va vi khong co dialog nen khong co gi de
+'   SendKeys "an" duoc, dan den ket qua "thanh cong gia" (RecallOneItem tra ve
+'   True nhung thuc chat khong lam gi).
+'
+'   HUONG XU LY DA THONG NHAT VOI NGUOI DUNG (2026-08-07): tam thoi DUNG o day,
+'   se quay lai sau. Phuong an duoc de xuat va nguoi dung dang can nhac:
+'     -> Thay the toan bo co che SendKeys+ExecuteMso bang thu vien REDEMPTION
+'        (redemption.dll, mien phi, https://www.dimastr.com/redemption/) -
+'        RDOMail.Recall() thao tac thang o tang MAPI, KHONG can dialog/UI,
+'        KHONG con race-condition, on dinh tuyet doi cho khoi luong 3000 mail.
+'        Chi can cai + regsvr32 tren DUY NHAT may dung de CHAY macro (admin),
+'        khong can gi o may 3000 nguoi nhan. Se can viet lai ham RecallOneItem
+'        de dung CreateObject("Redemption.SafeMailItem") thay vi itm.Display +
+'        ExecuteMso + SendKeys.
+'     -> Neu may chay macro bi khoa khong cai duoc phan mem/DLL (moi truong SHB
+'        co the co chinh sach khoa), can kiem tra quyen admin/whitelist truoc.
+'
+'   TRUOC KHI SUA TIEP: nen doc lai toan bo doan RecallOneItem (tim comment
+'   "RECALL ONE ITEM") va PHAN AN CHUA CHAY - phan doReplace mo cua so thay the
+'   qua Application.ActiveInspector sau ExecuteMso cung dang dua tren gia dinh
+'   tuong tu (thoi diem dung), nen ke ca khi chuyen sang Redemption van can xem
+'   lai toan bo logic gui mail thay the (co the Redemption cung ho tro dat noi
+'   dung thay the truc tiep khong can mo Inspector nua).
+' ================================================================
+'
 ' CHANGES vs v4.21
 '   - Fix kieu "replace" thuc te van chi Delete (khong replace): phim {TAB} day
 '     focus RA KHOI nhom radio button truoc khi bam {DOWN}, nen Down khong doi
