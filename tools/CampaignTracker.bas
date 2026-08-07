@@ -1,11 +1,18 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.16
+' SHB CM Campaign Tracker v4.17
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.16
+'   - Fix "Khong tim thay cua so mail dang mo" trong RecallCampaign kieu replace:
+'     MsgBox huong dan la modal nen nguoi dung khong the mo cua so mail moi giua
+'     luc macro dang chay. Gio yeu cau mo + soan san mail thay the TRUOC khi chay
+'     macro (Ctrl+N, giu mo), macro bat ActiveInspector ngay dau Sub (truoc moi
+'     InputBox/MsgBox khac) roi moi hoi slug/kieu recall.
 '
 ' CHANGES vs v4.15
 '   - RecallCampaign() kieu "replace": bo InputBox plain-text, gio lay noi dung
@@ -83,7 +90,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.16"
+Private Const VER       As String = "4.17"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -613,6 +620,16 @@ End Function
 ' ================================================================
 Public Sub RecallCampaign()
 
+    ' Neu muon dung kieu "replace": TRUOC KHI chay macro nay, hay mo san 1 cua so
+    ' mail moi (Ctrl+N), soan day du noi dung thay the (dinh dang/chen anh binh
+    ' thuong), va GIU cua so do dang mo (khong can dong) - roi moi chay macro.
+    ' MsgBox cua VBA la modal nen khong the mo cua so mail giua luc macro dang chay.
+
+    Dim preOpenDraft As Object
+    On Error Resume Next
+    Set preOpenDraft = Application.ActiveInspector.CurrentItem
+    On Error GoTo 0
+
     Dim slug As String
     slug = InputBox("Nhap slug campaign can Recall (xem trong MsgBox xac nhan luc gui, vd: dao-tao-q3-2026):", _
                     "SHB Tracker - Recall")
@@ -623,30 +640,22 @@ Public Sub RecallCampaign()
     modeAns = MsgBox("Chon kieu Recall cho campaign '" & slug & "':" & vbCrLf & vbCrLf & _
                      "YES = Delete unread copies of this message" & vbCrLf & _
                      "NO  = Delete unread copies AND replace with a new message" & vbCrLf & _
+                     "  (can mail thay the da soan san va DANG MO truoc khi chay macro)" & vbCrLf & _
                      "CANCEL = Huy", vbYesNoCancel + vbQuestion, "SHB Tracker - Recall")
     If modeAns = vbCancel Then Exit Sub
     Dim doReplace As Boolean: doReplace = (modeAns = vbNo)
 
     Dim replSubject As String, replHTML As String
     If doReplace Then
-        ' Lay noi dung thay the tu 1 cua so mail dang mo (soan day du dinh dang/anh
-        ' nhu binh thuong), tuong tu cach SendCampaign lay draft dang soan.
-        If MsgBox("Mo 1 cua so mail moi, soan noi dung thay the (co the dinh dang/chen anh " & _
-                  "day du), roi bam OK o day de tiep tuc." & vbCrLf & vbCrLf & _
-                  "(Cua so do PHAI dang la cua so dang active tren man hinh luc ban " & _
-                  "bam OK.)", vbOKCancel + vbInformation, "SHB Tracker - Recall") = vbCancel Then Exit Sub
-
-        Dim replInspSrc As Object
-        Set replInspSrc = Application.ActiveInspector
-        If replInspSrc Is Nothing Then
-            MsgBox "Khong tim thay cua so mail dang mo.", vbExclamation, "SHB Tracker - Recall"
-            Exit Sub
-        End If
-
+        ' Lay noi dung thay the tu cua so mail da mo san TRUOC khi chay macro
+        ' (bat duoc luc dau Sub, truoc khi cac InputBox/MsgBox lam mat active window).
         Dim replDraft As Object
-        Set replDraft = replInspSrc.CurrentItem
+        Set replDraft = preOpenDraft
         If replDraft Is Nothing Or replDraft.Class <> olMail Then
-            MsgBox "Cua so dang mo khong phai mail.", vbExclamation, "SHB Tracker - Recall"
+            MsgBox "Chua tim thay mail thay the dang mo." & vbCrLf & vbCrLf & _
+                   "Hay mo 1 cua so mail moi (Ctrl+N), soan day du noi dung thay the, " & _
+                   "GIU cua so do dang mo, roi CHAY LAI macro RecallCampaign() tu dau.", _
+                   vbExclamation, "SHB Tracker - Recall"
             Exit Sub
         End If
 
