@@ -1,11 +1,133 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.12
+' SHB CM Campaign Tracker v4.22
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' ================================================================
+' TODO / HANDOFF - RecallCampaign() con VAN DE CHUA XONG (tinh den v4.22):
+'   Test thuc te: MsgBox bao "Tim thay: 1, Da recall: 1, Loi: 0" (tuc RecallOneItem
+'   tra ve True, khong loi) nhung THUC TE khong co gi xay ra - khong dialog Recall
+'   nao xuat hien, khong co "Message Recall Success/Failure" notification, mail
+'   goc khong bi xoa/thay the, cung khong co mail thay the nao duoc gui.
+'
+'   Nguyen nhan nghi ngo: ky thuat "SendKeys (Wait:=False) truoc, ExecuteMso sau"
+'   (v4.21) chi la GIAI PHAP DOAN THOI DIEM (race condition) - phim duoc dua vao
+'   hang doi input truoc khi dialog "Message Recall" thuc su duoc tao, nhung
+'   Windows KHONG dam bao dialog se nhan dung phim do (co the bi Outlook "nuot"
+'   truoc, hoac dialog chua kip tao/focus khi phim den). Ket qua: co luc hoat
+'   dong (nhu lan test replace voi 2 mail thay the thanh cong truoc do), co luc
+'   ExecuteMso chay xong ma KHONG THUC SU mo duoc dialog/trigger duoc gi ca (vi
+'   du neu Recall command dang bi disable tren ribbon luc do, ExecuteMso co the
+'   silent no-op ma khong bao loi) - va vi khong co dialog nen khong co gi de
+'   SendKeys "an" duoc, dan den ket qua "thanh cong gia" (RecallOneItem tra ve
+'   True nhung thuc chat khong lam gi).
+'
+'   HUONG XU LY DA THONG NHAT VOI NGUOI DUNG (2026-08-07): tam thoi DUNG o day,
+'   se quay lai sau. Phuong an duoc de xuat va nguoi dung dang can nhac:
+'     -> Thay the toan bo co che SendKeys+ExecuteMso bang thu vien REDEMPTION
+'        (redemption.dll, mien phi, https://www.dimastr.com/redemption/) -
+'        RDOMail.Recall() thao tac thang o tang MAPI, KHONG can dialog/UI,
+'        KHONG con race-condition, on dinh tuyet doi cho khoi luong 3000 mail.
+'        Chi can cai + regsvr32 tren DUY NHAT may dung de CHAY macro (admin),
+'        khong can gi o may 3000 nguoi nhan. Se can viet lai ham RecallOneItem
+'        de dung CreateObject("Redemption.SafeMailItem") thay vi itm.Display +
+'        ExecuteMso + SendKeys.
+'     -> Neu may chay macro bi khoa khong cai duoc phan mem/DLL (moi truong SHB
+'        co the co chinh sach khoa), can kiem tra quyen admin/whitelist truoc.
+'
+'   TRUOC KHI SUA TIEP: nen doc lai toan bo doan RecallOneItem (tim comment
+'   "RECALL ONE ITEM") va PHAN AN CHUA CHAY - phan doReplace mo cua so thay the
+'   qua Application.ActiveInspector sau ExecuteMso cung dang dua tren gia dinh
+'   tuong tu (thoi diem dung), nen ke ca khi chuyen sang Redemption van can xem
+'   lai toan bo logic gui mail thay the (co the Redemption cung ho tro dat noi
+'   dung thay the truc tiep khong can mo Inspector nua).
+' ================================================================
+'
+' CHANGES vs v4.21
+'   - Fix kieu "replace" thuc te van chi Delete (khong replace): phim {TAB} day
+'     focus RA KHOI nhom radio button truoc khi bam {DOWN}, nen Down khong doi
+'     duoc lua chon radio (van la "Delete unread copies" mac dinh) - Enter chi
+'     xac nhan dung option cu. Bo {TAB}, chi con {DOWN}~ vi focus da nam san
+'     tren nhom radio ngay khi dialog mo (khong can Tab toi).
+'
+' CHANGES vs v4.20
+'   - Fix dialog "Message Recall" van hien len doi bam OK tay cho tung mail thay
+'     vi tu dong: ExecuteMso("RecallThisMessage") mo dialog o dang MODAL nen
+'     BLOCK luon VBA - dong SendKeys viet SAU ExecuteMso (nhu v4.20) khong bao
+'     gio chay toi vi ExecuteMso chua tra ve. Doi thu tu: SendKeys (Wait:=False,
+'     dua phim vao hang doi input cua Windows) truoc, roi moi goi ExecuteMso -
+'     dialog vua mo len se tu nhan dung phim da xep hang, khong can bam tay.
+'
+' CHANGES vs v4.19
+'   - Fix "Khong tim thay action 'Recall'": "Recall This Message" la lenh Ribbon
+'     (Fluent UI idMso "RecallThisMessage"), KHONG nam trong MailItem.Actions
+'     (chi co Reply/ReplyAll/Forward...) nen lan tim truoc luon that bai. Doi
+'     sang itm.Display() de mo cua so mail can recall, roi goi lenh qua
+'     Inspector.CommandBars.ExecuteMso("RecallThisMessage"). Dong cua so lai
+'     sau khi xu ly xong (olDiscard) de khong lam tran man hinh voi 3000 cua so.
+'
+' CHANGES vs v4.18
+'   - RecallCampaign bao "Loi: 1" nhung khong noi ro tai sao. Them errMsg ByRef
+'     vao RecallOneItem() de bat Err.Number/Description that su, hien trong
+'     MsgBox "Chi tiet loi" cuoi cung - giong cach DoFullMode da lam voi loi gui.
+'
+' CHANGES vs v4.17
+'   - Fix RecallCampaign khong tim thay mail: SendCampaign luu CMSlug qua
+'     MakeSlug() (ascii-lowercase-gach-ngang), nhung RecallCampaign truoc do so
+'     khop y nguyen chuoi nguoi dung go (co dau/hoa/khoang trang) nen khong bao
+'     gio trung. Gio RecallCampaign tu chay slug nguoi dung nhap qua MakeSlug()
+'     truoc khi so khop - go ten chien dich nguyen ban hay slug deu duoc.
+'
+' CHANGES vs v4.16
+'   - Fix "Khong tim thay cua so mail dang mo" trong RecallCampaign kieu replace:
+'     MsgBox huong dan la modal nen nguoi dung khong the mo cua so mail moi giua
+'     luc macro dang chay. Gio yeu cau mo + soan san mail thay the TRUOC khi chay
+'     macro (Ctrl+N, giu mo), macro bat ActiveInspector ngay dau Sub (truoc moi
+'     InputBox/MsgBox khac) roi moi hoi slug/kieu recall.
+'
+' CHANGES vs v4.15
+'   - RecallCampaign() kieu "replace": bo InputBox plain-text, gio lay noi dung
+'     thay the tu 1 cua so mail dang mo (soan day du dinh dang/chen anh nhu binh
+'     thuong qua ribbon Outlook, giong het cach SendCampaign lay draft dang soan)
+'     - macro doc Subject + HTMLBody tu cua so do va ap dung cho ca 3000 mail
+'     thay the tu dong, khong can bam tay tung cai.
+'
+' CHANGES vs v4.14
+'   - RecallCampaign() kieu "replace": truoc chi bam OK dialog voi noi dung
+'     mac dinh cua Outlook. Gio hoi Subject + Body thay the 1 LAN cho ca
+'     campaign truoc khi chay batch, roi voi tung mail se tu lay cua so soan
+'     thu thay the ma Outlook mo ra (qua ActiveInspector), ghi de dung
+'     Subject/Body do va tu Send - khong can bam tay tung cai trong 3000 mail.
+'
+' CHANGES vs v4.13
+'   - Fix "You don't have appropriate permission to perform this operation"
+'     (#-2147024891) khi gui Full mode: SaveSentMessageFolder vao folder con tu
+'     tao duoi Inbox bi Exchange chan (policy noi bo). Bo han buoc tao folder
+'     rieng - gio moi mail sau khi gui duoc luu vao Sent Items MAC DINH (chi bo
+'     DeleteAfterSubmit, khong doi noi luu), van giu UserProperties CMSlug/CMEID
+'     de RecallCampaign() loc lai dung campaign trong Sent Items.
+'
+' CHANGES vs v4.12
+'   - Van de: Full mode gui 3000 mail rieng (1 mail/nguoi) voi DeleteAfterSubmit=True
+'     -> khong luu ban copy nao ca -> KHONG THE Recall vi khong co gi de mo ra bam
+'     Recall. Neu muon Recall phai lam thu cong tung mail rat mat cong voi so luong lon.
+'   - Fix: DeleteAfterSubmit bo di de Outlook tu luu ban copy vao Sent Items, kem
+'     UserProperties CMSlug / CMEID de sau nay loc lai dung campaign.
+'   - Them macro moi RecallCampaign(): nhap slug campaign can recall, chon kieu
+'     (giong 2 lua chon cua Outlook: "Delete unread copies" hoac "Delete unread
+'     copies and replace with a new message"), roi tu dong loop toan bo mail cua
+'     campaign do trong Sent Items va thuc hien recall cho tung cai - khong phai
+'     mo tay tung mail nua.
+'   - LUU Y: Outlook khong co API "recall am tham" khong dialog trong Object Model
+'     chuan. RecallCampaign dung Actions("Recall-This-Message(C)").Execute + SendKeys
+'     de tu dong bam dialog xac nhan cho tung mail. Cach nay hoat dong tot nhung van
+'     phu thuoc UI dialog cua Outlook (locale/version) - da test tren Outlook Desktop
+'     VN. Recall chi thanh cong voi nguoi nhan noi bo Exchange, dung Outlook Desktop,
+'     va CHUA doc mail - day la gioi han cua Exchange, khong phai cua macro nay.
 '
 ' CHANGES vs v4.11
 '   - Doi TRACK_URL sang Ingress public rieng (anh Nam tao 15/07):
@@ -43,7 +165,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.12"
+Private Const VER       As String = "4.22"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -198,6 +320,7 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
 
     Dim sentOK As Long:   sentOK = 0
     Dim sentFail As Long: sentFail = 0
+    Dim failDiag As String: failDiag = ""
     Const BATCH As Long = 50
 
     Dim i As Long
@@ -254,7 +377,14 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
 
         m.Recipients.Add rcpt
         m.HTMLBody = thisHTML
-        m.DeleteAfterSubmit = True
+
+        ' Tag campaign info truc tiep vao mail de RecallCampaign() loc lai duoc sau nay
+        m.UserProperties.Add "CMSlug", olText
+        m.UserProperties("CMSlug").Value = slug
+        m.UserProperties.Add "CMEID", olText
+        m.UserProperties("CMEID").Value = eid
+
+        m.DeleteAfterSubmit = False
         m.send
         Set m = Nothing
         sentOK = sentOK + 1
@@ -283,6 +413,9 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
 
 FailItem:
         sentFail = sentFail + 1
+        If Len(failDiag) < 1000 Then
+            failDiag = failDiag & vbCrLf & "  - " & rcpt & ": #" & Err.Number & " " & Err.Description
+        End If
         On Error Resume Next
         If Not m Is Nothing Then m.Delete
         Set m = Nothing
@@ -296,8 +429,10 @@ NextPerson:
     Dim flushEnd As Date: flushEnd = Now + TimeSerial(0, 0, 3)
     Do While Now < flushEnd: DoEvents: Loop
 
-    MsgBox "Hoan thanh!" & vbCrLf & "Thanh cong: " & sentOK & vbCrLf & "Loi: " & sentFail, _
-           vbInformation, "SHB Tracker v" & VER
+    Dim doneMsg As String
+    doneMsg = "Hoan thanh!" & vbCrLf & "Thanh cong: " & sentOK & vbCrLf & "Loi: " & sentFail
+    If sentFail > 0 Then doneMsg = doneMsg & vbCrLf & vbCrLf & "Chi tiet loi:" & failDiag
+    MsgBox doneMsg, vbInformation, "SHB Tracker v" & VER
 End Sub
 
 
@@ -545,6 +680,223 @@ Private Function MakeSlug(s As String) As String
     Do While Len(res) > 0 And Right(res, 1) = "-": res = Left(res, Len(res) - 1): Loop
     If Len(res) = 0 Then res = "campaign"
     MakeSlug = res
+End Function
+
+
+' ================================================================
+' PUBLIC: RecallCampaign
+' Tu dong recall toan bo mail cua 1 campaign (theo slug) da gui qua
+' Full mode, thay vi phai mo tay tung mail trong 3000 mail.
+'
+' Gioi han (do Exchange, khong phai do macro):
+'   - Chi recall duoc mail gui noi bo cung to chuc Exchange.
+'   - Nguoi nhan phai dang dung Outlook Desktop (khong phai Web/Mobile).
+'   - Mail phai CHUA duoc mo doc.
+' ================================================================
+Public Sub RecallCampaign()
+
+    ' Neu muon dung kieu "replace": TRUOC KHI chay macro nay, hay mo san 1 cua so
+    ' mail moi (Ctrl+N), soan day du noi dung thay the (dinh dang/chen anh binh
+    ' thuong), va GIU cua so do dang mo (khong can dong) - roi moi chay macro.
+    ' MsgBox cua VBA la modal nen khong the mo cua so mail giua luc macro dang chay.
+
+    Dim preOpenDraft As Object
+    On Error Resume Next
+    Set preOpenDraft = Application.ActiveInspector.CurrentItem
+    On Error GoTo 0
+
+    Dim slugRaw As String
+    slugRaw = InputBox("Nhap ten/slug campaign can Recall (xem trong MsgBox xac nhan luc gui - " & _
+                       "co the nhap y nguyen ten chien dich hoac slug, vd: dao-tao-q3-2026):", _
+                       "SHB Tracker - Recall")
+    If Len(Trim(slugRaw)) = 0 Then Exit Sub
+    Dim slug As String: slug = MakeSlug(Trim(slugRaw))
+
+    Dim modeAns As Integer
+    modeAns = MsgBox("Chon kieu Recall cho campaign '" & slug & "':" & vbCrLf & vbCrLf & _
+                     "YES = Delete unread copies of this message" & vbCrLf & _
+                     "NO  = Delete unread copies AND replace with a new message" & vbCrLf & _
+                     "  (can mail thay the da soan san va DANG MO truoc khi chay macro)" & vbCrLf & _
+                     "CANCEL = Huy", vbYesNoCancel + vbQuestion, "SHB Tracker - Recall")
+    If modeAns = vbCancel Then Exit Sub
+    Dim doReplace As Boolean: doReplace = (modeAns = vbNo)
+
+    Dim replSubject As String, replHTML As String
+    If doReplace Then
+        ' Lay noi dung thay the tu cua so mail da mo san TRUOC khi chay macro
+        ' (bat duoc luc dau Sub, truoc khi cac InputBox/MsgBox lam mat active window).
+        Dim replDraft As Object
+        Set replDraft = preOpenDraft
+        If replDraft Is Nothing Or replDraft.Class <> olMail Then
+            MsgBox "Chua tim thay mail thay the dang mo." & vbCrLf & vbCrLf & _
+                   "Hay mo 1 cua so mail moi (Ctrl+N), soan day du noi dung thay the, " & _
+                   "GIU cua so do dang mo, roi CHAY LAI macro RecallCampaign() tu dau.", _
+                   vbExclamation, "SHB Tracker - Recall"
+            Exit Sub
+        End If
+
+        replSubject = replDraft.Subject
+        replHTML = replDraft.HTMLBody
+        If Len(Trim(replSubject)) = 0 Then
+            MsgBox "Mail thay the chua co Subject.", vbExclamation, "SHB Tracker - Recall"
+            Exit Sub
+        End If
+    End If
+
+    Dim sentFolder As folder
+    Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
+    If sentFolder Is Nothing Then
+        MsgBox "Khong tim thay folder Sent Items.", vbExclamation, "SHB Tracker - Recall"
+        Exit Sub
+    End If
+
+    Dim matched As Long: matched = 0
+    Dim recalled As Long: recalled = 0
+    Dim failed As Long: failed = 0
+    Dim failDiag As String: failDiag = ""
+
+    Dim itm As Object
+    Dim i As Long
+    For i = sentFolder.Items.Count To 1 Step -1
+        Set itm = sentFolder.Items(i)
+        If TypeName(itm) = "MailItem" Then
+            Dim itmSlug As String: itmSlug = ""
+            On Error Resume Next
+            itmSlug = itm.UserProperties("CMSlug").Value
+            On Error GoTo 0
+            If itmSlug = slug Then
+                matched = matched + 1
+                Dim itmErr As String: itmErr = ""
+                If RecallOneItem(itm, doReplace, replSubject, replHTML, itmErr) Then
+                    recalled = recalled + 1
+                Else
+                    failed = failed + 1
+                    If Len(failDiag) < 1000 Then
+                        failDiag = failDiag & vbCrLf & "  - " & itm.Subject & ": " & itmErr
+                    End If
+                End If
+                DoEvents
+            End If
+        End If
+    Next i
+
+    If matched = 0 Then
+        MsgBox "Khong tim thay mail nao cua campaign '" & slug & "' trong Sent Items." & vbCrLf & _
+               "(Chi cac campaign gui SAU khi cap nhat macro v" & VER & " moi duoc luu lai de recall.)", _
+               vbExclamation, "SHB Tracker - Recall"
+        Exit Sub
+    End If
+
+    Dim doneMsg As String
+    doneMsg = "Hoan thanh Recall cho campaign '" & slug & "'!" & vbCrLf & _
+              "Tim thay  : " & matched & vbCrLf & _
+              "Da recall : " & recalled & vbCrLf & _
+              "Loi       : " & failed & vbCrLf & vbCrLf & _
+              "Luu y: Recall chi thanh cong voi nguoi nhan noi bo, dung Outlook Desktop, " & _
+              "va chua doc mail - day la gioi han cua Exchange."
+    If failed > 0 Then doneMsg = doneMsg & vbCrLf & vbCrLf & "Chi tiet loi:" & failDiag
+    MsgBox doneMsg, vbInformation, "SHB Tracker - Recall"
+End Sub
+
+
+' ================================================================
+' RECALL ONE ITEM
+' "Recall This Message" la lenh Ribbon (Fluent UI), KHONG nam trong
+' MailItem.Actions (do chi co Reply/ReplyAll/Forward...). Phai mo
+' mail (Display) roi goi lenh Ribbon qua CommandBars.ExecuteMso, sau
+' do tu dong xac nhan dialog bang SendKeys (Outlook Object Model
+' khong co API recall khong-dialog). Mac dinh dialog chon san "Delete
+' unread copies"; neu doReplace=True se Tab xuong chon "...and
+' replace" roi Enter.
+'
+' Khi doReplace=True, sau khi xac nhan dialog Outlook se tu mo 1 cua
+' so soan thu MOI (ban copy cua mail goc, editable) - ham nay lay
+' cua so do qua ActiveInspector, ghi de Subject/HTMLBody bang noi
+' dung thay the (da soan san day du dinh dang tu 1 mail khac), roi
+' tu Send - khong can nguoi dung bam tay tung cai.
+' ================================================================
+Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
+                                Optional replSubject As String = "", _
+                                Optional replHTML As String = "", _
+                                Optional ByRef errMsg As String = "") As Boolean
+    On Error GoTo Fail
+
+    ' Mo mail can recall ra cua so rieng de co the goi lenh Ribbon "RecallThisMessage"
+    itm.Display
+
+    Dim tOpen As Date: tOpen = Now + TimeSerial(0, 0, 1)
+    Do While Now < tOpen: DoEvents: Loop
+
+    Dim readInsp As Object
+    Set readInsp = Application.ActiveInspector
+    If readInsp Is Nothing Then
+        errMsg = "Khong mo duoc cua so mail can recall."
+        GoTo FailNoErrObj
+    End If
+
+    ' QUAN TRONG: ExecuteMso mo dialog "Message Recall" o dang MODAL, nghia la
+    ' dong lenh nay se BI CHAN (khong return) cho toi khi dialog duoc dong. Vi
+    ' vay phai SendKeys TRUOC (dua phim vao hang doi input cua Windows) roi moi
+    ' goi ExecuteMso - luc do dialog vua mo len se tu "an" phai nhung phim da
+    ' xep hang san. Neu SendKeys o SAU ExecuteMso (nhu ban dau) se bi treo vi
+    ' ExecuteMso khong bao gio return de chay toi dong SendKeys do.
+    If doReplace Then
+        SendKeys "{DOWN}~", False
+    Else
+        SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
+    End If
+
+    On Error Resume Next
+    readInsp.CommandBars.ExecuteMso "RecallThisMessage"
+    Dim ExecErr As Long: ExecErr = Err.Number
+    Dim ExecDesc As String: ExecDesc = Err.Description
+    On Error GoTo Fail
+    If ExecErr <> 0 Then
+        On Error Resume Next
+        readInsp.Close olDiscard
+        On Error GoTo Fail
+        errMsg = "ExecuteMso 'RecallThisMessage' loi #" & ExecErr & " " & ExecDesc & _
+                 " (mail co the khong phai gui qua Exchange, hoac nguoi gui khong con quyen recall)."
+        GoTo FailNoErrObj
+    End If
+
+    Dim tEnd2 As Date: tEnd2 = Now + TimeSerial(0, 0, 1)
+    Do While Now < tEnd2: DoEvents: Loop
+
+    If doReplace Then
+        ' Outlook vua mo cua so soan mail thay the - lay va gui no
+        Dim tEnd3 As Date: tEnd3 = Now + TimeSerial(0, 0, 2)
+        Do While Now < tEnd3: DoEvents: Loop
+
+        Dim replInsp As Object
+        Set replInsp = Application.ActiveInspector
+        If Not replInsp Is Nothing Then
+            Dim replMail As Object
+            Set replMail = replInsp.CurrentItem
+            If Not replMail Is Nothing Then
+                If replMail.Class = olMail Then
+                    replMail.Subject = replSubject
+                    replMail.HTMLBody = replHTML
+                    replMail.send
+                End If
+            End If
+        End If
+    End If
+
+    On Error Resume Next
+    readInsp.Close olDiscard
+    On Error GoTo 0
+
+    RecallOneItem = True
+    Exit Function
+
+Fail:
+    errMsg = "#" & Err.Number & " " & Err.Description
+    On Error Resume Next
+    If Not readInsp Is Nothing Then readInsp.Close olDiscard
+    On Error GoTo 0
+FailNoErrObj:
+    RecallOneItem = False
 End Function
 
 
