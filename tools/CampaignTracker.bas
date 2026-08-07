@@ -1,11 +1,16 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.18
+' SHB CM Campaign Tracker v4.19
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.18
+'   - RecallCampaign bao "Loi: 1" nhung khong noi ro tai sao. Them errMsg ByRef
+'     vao RecallOneItem() de bat Err.Number/Description that su, hien trong
+'     MsgBox "Chi tiet loi" cuoi cung - giong cach DoFullMode da lam voi loi gui.
 '
 ' CHANGES vs v4.17
 '   - Fix RecallCampaign khong tim thay mail: SendCampaign luu CMSlug qua
@@ -97,7 +102,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.18"
+Private Const VER       As String = "4.19"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -685,6 +690,7 @@ Public Sub RecallCampaign()
     Dim matched As Long: matched = 0
     Dim recalled As Long: recalled = 0
     Dim failed As Long: failed = 0
+    Dim failDiag As String: failDiag = ""
 
     Dim itm As Object
     Dim i As Long
@@ -697,10 +703,14 @@ Public Sub RecallCampaign()
             On Error GoTo 0
             If itmSlug = slug Then
                 matched = matched + 1
-                If RecallOneItem(itm, doReplace, replSubject, replHTML) Then
+                Dim itmErr As String: itmErr = ""
+                If RecallOneItem(itm, doReplace, replSubject, replHTML, itmErr) Then
                     recalled = recalled + 1
                 Else
                     failed = failed + 1
+                    If Len(failDiag) < 1000 Then
+                        failDiag = failDiag & vbCrLf & "  - " & itm.Subject & ": " & itmErr
+                    End If
                 End If
                 DoEvents
             End If
@@ -714,13 +724,15 @@ Public Sub RecallCampaign()
         Exit Sub
     End If
 
-    MsgBox "Hoan thanh Recall cho campaign '" & slug & "'!" & vbCrLf & _
-           "Tim thay  : " & matched & vbCrLf & _
-           "Da recall : " & recalled & vbCrLf & _
-           "Loi       : " & failed & vbCrLf & vbCrLf & _
-           "Luu y: Recall chi thanh cong voi nguoi nhan noi bo, dung Outlook Desktop, " & _
-           "va chua doc mail - day la gioi han cua Exchange.", _
-           vbInformation, "SHB Tracker - Recall"
+    Dim doneMsg As String
+    doneMsg = "Hoan thanh Recall cho campaign '" & slug & "'!" & vbCrLf & _
+              "Tim thay  : " & matched & vbCrLf & _
+              "Da recall : " & recalled & vbCrLf & _
+              "Loi       : " & failed & vbCrLf & vbCrLf & _
+              "Luu y: Recall chi thanh cong voi nguoi nhan noi bo, dung Outlook Desktop, " & _
+              "va chua doc mail - day la gioi han cua Exchange."
+    If failed > 0 Then doneMsg = doneMsg & vbCrLf & vbCrLf & "Chi tiet loi:" & failDiag
+    MsgBox doneMsg, vbInformation, "SHB Tracker - Recall"
 End Sub
 
 
@@ -739,7 +751,8 @@ End Sub
 ' ================================================================
 Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
                                 Optional replSubject As String = "", _
-                                Optional replHTML As String = "") As Boolean
+                                Optional replHTML As String = "", _
+                                Optional ByRef errMsg As String = "") As Boolean
     On Error GoTo Fail
 
     Dim act As Object
@@ -752,7 +765,11 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
             Exit For
         End If
     Next a
-    If Not found Then GoTo Fail
+    If Not found Then
+        errMsg = "Khong tim thay action 'Recall' (mail co the khong phai gui qua Exchange, " & _
+                 "hoac nguoi gui khong con quyen recall)."
+        GoTo FailNoErrObj
+    End If
 
     act.Execute
 
@@ -792,6 +809,8 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     Exit Function
 
 Fail:
+    errMsg = "#" & Err.Number & " " & Err.Description
+FailNoErrObj:
     RecallOneItem = False
 End Function
 
