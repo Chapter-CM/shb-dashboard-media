@@ -1,11 +1,18 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.15
+' SHB CM Campaign Tracker v4.16
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.15
+'   - RecallCampaign() kieu "replace": bo InputBox plain-text, gio lay noi dung
+'     thay the tu 1 cua so mail dang mo (soan day du dinh dang/chen anh nhu binh
+'     thuong qua ribbon Outlook, giong het cach SendCampaign lay draft dang soan)
+'     - macro doc Subject + HTMLBody tu cua so do va ap dung cho ca 3000 mail
+'     thay the tu dong, khong can bam tay tung cai.
 '
 ' CHANGES vs v4.14
 '   - RecallCampaign() kieu "replace": truoc chi bam OK dialog voi noi dung
@@ -76,7 +83,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.15"
+Private Const VER       As String = "4.16"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -620,15 +627,35 @@ Public Sub RecallCampaign()
     If modeAns = vbCancel Then Exit Sub
     Dim doReplace As Boolean: doReplace = (modeAns = vbNo)
 
-    Dim replSubject As String, replBody As String
+    Dim replSubject As String, replHTML As String
     If doReplace Then
-        replSubject = InputBox("Tieu de mail thay the (ap dung cho ca campaign):", _
-                               "SHB Tracker - Recall", "[Thu hoi] ")
-        If Len(Trim(replSubject)) = 0 Then Exit Sub
-        replBody = InputBox("Noi dung mail thay the (text thuong, ap dung cho ca campaign):", _
-                            "SHB Tracker - Recall", _
-                            "Chung toi xin thu hoi email truoc do. Vui long bo qua email cu.")
-        If Len(Trim(replBody)) = 0 Then Exit Sub
+        ' Lay noi dung thay the tu 1 cua so mail dang mo (soan day du dinh dang/anh
+        ' nhu binh thuong), tuong tu cach SendCampaign lay draft dang soan.
+        If MsgBox("Mo 1 cua so mail moi, soan noi dung thay the (co the dinh dang/chen anh " & _
+                  "day du), roi bam OK o day de tiep tuc." & vbCrLf & vbCrLf & _
+                  "(Cua so do PHAI dang la cua so dang active tren man hinh luc ban " & _
+                  "bam OK.)", vbOKCancel + vbInformation, "SHB Tracker - Recall") = vbCancel Then Exit Sub
+
+        Dim replInspSrc As Object
+        Set replInspSrc = Application.ActiveInspector
+        If replInspSrc Is Nothing Then
+            MsgBox "Khong tim thay cua so mail dang mo.", vbExclamation, "SHB Tracker - Recall"
+            Exit Sub
+        End If
+
+        Dim replDraft As Object
+        Set replDraft = replInspSrc.CurrentItem
+        If replDraft Is Nothing Or replDraft.Class <> olMail Then
+            MsgBox "Cua so dang mo khong phai mail.", vbExclamation, "SHB Tracker - Recall"
+            Exit Sub
+        End If
+
+        replSubject = replDraft.Subject
+        replHTML = replDraft.HTMLBody
+        If Len(Trim(replSubject)) = 0 Then
+            MsgBox "Mail thay the chua co Subject.", vbExclamation, "SHB Tracker - Recall"
+            Exit Sub
+        End If
     End If
 
     Dim sentFolder As folder
@@ -653,7 +680,7 @@ Public Sub RecallCampaign()
             On Error GoTo 0
             If itmSlug = slug Then
                 matched = matched + 1
-                If RecallOneItem(itm, doReplace, replSubject, replBody) Then
+                If RecallOneItem(itm, doReplace, replSubject, replHTML) Then
                     recalled = recalled + 1
                 Else
                     failed = failed + 1
@@ -689,13 +716,13 @@ End Sub
 '
 ' Khi doReplace=True, sau khi xac nhan dialog Outlook se tu mo 1 cua
 ' so soan thu MOI (ban copy cua mail goc, editable) - ham nay lay
-' cua so do qua ActiveInspector, ghi de Subject/Body bang noi dung
-' thay the do nguoi dung nhap, roi tu Send - khong can nguoi dung
-' bam tay tung cai.
+' cua so do qua ActiveInspector, ghi de Subject/HTMLBody bang noi
+' dung thay the (da soan san day du dinh dang tu 1 mail khac), roi
+' tu Send - khong can nguoi dung bam tay tung cai.
 ' ================================================================
 Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
                                 Optional replSubject As String = "", _
-                                Optional replBody As String = "") As Boolean
+                                Optional replHTML As String = "") As Boolean
     On Error GoTo Fail
 
     Dim act As Object
@@ -737,7 +764,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
             If Not replMail Is Nothing Then
                 If replMail.Class = olMail Then
                     replMail.Subject = replSubject
-                    replMail.Body = replBody
+                    replMail.HTMLBody = replHTML
                     replMail.send
                 End If
             End If
