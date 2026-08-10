@@ -1,11 +1,34 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.22
+' SHB CM Campaign Tracker v4.23
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.22
+'   - Tim ra co che that su gay hien tuong "chi gui lai, khong recall": khi
+'     ExecuteMso("RecallThisMessage") silent no-op (khong thuc su mo duoc dialog
+'     Recall - vi du do readInsp chua kip lay focus), Application.ActiveInspector
+'     SAU DO VAN LA readInsp (cua so mail GOC). Code cu (v4.21/4.22) khong kiem
+'     tra dieu nay nen vo tinh ghi de Subject/HTMLBody + Send LEN CHINH mail goc
+'     - dung nhu hien tuong nguoi dung bao cao (mail goc bi gui lai y het, khong
+'     bi xoa/thay the that su).
+'   - Them 2 lop kiem tra truoc khi thao tac:
+'     1) readInsp.Activate + xac nhan ActiveInspector dung la readInsp truoc khi
+'        SendKeys - tranh SendKeys bay nham sang cua so khac.
+'     2) Sau ExecuteMso (kieu replace): xac nhan Application.Inspectors.Count
+'        THUC SU tang (co cua so moi mo ra) VA ActiveInspector khac readInsp,
+'        moi duoc phep ghi de/gui - neu khong thoa se bao Loi ro rang thay vi
+'        "thanh cong gia".
+'   - Van CHUA co cach xac minh chac chan cho kieu "delete only" (khong replace)
+'     vi khong co dau hieu UI ro rang (khong mo cua so moi) de doi chieu - van
+'     dua vao gia dinh SendKeys+ExecuteMso chay dung. Neu van con hien tuong
+'     "thanh cong gia" o kieu delete-only, huong xu ly triet de van la chuyen
+'     sang Redemption (RDOMail.Recall, khong dialog/UI) - xem TODO ben duoi,
+'     chua verify duoc cu phap chinh xac do khong truy cap duoc dimastr.com tu
+'     moi truong nay (bi chan boi egress proxy).
 '
 ' ================================================================
 ' TODO / HANDOFF - RecallCampaign() con VAN DE CHUA XONG (tinh den v4.22):
@@ -165,7 +188,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.22"
+Private Const VER       As String = "4.23"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -834,6 +857,24 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         GoTo FailNoErrObj
     End If
 
+    ' Dam bao dung cua so nay dang la cua so active/foreground - neu Display()
+    ' chua kip lay focus (vi du Outlook main window van dang giu focus), SendKeys
+    ' phia duoi se gui nham vao cua so khac va khong "trung" duoc dialog Recall,
+    ' dan den "thanh cong gia" (khong loi nhung khong lam gi ca).
+    On Error Resume Next
+    readInsp.Activate
+    On Error GoTo Fail
+    Dim tFocus As Date: tFocus = Now + TimeSerial(0, 0, 0) + (0.3 / 86400)
+    Do While Now < tFocus: DoEvents: Loop
+    If Not (Application.ActiveInspector Is readInsp) Then
+        errMsg = "Cua so mail khong lay duoc focus (Activate that bai) - " & _
+                 "co the do cua so khac dang che/foreground, bo qua de tranh ket qua sai."
+        On Error Resume Next
+        readInsp.Close olDiscard
+        On Error GoTo Fail
+        GoTo FailNoErrObj
+    End If
+
     ' QUAN TRONG: ExecuteMso mo dialog "Message Recall" o dang MODAL, nghia la
     ' dong lenh nay se BI CHAN (khong return) cho toi khi dialog duoc dong. Vi
     ' vay phai SendKeys TRUOC (dua phim vao hang doi input cua Windows) roi moi
@@ -845,6 +886,8 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     Else
         SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
     End If
+
+    Dim inspCountBefore As Long: inspCountBefore = Application.Inspectors.Count
 
     On Error Resume Next
     readInsp.CommandBars.ExecuteMso "RecallThisMessage"
@@ -868,8 +911,27 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         Dim tEnd3 As Date: tEnd3 = Now + TimeSerial(0, 0, 2)
         Do While Now < tEnd3: DoEvents: Loop
 
+        ' XAC MINH co cua so MOI thuc su mo ra (khong phai van la readInsp cua
+        ' mail goc) - neu ExecuteMso silent no-op (khong mo duoc dialog Recall),
+        ' ActiveInspector se van la readInsp, va neu khong kiem tra se vo tinh
+        ' ghi de + gui lai CHINH mail goc (dung y hien tuong "chi gui lai, khong
+        ' recall" da gap phai).
+        If Application.Inspectors.Count <= inspCountBefore Then
+            errMsg = "Khong thay cua so mail thay the moi mo ra (Inspectors.Count khong tang) " & _
+                     "- ExecuteMso co the da khong thuc su mo dialog Recall, huy de tranh gui nham."
+            On Error Resume Next
+            readInsp.Close olDiscard
+            On Error GoTo Fail
+            GoTo FailNoErrObj
+        End If
+
         Dim replInsp As Object
         Set replInsp = Application.ActiveInspector
+        If replInsp Is readInsp Then
+            errMsg = "Cua so active van la mail goc (khong phai cua so thay the moi) " & _
+                     "- huy de tranh ghi de/gui lai chinh mail goc."
+            GoTo FailNoErrObj
+        End If
         If Not replInsp Is Nothing Then
             Dim replMail As Object
             Set replMail = replInsp.CurrentItem
