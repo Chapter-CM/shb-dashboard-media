@@ -45,7 +45,18 @@
   // (404) thì vẫn còn đường lui: copy(SHBCL_export()) + shb-ingest-upload.console.js.
   var BRIDGE_URL = 'https://cm-dashboard.dev-saha.aws.shb.com.vn/ingest-bridge';
   var BRIDGE_ORIGIN = 'https://cm-dashboard.dev-saha.aws.shb.com.vn';
-  var SECRET = '500a13c1-4b4a-4da0-a4c7-c4200e51b66a';   // INGEST_SECRET noi bo SHB
+  // INGEST_SECRET: KHÔNG hardcode trong file — hỏi 1 lần rồi lưu trên máy này
+  // (localStorage của facebook.com), tránh lộ secret thật khi commit lên GitLab.
+  var SECRET = (function () {
+    var key = 'shb_ingest_secret';
+    var s = null;
+    try { s = localStorage.getItem(key); } catch (e) {}
+    if (!s) {
+      s = window.prompt('Nhập INGEST_SECRET nội bộ SHB (chỉ hỏi 1 lần, lưu trên máy này):') || '';
+      if (s) { try { localStorage.setItem(key, s); } catch (e) {} }
+    }
+    return s;
+  })();
   var GROUP_ID = '503009407721580';          // SHB Một Nhà
   var AUTO_SCROLL = true;                     // tự cuộn để lazy-load hết bài trong dải ngày đang chọn
   var DEBUG = true;
