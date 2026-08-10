@@ -7,6 +7,8 @@
 // @match        https://www.facebook.com/*
 // @match        https://business.facebook.com/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @grant        unsafeWindow
 // @connect      cm-dashboard.dev-saha.aws.shb.com.vn
 // @run-at       document-start
@@ -18,7 +20,17 @@
   // ── CẤU HÌNH (chỉ nằm trên máy admin, KHÔNG commit secret thật) ──────────
   // Đổi 14/07/2026: endpoint nội bộ SHB (trước là Vercel, xem lịch sử HANDOFF.md).
   var INGEST = 'https://cm-dashboard.dev-saha.aws.shb.com.vn/api/ingest';
-  var SECRET = '500a13c1-4b4a-4da0-a4c7-c4200e51b66a';   // INGEST_SECRET noi bo SHB
+  // INGEST_SECRET: KHÔNG hardcode trong file — hỏi 1 lần rồi lưu trong bộ nhớ riêng
+  // của Tampermonkey (GM_getValue/GM_setValue, không phụ thuộc origin facebook.com),
+  // tránh lộ secret thật khi commit lên GitLab.
+  var SECRET = (function () {
+    var s = GM_getValue('shb_ingest_secret', '');
+    if (!s) {
+      s = window.prompt('Nhập INGEST_SECRET nội bộ SHB (chỉ hỏi 1 lần, lưu trong Tampermonkey):') || '';
+      if (s) GM_setValue('shb_ingest_secret', s);
+    }
+    return s;
+  })();
   var GROUP_ID = '503009407721580';          // SHB Một Nhà
   var AUTO_SCROLL = true;                     // tự cuộn để lazy-load hết bài trong dải ngày đang chọn
   var DEBUG = true;

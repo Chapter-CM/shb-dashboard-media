@@ -16,8 +16,20 @@
   'use strict';
 
   var INGEST = 'https://cm-dashboard.dev-saha.aws.shb.com.vn/api/ingest';
-  var SECRET = '500a13c1-4b4a-4da0-a4c7-c4200e51b66a';   // INGEST_SECRET noi bo SHB
   var CHUNK = 25; // gửi bài viết theo lô 25 dòng/request cho nhẹ
+
+  // INGEST_SECRET: KHÔNG hardcode trong file — hỏi 1 lần rồi lưu trên máy này
+  // (localStorage của domain dashboard), tránh lộ secret thật khi commit lên GitLab.
+  var SECRET_KEY = 'shb_ingest_secret';
+  function getSecret() {
+    var s = null;
+    try { s = localStorage.getItem(SECRET_KEY); } catch (e) {}
+    if (!s) {
+      s = window.prompt('Nhập INGEST_SECRET nội bộ SHB (chỉ hỏi 1 lần, lưu trên máy này):') || '';
+      if (s) { try { localStorage.setItem(SECRET_KEY, s); } catch (e) {} }
+    }
+    return s;
+  }
 
   // ── UI nổi góc phải ────────────────────────────────────────────────────────
   var old = document.getElementById('shb-uploader'); if (old) old.remove();
@@ -41,7 +53,7 @@
   function post(body) {
     return fetch(INGEST, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': SECRET },
+      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': getSecret() },
       body: JSON.stringify(body)
     }).then(function (r) { return r.text().then(function (t) { return { status: r.status, text: t }; }); });
   }
