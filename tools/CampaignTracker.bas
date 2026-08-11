@@ -1,11 +1,21 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.30
+' SHB CM Campaign Tracker v4.31
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.30
+'   - Test tay xac nhan: tinh nang replace CUA OUTLOOK hoan toan binh thuong
+'     (click chuot thu cong -> cua so soan thu moi mo ra dung) - loi chi nam o
+'     automation, khong phai policy/moi truong. v4.30 them {ESC} truoc {DOWN}~
+'     van 100% that bai giong het v4.29 (khong doi Activate cung khong doi ket
+'     qua) -> nghi ngo chinh {ESC} la nguyen nhan: neu no den dung luc dialog
+'     Recall vua mo, ESC = Cancel/dong dialog ngay truoc khi DOWN/Enter kip lam
+'     gi. Bo {ESC}, quay ve dung {DOWN}~ (cau hinh da tung chay thanh cong that
+'     truoc day).
 '
 ' CHANGES vs v4.29
 '   - Kieu replace van that bai 100% (Inspectors.Count khong doi) du delete-only
@@ -262,7 +272,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.30"
+Private Const VER       As String = "4.31"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -976,9 +986,13 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         ' luon dong lenh - phai SendKeys TRUOC (dua phim vao hang doi input cua
         ' Windows) roi moi goi ExecuteMso, dialog vua mo len se tu "an" phim.
         If doReplace Then
-            ' {ESC} truoc de dong bat ky dropdown/menu nao lo bi mo ra tu buoc
-            ' Activate ban dau (an toan - khong lam gi neu khong co menu nao mo).
-            SendKeys "{ESC}{DOWN}~", False
+            ' BO {ESC}: nghi ngo chinh no la nguyen nhan that bai 100% o v4.30 -
+            ' neu ESC den dung luc dialog Recall vua mo, ESC = Cancel/dong dialog
+            ' ngay lap tuc truoc khi DOWN/Enter kip lam gi (test tay xac nhan
+            ' tinh nang replace cua Outlook hoan toan binh thuong, loi chi o
+            ' automation). Quay ve dung {DOWN}~ - cau hinh da tung chay thanh
+            ' cong that (2 lan gui duoc, co notification that).
+            SendKeys "{DOWN}~", False
         Else
             SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
         End If
