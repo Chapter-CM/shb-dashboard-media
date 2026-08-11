@@ -1,11 +1,21 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.25
+' SHB CM Campaign Tracker v4.26
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.25
+'   - v4.25 (CommandBars.FindControl ID=2511) TE HON: khong tim thay control nao
+'     ca. Nguoi dung xac nhan lai: o ban test v4.20, ExecuteMso("RecallThisMessage")
+'     DA TUNG mo dung dialog "Message Recall" that (thay tan mat tren man hinh) -
+'     tuc ExecuteMso dung co che, van de chi la doi luc "lo nhip" (silent no-op)
+'     chu khong phai sai hoan toan. Quay lai ExecuteMso (bo FindControl), giu cac
+'     fix da xac nhan dung (SendKeys truoc ExecuteMso, bo {TAB} thua). Them RETRY
+'     toi da 3 lan (moi lan lai Activate + SendKeys + ExecuteMso) truoc khi bao
+'     Loi, thay vi bo cuoc ngay lan dau bi "lo nhip".
 '
 ' CHANGES vs v4.24
 '   - Tang delay len 5s (v4.24) van khong het loi -> khong phai do timing. Kiem
@@ -212,7 +222,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.25"
+Private Const VER       As String = "4.26"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -899,63 +909,70 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         GoTo FailNoErrObj
     End If
 
-    ' "Recall This Message..." la 1 muc trong dropdown menu "Actions" (Move
-    ' group), thuoc he CommandBars kieu cu (numeric Control ID = 2511), KHONG
-    ' phai 1 lenh Fluent Ribbon doc lap - ExecuteMso("RecallThisMessage") co
-    ' the da goi SAI co che (idMso khong khop dung control nay). Dung
-    ' CommandBars.FindControl(ID:=2511) thay the - cach nay con cho phep kiem
-    ' tra THAT SU .Enabled thay vi doan mu thoi gian cho nhu truoc.
-    Dim ctrl As Object
-    Set ctrl = readInsp.CommandBars.FindControl(, 2511, , True)
-    If ctrl Is Nothing Then
-        errMsg = "Khong tim thay control 'Recall This Message' (ID=2511) tren CommandBars " & _
-                 "cua cua so mail nay."
+    ' XAC NHAN: ExecuteMso("RecallThisMessage") DA TUNG mo dung dialog "Message
+    ' Recall" that (kiem chung bang mat o ban test v4.20). CommandBars.FindControl
+    ' voi ID=2511 (thu o v4.25) khong tim thay control gi ca - te hon, bo lai.
+    ' Quay ve ExecuteMso, giu cac fix da xac nhan dung (SendKeys truoc, khong con
+    ' {TAB}), them RETRY toi da 3 lan cho truong hop thinh thoang bi "lo nhip"
+    ' (silent no-op mot lan nhung lan sau lai duoc) thay vi bo cuoc ngay lan dau.
+    Dim inspCountBefore As Long
+    Dim gotResult As Boolean: gotResult = False
+    Dim attempt As Long
+    For attempt = 1 To 3
+        On Error Resume Next
+        readInsp.Activate
+        On Error GoTo Fail
+        Dim tA As Date: tA = Now + TimeSerial(0, 0, 1)
+        Do While Now < tA: DoEvents: Loop
+
+        ' QUAN TRONG: ExecuteMso mo dialog "Message Recall" o dang MODAL, block
+        ' luon dong lenh - phai SendKeys TRUOC (dua phim vao hang doi input cua
+        ' Windows) roi moi goi ExecuteMso, dialog vua mo len se tu "an" phim.
+        If doReplace Then
+            SendKeys "{DOWN}~", False
+        Else
+            SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
+        End If
+
+        inspCountBefore = Application.Inspectors.Count
+
+        On Error Resume Next
+        readInsp.CommandBars.ExecuteMso "RecallThisMessage"
+        Dim ExecErr As Long: ExecErr = Err.Number
+        Dim ExecDesc As String: ExecDesc = Err.Description
+        On Error GoTo Fail
+
+        Dim tW As Date: tW = Now + TimeSerial(0, 0, 1)
+        Do While Now < tW: DoEvents: Loop
+
+        If ExecErr = 0 Then
+            If doReplace Then
+                ' Chi coi la thanh cong neu THUC SU co cua so moi mo ra
+                If Application.Inspectors.Count > inspCountBefore And _
+                   Not (Application.ActiveInspector Is readInsp) Then
+                    gotResult = True
+                    Exit For
+                End If
+            Else
+                ' Kieu delete-only khong co dau hieu UI ro de doi chieu -
+                ' chap nhan ExecErr=0 la dau hieu tot nhat hien co.
+                gotResult = True
+                Exit For
+            End If
+        End If
+
+        ' Chua thanh cong - cho mot chut roi thu lai (toi da 3 lan)
+        Dim tRetryWait As Date: tRetryWait = Now + TimeSerial(0, 0, 1)
+        Do While Now < tRetryWait: DoEvents: Loop
+    Next attempt
+
+    If Not gotResult Then
+        errMsg = "ExecuteMso 'RecallThisMessage' khong trigger duoc dialog sau 3 lan thu " & _
+                 "(mail co the khong phai gui qua Exchange, da qua han, hoac nguoi gui " & _
+                 "khong con quyen recall)."
         On Error Resume Next
         readInsp.Close olDiscard
         On Error GoTo Fail
-        GoTo FailNoErrObj
-    End If
-
-    ' Doi toi da 8s de control THAT SU enabled (thay vi doan mu 1 khoang delay
-    ' co dinh) - Outlook can thoi gian xac dinh mail con recall duoc khong.
-    Dim tEnable As Date: tEnable = Now + TimeSerial(0, 0, 8)
-    Do While Not ctrl.Enabled And Now < tEnable
-        DoEvents
-        Set ctrl = readInsp.CommandBars.FindControl(, 2511, , True)
-        If ctrl Is Nothing Then Exit Do
-    Loop
-    If ctrl Is Nothing Or Not ctrl.Enabled Then
-        errMsg = "Control 'Recall This Message' khong enabled sau 8s cho - " & _
-                 "mail co the khong phai gui qua Exchange, da qua han, hoac Outlook " & _
-                 "chua xac dinh xong trang thai co the recall."
-        On Error Resume Next
-        readInsp.Close olDiscard
-        On Error GoTo Fail
-        GoTo FailNoErrObj
-    End If
-
-    ' QUAN TRONG: ctrl.Execute cung mo dialog "Message Recall" dang MODAL (block
-    ' luon dong lenh) giong ExecuteMso - nen van phai SendKeys TRUOC (dua phim
-    ' vao hang doi input cua Windows) roi moi goi Execute.
-    If doReplace Then
-        SendKeys "{DOWN}~", False
-    Else
-        SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
-    End If
-
-    Dim inspCountBefore As Long: inspCountBefore = Application.Inspectors.Count
-
-    On Error Resume Next
-    ctrl.Execute
-    Dim ExecErr As Long: ExecErr = Err.Number
-    Dim ExecDesc As String: ExecDesc = Err.Description
-    On Error GoTo Fail
-    If ExecErr <> 0 Then
-        On Error Resume Next
-        readInsp.Close olDiscard
-        On Error GoTo Fail
-        errMsg = "ctrl.Execute (Recall) loi #" & ExecErr & " " & ExecDesc & _
-                 " (mail co the khong phai gui qua Exchange, hoac nguoi gui khong con quyen recall)."
         GoTo FailNoErrObj
     End If
 
