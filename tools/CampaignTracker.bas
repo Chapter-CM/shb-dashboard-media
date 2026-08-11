@@ -1,11 +1,27 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.35
+' SHB CM Campaign Tracker v4.36
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.35
+'   - Cach cua v4.35 (ghi file .vbs tam roi chay bang wscript) BI CHAN: Trellix
+'     Endpoint Security phat hien va XOA file shb_recall_keys.vbs ("Susp
+'     Attachment!scri...", Potentially Unwanted) -> wscript bao "Can not find
+'     script file". Day la dung chinh sach bao mat cua SHB; KHONG tim cach lach
+'     antivirus. Bo han huong ghi file script.
+'   - Thay bang Windows timer (SetTimer/KillTimer, user32) - hoan toan trong
+'     tien trinh Outlook, khong tao file nao:
+'       + Gui {DOWN} ngay (theo hang doi input) truoc khi goi ExecuteMso.
+'       + SetTimer 1500ms voi callback RecallEnterTimerProc de ban Enter SAU do.
+'     Dialog modal tuy chan code VBA nhung van chay message loop rieng, nen
+'     WM_TIMER van duoc dispatch va callback van chay -> tach duoc 2 phim ra,
+'     dung thu ma nguyen nhan goc doi hoi.
+'   - Callback tu KillTimer ngay khi ban xong; sau ExecuteMso con don not timer
+'     con sot lai de khong ban Enter lung tung vao cua so khac.
 '
 ' CHANGES vs v4.34
 '   - CHAN DOAN v4.34 DA CHUNG MINH NGUYEN NHAN GOC. Khi chi gui {DOWN} (khong
@@ -332,12 +348,40 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.35"
+Private Const VER       As String = "4.36"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
 Private m_Bag(0 To 399) As Object
 Private m_BagN           As Long
+
+' ================================================================
+' WINDOWS TIMER - dung de gui phim Enter TRE HON phim {DOWN} trong
+' dialog "Message Recall" (kieu replace).
+'
+' Ly do can: ExecuteMso mo dialog o dang MODAL nen CHAN toan bo code
+' VBA - khong the chen delay giua {DOWN} va Enter tu trong VBA. Nhung
+' dialog modal chay vong lap thong diep (message loop) rieng cua no,
+' nen WM_TIMER VAN duoc dispatch va callback VBA van chay duoc trong
+' luc do. Day la cach giai quyet hoan toan trong tien trinh Outlook,
+' KHONG can tao file script ben ngoai (ban v4.35 dung file .vbs tam da
+' bi Trellix Endpoint Security xoa - dung chinh sach bao mat SHB).
+' ================================================================
+#If VBA7 Then
+    Private Declare PtrSafe Function SetTimer Lib "user32" ( _
+        ByVal hwnd As LongPtr, ByVal nIDEvent As LongPtr, _
+        ByVal uElapse As Long, ByVal lpTimerFunc As LongPtr) As LongPtr
+    Private Declare PtrSafe Function KillTimer Lib "user32" ( _
+        ByVal hwnd As LongPtr, ByVal nIDEvent As LongPtr) As Long
+    Private m_RecallTimerID As LongPtr
+#Else
+    Private Declare Function SetTimer Lib "user32" ( _
+        ByVal hwnd As Long, ByVal nIDEvent As Long, _
+        ByVal uElapse As Long, ByVal lpTimerFunc As Long) As Long
+    Private Declare Function KillTimer Lib "user32" ( _
+        ByVal hwnd As Long, ByVal nIDEvent As Long) As Long
+    Private m_RecallTimerID As Long
+#End If
 
 ' ================================================================
 ' PUBLIC: SendCampaign
@@ -1053,12 +1097,19 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
             ' mac dinh (delete-only) -> khong co cua so thay the -> GotDraft=False.
             ' Dung y hien tuong "chi xoa khong replace" bao cao tu dau.
             '
-            ' Khong the chen delay giua 2 phim tu VBA, vi ExecuteMso CHAN toan bo
-            ' code khi dialog dang mo. Giai phap: nho MOT TIEN TRINH RIENG
-            ' (wscript) gui phim - no chay song song trong luc VBA bi chan, nen
-            ' co the tu ngu giua 2 phim.
-            If Not QueueReplaceKeysExternally() Then
-                errMsg = "Khong tao/chay duoc script gui phim ben ngoai (wscript co the bi chan)."
+            ' Khong the chen delay giua 2 phim bang code VBA thuan, vi ExecuteMso
+            ' CHAN toan bo code khi dialog dang mo. Ban v4.35 thu lach bang cach
+            ' ghi 1 file .vbs tam roi chay wscript - da bi Trellix Endpoint
+            ' Security xoa (dung chinh sach bao mat SHB, khong tim cach lach).
+            '
+            ' Cach nay khong can file script nao: dat 1 Windows timer. Dialog
+            ' modal van chay message loop rieng nen WM_TIMER van duoc dispatch,
+            ' callback RecallEnterTimerProc se ban Enter SAU 1.5s - luc do {DOWN}
+            ' (gui ngay bay gio, theo hang doi input) da kip chuyen radio.
+            SendKeys "{DOWN}", False
+            m_RecallTimerID = SetTimer(0, 0, 1500, AddressOf RecallEnterTimerProc)
+            If m_RecallTimerID = 0 Then
+                errMsg = "Khong dat duoc Windows timer de ban phim Enter (SetTimer that bai)."
                 On Error Resume Next
                 readInsp.Close olDiscard
                 On Error GoTo Fail
@@ -1083,6 +1134,15 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         On Error GoTo Fail
 
         Dim execMs As Long: execMs = CLng((Timer - tExecStart) * 1000)
+
+        ' Don timer neu no chua kip ban (vd dialog dong som vi ly do khac) -
+        ' tranh de lai timer "mo coi" ban Enter lung tung vao cua so khac.
+        If m_RecallTimerID <> 0 Then
+            On Error Resume Next
+            KillTimer 0, m_RecallTimerID
+            m_RecallTimerID = 0
+            On Error GoTo Fail
+        End If
 
         ' PHAT HIEN CUA SO THAY THE DUNG CACH: khong dua vao Inspectors.Count nua.
         ' Du lieu tu ban test v4.31 cho thay InspBefore=InspAfter=2 VA
@@ -1218,40 +1278,30 @@ End Function
 
 
 ' ================================================================
-' QUEUE REPLACE KEYS EXTERNALLY
-' Ghi 1 file .vbs tam roi chay bang wscript (KHONG cho ket qua - chay
-' song song). Script nay ngu mot chut cho dialog "Message Recall" kip
-' hien ra, gui {DOWN} de chon radio "...and replace", NGU TIEP de radio
-' kip doi, roi moi gui Enter de bam OK.
+' TIMER CALLBACK - gui Enter (bam OK) SAU khi {DOWN} da kip chuyen
+' radio sang "...and replace".
 '
-' Vi sao phai lam vong ve nhu vay: SendKeys tu VBA phai gui TRUOC khi
-' goi ExecuteMso (ExecuteMso mo dialog MODAL, chan luon code VBA), nen
-' khong cach nao chen delay giua {DOWN} va Enter tu ben trong VBA -
-' hai phim di sat nhau, Enter bam OK truoc khi DOWN kip chuyen radio.
-' Tien trinh wscript rieng thi chay song song, ngu bao lau tuy y.
+' Ham nay duoc Windows goi qua WM_TIMER. Dialog "Message Recall" tuy
+' MODAL (chan code VBA dang cho ExecuteMso tra ve) nhung no van chay
+' vong lap thong diep rieng, nen WM_TIMER van duoc dispatch va callback
+' nay van chay - dung thu ta can de tach 2 phim ra.
+'
+' PHAI la Public va nam trong standard module thi AddressOf moi lay
+' duoc dia chi.
 ' ================================================================
-Private Function QueueReplaceKeysExternally() As Boolean
-    On Error GoTo Fail
-
-    Dim fso As Object: Set fso = CreateObject("Scripting.FileSystemObject")
-    Dim vbsPath As String
-    vbsPath = fso.GetSpecialFolder(2) & "\shb_recall_keys.vbs"   ' 2 = TemporaryFolder
-
-    Dim ts As Object: Set ts = fso.CreateTextFile(vbsPath, True)
-    ts.WriteLine "Set sh = CreateObject(""WScript.Shell"")"
-    ts.WriteLine "WScript.Sleep 1200"        ' cho dialog Recall hien ra
-    ts.WriteLine "sh.SendKeys ""{DOWN}"""    ' chon radio "...and replace"
-    ts.WriteLine "WScript.Sleep 600"         ' cho radio doi that su
-    ts.WriteLine "sh.SendKeys ""~"""         ' Enter = OK
-    ts.Close
-
-    Shell "wscript.exe """ & vbsPath & """", vbHide
-    QueueReplaceKeysExternally = True
-    Exit Function
-
-Fail:
-    QueueReplaceKeysExternally = False
-End Function
+#If VBA7 Then
+Public Sub RecallEnterTimerProc(ByVal hwnd As LongPtr, ByVal uMsg As Long, _
+                                 ByVal idEvent As LongPtr, ByVal dwTime As Long)
+#Else
+Public Sub RecallEnterTimerProc(ByVal hwnd As Long, ByVal uMsg As Long, _
+                                 ByVal idEvent As Long, ByVal dwTime As Long)
+#End If
+    On Error Resume Next
+    ' Huy timer ngay - chi can ban duy nhat 1 lan
+    KillTimer 0, idEvent
+    m_RecallTimerID = 0
+    SendKeys "~", False      ' Enter = bam OK
+End Sub
 
 
 ' ================================================================
