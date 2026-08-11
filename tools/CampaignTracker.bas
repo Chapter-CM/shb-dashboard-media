@@ -1,11 +1,24 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.29
+' SHB CM Campaign Tracker v4.30
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.29
+'   - Kieu replace van that bai 100% (Inspectors.Count khong doi) du delete-only
+'     on dinh. Nho lai: {DOWN}~ TUNG chay thanh cong that (2 lan gui duoc, co
+'     notification that) o ban code TRUOC KHI them buoc readInsp.Activate() lap
+'     lai trong moi lan retry (v4.23). Nghi ngo: Activate() day focus vao 1
+'     control tren ribbon (vd nut "Actions" co dropdown) - phim DOWN la phim
+'     chuan de MO dropdown cua split-button, neu vo tinh trung dung luc se mo
+'     menu day, khien ExecuteMso silent no-op vi da co menu khac dang mo. Bo
+'     Activate() lap lai trong retry loop (giu lai buoc Activate 1 lan duy nhat
+'     truoc loop de dam bao co focus ban dau). Them {ESC} truoc {DOWN}~ nhu lop
+'     an toan bo sung - dong bat ky menu nao lo mo ra, an toan neu khong co gi
+'     de dong.
 '
 ' CHANGES vs v4.28
 '   - Nguoi dung xac nhan delete-only mode THAT SU hoat dong (co nhan duoc mail
@@ -249,7 +262,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.29"
+Private Const VER       As String = "4.30"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -947,19 +960,25 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     Dim attempt As Long
     Dim attemptDiag As String: attemptDiag = ""
     For attempt = 1 To 3
-        On Error Resume Next
-        readInsp.Activate
-        Dim ActErr As Long: ActErr = Err.Number
-        On Error GoTo Fail
-        Dim tA As Date: tA = Now + TimeSerial(0, 0, 0) + (0.4 / 86400)
-        Do While Now < tA: DoEvents: Loop
+        ' KHONG goi lai readInsp.Activate() o day nua: ban {DOWN}~ tung chay
+        ' THANH CONG THAT (2 lan gui duoc, co notification that) truoc khi buoc
+        ' Activate() lap lai trong retry loop nay duoc them vao. Nghi ngo:
+        ' Activate() day focus vao mot control tren ribbon (vd nut "Actions" -
+        ' co dropdown), khien phim DOWN bi "an" boi chinh control do (DOWN la
+        ' phim chuan de mo dropdown cua 1 split-button), lam ExecuteMso silent
+        ' no-op vi da co 1 menu dang mo san. itm.Display() ban dau da tu dat
+        ' focus vao noi dung mail (khong phai ribbon) - giu nguyen trang thai
+        ' do thay vi Activate lai.
+        Dim ActErr As Long: ActErr = 0
         Dim wasActive As Boolean: wasActive = (Application.ActiveInspector Is readInsp)
 
         ' QUAN TRONG: ExecuteMso mo dialog "Message Recall" o dang MODAL, block
         ' luon dong lenh - phai SendKeys TRUOC (dua phim vao hang doi input cua
         ' Windows) roi moi goi ExecuteMso, dialog vua mo len se tu "an" phim.
         If doReplace Then
-            SendKeys "{DOWN}~", False
+            ' {ESC} truoc de dong bat ky dropdown/menu nao lo bi mo ra tu buoc
+            ' Activate ban dau (an toan - khong lam gi neu khong co menu nao mo).
+            SendKeys "{ESC}{DOWN}~", False
         Else
             SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
         End If
