@@ -1,11 +1,20 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.27
+' SHB CM Campaign Tracker v4.28
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.27
+'   - Nguoi dung xac nhan: kieu delete-only DA CHAY DUOC on dinh o v4.26, chi
+'     kieu replace la that bai. Nguyen nhan nghi ngo: sau khi dialog Recall dong,
+'     Outlook can THEM thoi gian de tao cua so soan mail thay the (copy noi dung
+'     mail goc) truoc khi no xuat hien - wait co dinh 1s (dung chung cho ca 2
+'     kieu) la qua ngan cho truong hop nay. Doi thanh poll toi da 4s rieng cho
+'     doReplace (kiem tra lien tuc Inspectors.Count/ActiveInspector thay vi cho
+'     co dinh roi kiem tra 1 lan), giu nguyen 1s cho delete-only (da on dinh).
 '
 ' CHANGES vs v4.26
 '   - v4.26 (retry 3 lan) van that bai 100% (khong con la "lo nhip" ngau nhien)
@@ -229,7 +238,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.27"
+Private Const VER       As String = "4.28"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -952,11 +961,26 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         Dim ExecDesc As String: ExecDesc = Err.Description
         On Error GoTo Fail
 
-        Dim tW As Date: tW = Now + TimeSerial(0, 0, 1)
-        Do While Now < tW: DoEvents: Loop
-
-        Dim inspCountAfter As Long: inspCountAfter = Application.Inspectors.Count
-        Dim stillSameInsp As Boolean: stillSameInsp = (Application.ActiveInspector Is readInsp)
+        ' Kieu replace can nhieu thoi gian hon: sau khi dialog Recall dong, Outlook
+        ' con phai TAO cua so soan mail thay the (copy noi dung mail goc) truoc
+        ' khi no xuat hien - 1s la qua ngan (v4.26 that bai toan bo o kieu nay du
+        ' delete-only van on). Poll toi da 4s cho doReplace, giu 1s cho delete-only.
+        Dim inspCountAfter As Long
+        Dim stillSameInsp As Boolean
+        If doReplace Then
+            Dim tWpoll As Date: tWpoll = Now + TimeSerial(0, 0, 4)
+            Do
+                DoEvents
+                inspCountAfter = Application.Inspectors.Count
+                stillSameInsp = (Application.ActiveInspector Is readInsp)
+                If inspCountAfter > inspCountBefore And Not stillSameInsp Then Exit Do
+            Loop While Now < tWpoll
+        Else
+            Dim tW As Date: tW = Now + TimeSerial(0, 0, 1)
+            Do While Now < tW: DoEvents: Loop
+            inspCountAfter = Application.Inspectors.Count
+            stillSameInsp = (Application.ActiveInspector Is readInsp)
+        End If
 
         attemptDiag = attemptDiag & vbCrLf & "  [" & attempt & "] Activate:ActErr=" & ActErr & _
                       ",WasActive=" & wasActive & " | ExecuteMso:Err=" & ExecErr & _
