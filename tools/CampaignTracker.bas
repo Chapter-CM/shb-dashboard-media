@@ -1,11 +1,22 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.33
+' SHB CM Campaign Tracker v4.34
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.33
+'   - ExecMs do duoc = 31/31/20ms -> KHONG ket luan duoc, vi do phan giai cua
+'     Timer trong VBA chi ~15.6ms (20-31ms chi la 1-2 nhip, co the la nhieu).
+'   - Them che do chan doan DIAG_REPLACE_NO_ENTER (dang = True): kieu replace
+'     chi gui {DOWN}, KHONG gui Enter. Ket qua se nhin thay duoc bang MAT:
+'       + Dialog DUNG YEN tren man hinh (ExecMs rat lon) -> dialog CO mo that,
+'         nhin luon duoc radio nao dang chon -> van de chi o buoc gui phim.
+'       + Khong co gi hien ra, ExecMs van ~20ms -> lenh Recall bi DISABLE,
+'         ExecuteMso silent no-op -> van de hoan toan khac, phai sua huong khac.
+'     NHO dat lai DIAG_REPLACE_NO_ENTER = False sau khi chan doan xong.
 '
 ' CHANGES vs v4.32
 '   - Loai tru duoc nguyen nhan "mat ket noi Exchange": test lai luc da
@@ -303,7 +314,12 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.33"
+Private Const VER       As String = "4.34"
+
+' CHAN DOAN (tam thoi): True = kieu replace chi gui {DOWN}, KHONG gui Enter, de
+' dialog Recall DUNG YEN tren man hinh cho ta nhin thay no co mo that khong va
+' radio nao dang duoc chon. Dat lai False sau khi chan doan xong.
+Private Const DIAG_REPLACE_NO_ENTER As Boolean = True
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1017,13 +1033,18 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         ' luon dong lenh - phai SendKeys TRUOC (dua phim vao hang doi input cua
         ' Windows) roi moi goi ExecuteMso, dialog vua mo len se tu "an" phim.
         If doReplace Then
-            ' BO {ESC}: nghi ngo chinh no la nguyen nhan that bai 100% o v4.30 -
-            ' neu ESC den dung luc dialog Recall vua mo, ESC = Cancel/dong dialog
-            ' ngay lap tuc truoc khi DOWN/Enter kip lam gi (test tay xac nhan
-            ' tinh nang replace cua Outlook hoan toan binh thuong, loi chi o
-            ' automation). Quay ve dung {DOWN}~ - cau hinh da tung chay thanh
-            ' cong that (2 lan gui duoc, co notification that).
-            SendKeys "{DOWN}~", False
+            If DIAG_REPLACE_NO_ENTER Then
+                ' CHE DO CHAN DOAN: chi gui {DOWN}, KHONG gui Enter.
+                '   - Neu dialog CO mo va nhan duoc phim -> dialog se DUNG YEN
+                '     tren man hinh cho nguoi dung (ExecuteMso bi chan rat lau,
+                '     ExecMs se rat lon) va nguoi dung NHIN THAY duoc radio nao
+                '     dang duoc chon -> van de chi la o phim Enter/{DOWN}.
+                '   - Neu KHONG co gi hien ra va ExecMs van ~20ms -> lenh Recall
+                '     bi DISABLE, ExecuteMso silent no-op (van de hoan toan khac).
+                SendKeys "{DOWN}", False
+            Else
+                SendKeys "{DOWN}~", False
+            End If
         Else
             SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
         End If
