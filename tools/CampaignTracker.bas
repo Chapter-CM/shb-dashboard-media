@@ -1,11 +1,21 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.37
+' SHB CM Campaign Tracker v4.38
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.37
+'   - Van GotDraft=False, ExecMs ~1691/1754/1867 (dai hon 1500ms mot chut) ->
+'     nghi ngo FindWindowA KHONG tim thay dialog theo class "#32770" (dialog cua
+'     Office doi moi co the dung class khac), nen roi vao nhanh du phong
+'     SendKeys "~" - tuc lap lai dung loi cu.
+'   - Them cach tim thu 2: bo qua class, chi khop theo title. Va ghi lai nhanh
+'     nao THAT SU chay (m_DlgProbe: OK-viaClassTitle / OK-viaTitleOnly /
+'     NotFound-fellBackToSendKeys) vao log chan doan, de biet chinh xac van de
+'     nam o buoc tim cua so hay o buoc bam OK.
 '
 ' CHANGES vs v4.36
 '   - Timer DA CHAY DUNG: ExecMs = 1488/1512/1508 (dialog dung yen dung 1.5s roi
@@ -361,7 +371,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.37"
+Private Const VER       As String = "4.38"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -405,6 +415,9 @@ Private m_BagN           As Long
         ByVal wParam As Long, ByVal lParam As Long) As Long
     Private m_RecallTimerID As Long
 #End If
+
+' Ghi lai nhanh nao that su chay trong timer callback (de chan doan)
+Private m_DlgProbe As String
 
 Private Const WM_COMMAND As Long = &H111
 Private Const IDOK       As Long = 1
@@ -1135,6 +1148,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
             ' callback RecallEnterTimerProc se ban Enter SAU 1.5s - luc do {DOWN}
             ' (gui ngay bay gio, theo hang doi input) da kip chuyen radio.
             SendKeys "{DOWN}", False
+            m_DlgProbe = "(timer chua chay)"
             m_RecallTimerID = SetTimer(0, 0, 1500, AddressOf RecallEnterTimerProc)
             If m_RecallTimerID = 0 Then
                 errMsg = "Khong dat duoc Windows timer de ban phim Enter (SetTimer that bai)."
@@ -1218,7 +1232,8 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
                       IIf(ExecErr <> 0, " (" & ExecDesc & ")", "") & _
                       " | ExecMs=" & execMs & _
                       " | InspBefore=" & inspCountBefore & ",InspAfter=" & inspCountAfter & _
-                      ",StillSameInsp=" & stillSameInsp & ",GotDraft=" & gotDraft
+                      ",StillSameInsp=" & stillSameInsp & ",GotDraft=" & gotDraft & _
+                      IIf(doReplace, " | Dlg=" & m_DlgProbe, "")
 
         If ExecErr = 0 Then
             If doReplace Then
@@ -1338,12 +1353,23 @@ Public Sub RecallEnterTimerProc(ByVal hwnd As Long, ByVal uMsg As Long, _
     KillTimer 0, idEvent
     m_RecallTimerID = 0
 
+    ' Cach 1: dung class dialog Win32 chuan + dung title
     hDlg = FindWindowA(DLG_CLASS, RECALL_DLG_TITLE)
+    If hDlg <> 0 Then
+        m_DlgProbe = "OK-viaClassTitle"
+    Else
+        ' Cach 2: bo qua class (dialog cua Office doi moi co the KHONG phai
+        ' class "#32770"), chi khop theo title
+        hDlg = FindWindowA(vbNullString, RECALL_DLG_TITLE)
+        If hDlg <> 0 Then m_DlgProbe = "OK-viaTitleOnly"
+    End If
+
     If hDlg <> 0 Then
         ' Bam OK mot cach xac dinh (khong qua ban phim/focus)
         PostMessageA hDlg, WM_COMMAND, IDOK, 0
     Else
-        ' Khong tim thay dialog theo ten -> quay ve cach cu de con co co hoi
+        ' Khong tim thay dialog -> quay ve cach cu de con co co hoi
+        m_DlgProbe = "NotFound-fellBackToSendKeys"
         SendKeys "~", False
     End If
 End Sub
