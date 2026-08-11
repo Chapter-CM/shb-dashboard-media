@@ -1,11 +1,24 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.24
+' SHB CM Campaign Tracker v4.25
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.24
+'   - Tang delay len 5s (v4.24) van khong het loi -> khong phai do timing. Kiem
+'     tra Redemption (RDOMail): KHONG co method Recall() nao ca, huong Redemption
+'     dong lai. Kiem tra thu cong: "Recall This Message..." la 1 MUC TRONG
+'     DROPDOWN MENU "Actions" (Move group), thuoc he CommandBars kieu cu (numeric
+'     Control ID = 2511), KHONG phai lenh Fluent Ribbon doc lap - nen rat co the
+'     ExecuteMso("RecallThisMessage") tu dau da SAI CO CHE (idMso do khong khop
+'     dung control nay, hoac khong ton tai duoi dang idMso rieng).
+'   - Doi sang CommandBars.FindControl(, 2511, , True) de lay dung control, kem
+'     vong lap kiem tra THAT SU ctrl.Enabled (toi da 8s) thay vi doan mu delay
+'     co dinh nhu truoc. Neu ctrl.Enabled khong bao gio True trong 8s, macro se
+'     bao loi ro rang thay vi "thanh cong gia" hoac "khong lam gi".
 '
 ' CHANGES vs v4.23
 '   - Lop kiem tra moi cua v4.23 xac nhan dung nghi ngo: ExecuteMso silent no-op
@@ -199,7 +212,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.24"
+Private Const VER       As String = "4.25"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -886,12 +899,44 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         GoTo FailNoErrObj
     End If
 
-    ' QUAN TRONG: ExecuteMso mo dialog "Message Recall" o dang MODAL, nghia la
-    ' dong lenh nay se BI CHAN (khong return) cho toi khi dialog duoc dong. Vi
-    ' vay phai SendKeys TRUOC (dua phim vao hang doi input cua Windows) roi moi
-    ' goi ExecuteMso - luc do dialog vua mo len se tu "an" phai nhung phim da
-    ' xep hang san. Neu SendKeys o SAU ExecuteMso (nhu ban dau) se bi treo vi
-    ' ExecuteMso khong bao gio return de chay toi dong SendKeys do.
+    ' "Recall This Message..." la 1 muc trong dropdown menu "Actions" (Move
+    ' group), thuoc he CommandBars kieu cu (numeric Control ID = 2511), KHONG
+    ' phai 1 lenh Fluent Ribbon doc lap - ExecuteMso("RecallThisMessage") co
+    ' the da goi SAI co che (idMso khong khop dung control nay). Dung
+    ' CommandBars.FindControl(ID:=2511) thay the - cach nay con cho phep kiem
+    ' tra THAT SU .Enabled thay vi doan mu thoi gian cho nhu truoc.
+    Dim ctrl As Object
+    Set ctrl = readInsp.CommandBars.FindControl(, 2511, , True)
+    If ctrl Is Nothing Then
+        errMsg = "Khong tim thay control 'Recall This Message' (ID=2511) tren CommandBars " & _
+                 "cua cua so mail nay."
+        On Error Resume Next
+        readInsp.Close olDiscard
+        On Error GoTo Fail
+        GoTo FailNoErrObj
+    End If
+
+    ' Doi toi da 8s de control THAT SU enabled (thay vi doan mu 1 khoang delay
+    ' co dinh) - Outlook can thoi gian xac dinh mail con recall duoc khong.
+    Dim tEnable As Date: tEnable = Now + TimeSerial(0, 0, 8)
+    Do While Not ctrl.Enabled And Now < tEnable
+        DoEvents
+        Set ctrl = readInsp.CommandBars.FindControl(, 2511, , True)
+        If ctrl Is Nothing Then Exit Do
+    Loop
+    If ctrl Is Nothing Or Not ctrl.Enabled Then
+        errMsg = "Control 'Recall This Message' khong enabled sau 8s cho - " & _
+                 "mail co the khong phai gui qua Exchange, da qua han, hoac Outlook " & _
+                 "chua xac dinh xong trang thai co the recall."
+        On Error Resume Next
+        readInsp.Close olDiscard
+        On Error GoTo Fail
+        GoTo FailNoErrObj
+    End If
+
+    ' QUAN TRONG: ctrl.Execute cung mo dialog "Message Recall" dang MODAL (block
+    ' luon dong lenh) giong ExecuteMso - nen van phai SendKeys TRUOC (dua phim
+    ' vao hang doi input cua Windows) roi moi goi Execute.
     If doReplace Then
         SendKeys "{DOWN}~", False
     Else
@@ -901,7 +946,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     Dim inspCountBefore As Long: inspCountBefore = Application.Inspectors.Count
 
     On Error Resume Next
-    readInsp.CommandBars.ExecuteMso "RecallThisMessage"
+    ctrl.Execute
     Dim ExecErr As Long: ExecErr = Err.Number
     Dim ExecDesc As String: ExecDesc = Err.Description
     On Error GoTo Fail
@@ -909,7 +954,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         On Error Resume Next
         readInsp.Close olDiscard
         On Error GoTo Fail
-        errMsg = "ExecuteMso 'RecallThisMessage' loi #" & ExecErr & " " & ExecDesc & _
+        errMsg = "ctrl.Execute (Recall) loi #" & ExecErr & " " & ExecDesc & _
                  " (mail co the khong phai gui qua Exchange, hoac nguoi gui khong con quyen recall)."
         GoTo FailNoErrObj
     End If
