@@ -1,11 +1,22 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.39
+' SHB CM Campaign Tracker v4.40
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.39
+'   - Them tuy chon bat/tat checkbox "Tell me if recall succeeds or fails for
+'     each recipient" trong dialog Recall (mac dinh Outlook tick san - voi
+'     campaign lon se nhan rat nhieu mail thong bao rieng le). RecallCampaign()
+'     gio hoi 1 lan truoc khi chay batch; neu chon tat, SendKeys se gui
+'     "{TAB}{SPACE}~" (Tab toi checkbox, Space bo tick, Enter OK) thay vi chi
+'     "~". Day la chuoi nhieu phim (giong kieu tung khong on dinh o tinh nang
+'     "replace" da bo) nhung it rui ro hon nhieu: neu khong an dinh thi toi da
+'     la checkbox van con tick (van co notification), KHONG anh huong den ket
+'     qua recall thanh cong/that bai.
 '
 ' CHANGES vs v4.38
 '   - BO HAN che do "replace" trong RecallCampaign(). Da thu nhieu co che khac
@@ -35,7 +46,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.39"
+Private Const VER       As String = "4.40"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -577,6 +588,14 @@ Public Sub RecallCampaign()
               "Luu y: chi xoa duoc ban CHUA DOC o nguoi nhan noi bo dung Outlook Desktop.", _
               vbYesNo + vbQuestion, "SHB Tracker - Recall") = vbNo Then Exit Sub
 
+    ' Checkbox "Tell me if recall succeeds or fails for each recipient" trong
+    ' dialog Recall dang tick san theo mac dinh Outlook -> voi campaign lon (vd
+    ' 3000 mail) se nhan ve rat nhieu mail thong bao rieng le. Cho tuy chon tat.
+    Dim wantNotify As Boolean
+    wantNotify = (MsgBox("Nhan thong bao 'Recall Success/Failure' cho tung nguoi nhan?" & vbCrLf & _
+                        "(Voi campaign lon nen chon NO de tranh nhan qua nhieu mail thong bao rieng le)", _
+                        vbYesNo + vbQuestion, "SHB Tracker - Recall") = vbYes)
+
     Dim sentFolder As folder
     Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
     If sentFolder Is Nothing Then
@@ -601,7 +620,7 @@ Public Sub RecallCampaign()
             If itmSlug = slug Then
                 matched = matched + 1
                 Dim itmErr As String: itmErr = ""
-                If RecallOneItem(itm, itmErr) Then
+                If RecallOneItem(itm, wantNotify, itmErr) Then
                     recalled = recalled + 1
                 Else
                     failed = failed + 1
@@ -648,8 +667,18 @@ End Sub
 ' Windows) roi moi goi ExecuteMso; dialog vua mo len se tu "an" phim
 ' da xep hang san. Neu SendKeys o SAU ExecuteMso se bi treo vi
 ' ExecuteMso khong bao gio return de chay toi dong SendKeys do.
+'
+' wantNotify=False: bo tick checkbox "Tell me if recall succeeds or
+' fails for each recipient" (mac dinh Outlook tick san) bang chuoi
+' "{TAB}{SPACE}~" thay vi chi "~" - Tab tu radio nhay thang toi
+' checkbox (bo qua radio con lai trong nhom), Space bo tick, Enter xac
+' nhan OK. Day la chuoi NHIEU PHIM giong kieu tung gay loi o tinh nang
+' "replace" da bo - neu no khong an dinh, RecallOneItem van tra ve
+' dung ket qua (chi la checkbox co the van tick), khong anh huong toi
+' viec recall co thanh cong hay khong.
 ' ================================================================
-Private Function RecallOneItem(itm As Object, Optional ByRef errMsg As String = "") As Boolean
+Private Function RecallOneItem(itm As Object, wantNotify As Boolean, _
+                                Optional ByRef errMsg As String = "") As Boolean
     On Error GoTo Fail
 
     itm.Display
@@ -673,7 +702,11 @@ Private Function RecallOneItem(itm As Object, Optional ByRef errMsg As String = 
     Dim gotResult As Boolean: gotResult = False
     Dim attempt As Long
     For attempt = 1 To 3
-        SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
+        If wantNotify Then
+            SendKeys "~", False   ' Enter = OK (giu nguyen checkbox thong bao dang tick)
+        Else
+            SendKeys "{TAB}{SPACE}~", False   ' Tab->checkbox, Space=bo tick, Enter=OK
+        End If
 
         On Error Resume Next
         readInsp.CommandBars.ExecuteMso "RecallThisMessage"
