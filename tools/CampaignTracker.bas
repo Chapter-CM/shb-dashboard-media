@@ -1,11 +1,25 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.32
+' SHB CM Campaign Tracker v4.33
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.32
+'   - Loai tru duoc nguyen nhan "mat ket noi Exchange": test lai luc da
+'     "Connected to: Microsoft Exchange" + Outbox trong -> VAN GotDraft=False,
+'     Err=0, InspBefore=InspAfter, StillSameInsp=True o ca 3 lan. Delete-only
+'     van chay tot voi cung co che -> khac biet duy nhat la chuoi SendKeys
+'     ("~" chay duoc / "{DOWN}~" khong).
+'   - Them phep do QUYET DINH: dem thoi gian (ms) ExecuteMso chay. Dialog
+'     "Message Recall" la MODAL nen ExecuteMso PHAI bi chan cho toi khi dialog
+'     dong (>100ms). Neu ExecMs ~= 0 -> lenh Recall dang bi DISABLE va ExecuteMso
+'     silent no-op (khong phai van de SendKeys/timing). Neu ExecMs lon -> dialog
+'     CO mo that va van de nam o cho phim {DOWN} khong toi duoc dung radio.
+'     Hai ket qua nay dan den 2 huong sua hoan toan khac nhau, nen can do truoc
+'     khi sua tiep.
 '
 ' CHANGES vs v4.31
 '   - TIM RA NGUYEN NHAN THAT (dua tren log v4.31): InspBefore=InspAfter=2 VA
@@ -289,7 +303,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.32"
+Private Const VER       As String = "4.33"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1016,11 +1030,19 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
 
         inspCountBefore = Application.Inspectors.Count
 
+        ' DO THOI GIAN ExecuteMso: day la phep do QUYET DINH xem dialog co THAT SU
+        ' mo ra hay khong. Dialog "Message Recall" la MODAL -> ExecuteMso se BI
+        ' CHAN cho toi khi dialog dong (thuong >100ms). Neu lenh Recall dang bi
+        ' DISABLE, ExecuteMso tra ve TUC THI (~0ms) va khong bao loi gi ca.
+        Dim tExecStart As Single: tExecStart = Timer
+
         On Error Resume Next
         readInsp.CommandBars.ExecuteMso "RecallThisMessage"
         Dim ExecErr As Long: ExecErr = Err.Number
         Dim ExecDesc As String: ExecDesc = Err.Description
         On Error GoTo Fail
+
+        Dim execMs As Long: execMs = CLng((Timer - tExecStart) * 1000)
 
         ' PHAT HIEN CUA SO THAY THE DUNG CACH: khong dua vao Inspectors.Count nua.
         ' Du lieu tu ban test v4.31 cho thay InspBefore=InspAfter=2 VA
@@ -1066,6 +1088,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         attemptDiag = attemptDiag & vbCrLf & "  [" & attempt & "] Activate:ActErr=" & ActErr & _
                       ",WasActive=" & wasActive & " | ExecuteMso:Err=" & ExecErr & _
                       IIf(ExecErr <> 0, " (" & ExecDesc & ")", "") & _
+                      " | ExecMs=" & execMs & _
                       " | InspBefore=" & inspCountBefore & ",InspAfter=" & inspCountAfter & _
                       ",StillSameInsp=" & stillSameInsp & ",GotDraft=" & gotDraft
 
