@@ -1,11 +1,24 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.36
+' SHB CM Campaign Tracker v4.37
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.36
+'   - Timer DA CHAY DUNG: ExecMs = 1488/1512/1508 (dialog dung yen dung 1.5s roi
+'     dong ngay khi timer ban) va radio "...and replace" DA duoc chon dung. Nhung
+'     van GotDraft=False, khong ra cua so thay the -> phim Enter tu timer dang
+'     bam nham nut khac (nhieu kha nang la Cancel: {DOWN} da day focus vao nhom
+'     nut OK/Cancel, Enter kich hoat dung nut dang focus chu khong phai nut mac
+'     dinh).
+'   - Bo cach "go phim Enter" mo ho. Timer gio tim dung handle cua dialog
+'     (FindWindowA voi class "#32770" + title "Recall This Message") roi
+'     PostMessage WM_COMMAND/IDOK thang vao no - bam OK MOT CACH XAC DINH,
+'     khong phu thuoc control nao dang focus. Neu khong tim thay dialog theo
+'     ten thi van fallback ve SendKeys "~" de con co co hoi.
 '
 ' CHANGES vs v4.35
 '   - Cach cua v4.35 (ghi file .vbs tam roi chay bang wscript) BI CHAN: Trellix
@@ -348,7 +361,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.36"
+Private Const VER       As String = "4.37"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -373,6 +386,11 @@ Private m_BagN           As Long
         ByVal uElapse As Long, ByVal lpTimerFunc As LongPtr) As LongPtr
     Private Declare PtrSafe Function KillTimer Lib "user32" ( _
         ByVal hwnd As LongPtr, ByVal nIDEvent As LongPtr) As Long
+    Private Declare PtrSafe Function FindWindowA Lib "user32" ( _
+        ByVal lpClassName As String, ByVal lpWindowName As String) As LongPtr
+    Private Declare PtrSafe Function PostMessageA Lib "user32" ( _
+        ByVal hwnd As LongPtr, ByVal wMsg As Long, _
+        ByVal wParam As LongPtr, ByVal lParam As LongPtr) As Long
     Private m_RecallTimerID As LongPtr
 #Else
     Private Declare Function SetTimer Lib "user32" ( _
@@ -380,8 +398,18 @@ Private m_BagN           As Long
         ByVal uElapse As Long, ByVal lpTimerFunc As Long) As Long
     Private Declare Function KillTimer Lib "user32" ( _
         ByVal hwnd As Long, ByVal nIDEvent As Long) As Long
+    Private Declare Function FindWindowA Lib "user32" ( _
+        ByVal lpClassName As String, ByVal lpWindowName As String) As Long
+    Private Declare Function PostMessageA Lib "user32" ( _
+        ByVal hwnd As Long, ByVal wMsg As Long, _
+        ByVal wParam As Long, ByVal lParam As Long) As Long
     Private m_RecallTimerID As Long
 #End If
+
+Private Const WM_COMMAND As Long = &H111
+Private Const IDOK       As Long = 1
+Private Const DLG_CLASS  As String = "#32770"        ' class chuan cua dialog Win32
+Private Const RECALL_DLG_TITLE As String = "Recall This Message"
 
 ' ================================================================
 ' PUBLIC: SendCampaign
@@ -1278,13 +1306,20 @@ End Function
 
 
 ' ================================================================
-' TIMER CALLBACK - gui Enter (bam OK) SAU khi {DOWN} da kip chuyen
-' radio sang "...and replace".
+' TIMER CALLBACK - BAM NUT OK cua dialog "Recall This Message", SAU khi
+' phim {DOWN} da kip chuyen radio sang "...and replace".
 '
-' Ham nay duoc Windows goi qua WM_TIMER. Dialog "Message Recall" tuy
-' MODAL (chan code VBA dang cho ExecuteMso tra ve) nhung no van chay
-' vong lap thong diep rieng, nen WM_TIMER van duoc dispatch va callback
-' nay van chay - dung thu ta can de tach 2 phim ra.
+' Ham nay duoc Windows goi qua WM_TIMER. Dialog tuy MODAL (chan code VBA
+' dang cho ExecuteMso tra ve) nhung van chay vong lap thong diep rieng,
+' nen WM_TIMER van duoc dispatch va callback nay van chay - dung thu ta
+' can de tach thao tac ra khoi luc queue phim.
+'
+' KHONG dung SendKeys "~" nua: ban v4.36 cho thay dialog dong dung luc
+' timer ban (ExecMs ~1500) nhung KHONG ra cua so thay the - phim Enter
+' bam nham nut dang focus (nhieu kha nang la Cancel, vi {DOWN} da day
+' focus vao nhom nut). Thay bang cach XAC DINH: tim dung handle cua
+' dialog roi POST thang lenh IDOK vao no - khong phu thuoc control nao
+' dang focus.
 '
 ' PHAI la Public va nam trong standard module thi AddressOf moi lay
 ' duoc dia chi.
@@ -1292,15 +1327,25 @@ End Function
 #If VBA7 Then
 Public Sub RecallEnterTimerProc(ByVal hwnd As LongPtr, ByVal uMsg As Long, _
                                  ByVal idEvent As LongPtr, ByVal dwTime As Long)
+    Dim hDlg As LongPtr
 #Else
 Public Sub RecallEnterTimerProc(ByVal hwnd As Long, ByVal uMsg As Long, _
                                  ByVal idEvent As Long, ByVal dwTime As Long)
+    Dim hDlg As Long
 #End If
     On Error Resume Next
     ' Huy timer ngay - chi can ban duy nhat 1 lan
     KillTimer 0, idEvent
     m_RecallTimerID = 0
-    SendKeys "~", False      ' Enter = bam OK
+
+    hDlg = FindWindowA(DLG_CLASS, RECALL_DLG_TITLE)
+    If hDlg <> 0 Then
+        ' Bam OK mot cach xac dinh (khong qua ban phim/focus)
+        PostMessageA hDlg, WM_COMMAND, IDOK, 0
+    Else
+        ' Khong tim thay dialog theo ten -> quay ve cach cu de con co co hoi
+        SendKeys "~", False
+    End If
 End Sub
 
 
