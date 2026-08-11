@@ -1,11 +1,17 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.40
+' SHB CM Campaign Tracker v4.41
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.40
+'   - Fix loi #5 "Invalid procedure call or argument" ngay lap tuc cho MOI mail
+'     khi tat notification: "{SPACE}" KHONG phai ma phim hop le trong SendKeys
+'     cua VBA (danh sach ma ngoac {..} khong co SPACE) - de gui phim cach chi
+'     can 1 ky tu trang " " binh thuong. Doi "{TAB}{SPACE}~" -> "{TAB} ~".
 '
 ' CHANGES vs v4.39
 '   - Them tuy chon bat/tat checkbox "Tell me if recall succeeds or fails for
@@ -46,7 +52,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.40"
+Private Const VER       As String = "4.41"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -705,7 +711,7 @@ Private Function RecallOneItem(itm As Object, wantNotify As Boolean, _
         If wantNotify Then
             SendKeys "~", False   ' Enter = OK (giu nguyen checkbox thong bao dang tick)
         Else
-            SendKeys "{TAB}{SPACE}~", False   ' Tab->checkbox, Space=bo tick, Enter=OK
+            SendKeys "{TAB} ~", False   ' Tab->checkbox, " "=bo tick (khong phai "{SPACE}"), Enter=OK
         End If
 
         On Error Resume Next
