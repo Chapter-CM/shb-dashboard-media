@@ -1,11 +1,18 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.26
+' SHB CM Campaign Tracker v4.27
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.26
+'   - v4.26 (retry 3 lan) van that bai 100% (khong con la "lo nhip" ngau nhien)
+'     nhung chua biet ExecuteMso tra ve loi gi hay chi la khong mo duoc dialog.
+'     Them log chi tiet TUNG LAN thu (Activate OK khong, ExecuteMso.Err la gi,
+'     Inspectors.Count truoc/sau, co con la readInsp khong) vao errMsg de co du
+'     lieu that chan doan thay vi tiep tuc doan.
 '
 ' CHANGES vs v4.25
 '   - v4.25 (CommandBars.FindControl ID=2511) TE HON: khong tim thay control nao
@@ -222,7 +229,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.26"
+Private Const VER       As String = "4.27"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -918,12 +925,15 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     Dim inspCountBefore As Long
     Dim gotResult As Boolean: gotResult = False
     Dim attempt As Long
+    Dim attemptDiag As String: attemptDiag = ""
     For attempt = 1 To 3
         On Error Resume Next
         readInsp.Activate
+        Dim ActErr As Long: ActErr = Err.Number
         On Error GoTo Fail
         Dim tA As Date: tA = Now + TimeSerial(0, 0, 1)
         Do While Now < tA: DoEvents: Loop
+        Dim wasActive As Boolean: wasActive = (Application.ActiveInspector Is readInsp)
 
         ' QUAN TRONG: ExecuteMso mo dialog "Message Recall" o dang MODAL, block
         ' luon dong lenh - phai SendKeys TRUOC (dua phim vao hang doi input cua
@@ -945,11 +955,19 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         Dim tW As Date: tW = Now + TimeSerial(0, 0, 1)
         Do While Now < tW: DoEvents: Loop
 
+        Dim inspCountAfter As Long: inspCountAfter = Application.Inspectors.Count
+        Dim stillSameInsp As Boolean: stillSameInsp = (Application.ActiveInspector Is readInsp)
+
+        attemptDiag = attemptDiag & vbCrLf & "  [" & attempt & "] Activate:ActErr=" & ActErr & _
+                      ",WasActive=" & wasActive & " | ExecuteMso:Err=" & ExecErr & _
+                      IIf(ExecErr <> 0, " (" & ExecDesc & ")", "") & _
+                      " | InspBefore=" & inspCountBefore & ",InspAfter=" & inspCountAfter & _
+                      ",StillSameInsp=" & stillSameInsp
+
         If ExecErr = 0 Then
             If doReplace Then
                 ' Chi coi la thanh cong neu THUC SU co cua so moi mo ra
-                If Application.Inspectors.Count > inspCountBefore And _
-                   Not (Application.ActiveInspector Is readInsp) Then
+                If inspCountAfter > inspCountBefore And Not stillSameInsp Then
                     gotResult = True
                     Exit For
                 End If
@@ -967,9 +985,8 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     Next attempt
 
     If Not gotResult Then
-        errMsg = "ExecuteMso 'RecallThisMessage' khong trigger duoc dialog sau 3 lan thu " & _
-                 "(mail co the khong phai gui qua Exchange, da qua han, hoac nguoi gui " & _
-                 "khong con quyen recall)."
+        errMsg = "ExecuteMso 'RecallThisMessage' khong trigger duoc dialog sau 3 lan thu. Chi tiet:" & _
+                 attemptDiag
         On Error Resume Next
         readInsp.Close olDiscard
         On Error GoTo Fail
