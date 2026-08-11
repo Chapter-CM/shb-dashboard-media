@@ -1,11 +1,20 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.41
+' SHB CM Campaign Tracker v4.42
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.41
+'   - Bo han tuy chon tat notification "Recall Success/Failure": nguoi dung
+'     test thay dialog van hien binh thuong nhung recall khong xay ra - chuoi
+'     "{TAB} ~" da lap lai DUNG loi cua tinh nang "replace" da bo (Tab day
+'     focus vao nhom nut OK/Cancel, Enter bam nham Cancel). Quay ve dung "~"
+'     mot phim - co che DUY NHAT da kiem chung on dinh 100% qua nhieu lan test.
+'     Checkbox thong bao se luon giu nguyen trang thai tick mac dinh cua
+'     Outlook (co nhan "Message Recall Success/Failure" cho tung nguoi).
 '
 ' CHANGES vs v4.40
 '   - Fix loi #5 "Invalid procedure call or argument" ngay lap tuc cho MOI mail
@@ -52,7 +61,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.41"
+Private Const VER       As String = "4.42"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -594,13 +603,12 @@ Public Sub RecallCampaign()
               "Luu y: chi xoa duoc ban CHUA DOC o nguoi nhan noi bo dung Outlook Desktop.", _
               vbYesNo + vbQuestion, "SHB Tracker - Recall") = vbNo Then Exit Sub
 
-    ' Checkbox "Tell me if recall succeeds or fails for each recipient" trong
-    ' dialog Recall dang tick san theo mac dinh Outlook -> voi campaign lon (vd
-    ' 3000 mail) se nhan ve rat nhieu mail thong bao rieng le. Cho tuy chon tat.
-    Dim wantNotify As Boolean
-    wantNotify = (MsgBox("Nhan thong bao 'Recall Success/Failure' cho tung nguoi nhan?" & vbCrLf & _
-                        "(Voi campaign lon nen chon NO de tranh nhan qua nhieu mail thong bao rieng le)", _
-                        vbYesNo + vbQuestion, "SHB Tracker - Recall") = vbYes)
+    ' (Da thu cho tat checkbox "Tell me if recall succeeds or fails" bang
+    ' "{TAB} ~" - lap lai dung loi cua tinh nang "replace" da bo: Tab day focus
+    ' vao nhom nut OK/Cancel, Enter bam nham Cancel nen recall khong xay ra.
+    ' Bo tinh nang nay, quay ve dung "~" mot phim - co che DUY NHAT da kiem
+    ' chung on dinh 100%. Checkbox se luon giu nguyen trang thai tick mac dinh
+    ' cua Outlook (co nhan notification rieng cho tung nguoi).)
 
     Dim sentFolder As folder
     Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
@@ -626,7 +634,7 @@ Public Sub RecallCampaign()
             If itmSlug = slug Then
                 matched = matched + 1
                 Dim itmErr As String: itmErr = ""
-                If RecallOneItem(itm, wantNotify, itmErr) Then
+                If RecallOneItem(itm, itmErr) Then
                     recalled = recalled + 1
                 Else
                     failed = failed + 1
@@ -674,16 +682,12 @@ End Sub
 ' da xep hang san. Neu SendKeys o SAU ExecuteMso se bi treo vi
 ' ExecuteMso khong bao gio return de chay toi dong SendKeys do.
 '
-' wantNotify=False: bo tick checkbox "Tell me if recall succeeds or
-' fails for each recipient" (mac dinh Outlook tick san) bang chuoi
-' "{TAB}{SPACE}~" thay vi chi "~" - Tab tu radio nhay thang toi
-' checkbox (bo qua radio con lai trong nhom), Space bo tick, Enter xac
-' nhan OK. Day la chuoi NHIEU PHIM giong kieu tung gay loi o tinh nang
-' "replace" da bo - neu no khong an dinh, RecallOneItem van tra ve
-' dung ket qua (chi la checkbox co the van tick), khong anh huong toi
-' viec recall co thanh cong hay khong.
+' (Da thu bo tick checkbox thong bao bang "{TAB} ~" - lap lai dung loi cua
+' tinh nang "replace" da bo: Tab day focus vao nhom nut OK/Cancel, Enter
+' bam nham Cancel nen recall khong xay ra. Bo huong do, quay ve dung "~"
+' mot phim - co che DUY NHAT da kiem chung on dinh 100%.)
 ' ================================================================
-Private Function RecallOneItem(itm As Object, wantNotify As Boolean, _
+Private Function RecallOneItem(itm As Object, _
                                 Optional ByRef errMsg As String = "") As Boolean
     On Error GoTo Fail
 
@@ -708,11 +712,7 @@ Private Function RecallOneItem(itm As Object, wantNotify As Boolean, _
     Dim gotResult As Boolean: gotResult = False
     Dim attempt As Long
     For attempt = 1 To 3
-        If wantNotify Then
-            SendKeys "~", False   ' Enter = OK (giu nguyen checkbox thong bao dang tick)
-        Else
-            SendKeys "{TAB} ~", False   ' Tab->checkbox, " "=bo tick (khong phai "{SPACE}"), Enter=OK
-        End If
+        SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
 
         On Error Resume Next
         readInsp.CommandBars.ExecuteMso "RecallThisMessage"
