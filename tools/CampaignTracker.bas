@@ -1,11 +1,28 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.31
+' SHB CM Campaign Tracker v4.32
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.31
+'   - TIM RA NGUYEN NHAN THAT (dua tren log v4.31): InspBefore=InspAfter=2 VA
+'     StillSameInsp=True o CA 3 lan thu -> Outlook TAI SU DUNG chinh cua so dang
+'     mo de bien thanh cua so soan mail thay the, KHONG mo them cua so moi. Cach
+'     kiem tra cu (bat buoc Inspectors.Count phai TANG va ActiveInspector phai
+'     KHAC readInsp) nen luon ket luan nham la "that bai", roi ngay sau do goi
+'     readInsp.Close olDiscard - tuc la TU TAY DONG + HUY chinh cua so thay the
+'     vua duoc tao ra. Dung y hien tuong "khong co gi xay ra ca" + "khong bao
+'     loi that su".
+'   - Doi dau hieu phat hien sang MailItem.Sent (dang tin cay, khong phu thuoc
+'     so luong/danh tinh cua so):
+'       mail GOC da gui        -> .Sent = True
+'       ban nhap mail thay the -> .Sent = False
+'     Poll toi da 5s tim mot mail dang mo co .Sent=False. Truoc khi ghi de/gui
+'     con chot an toan lan cuoi (phai la olMail VA .Sent=False) de khong bao gio
+'     lap lai su co "ghi de + gui lai chinh mail goc" cua cac ban truoc.
 '
 ' CHANGES vs v4.30
 '   - Test tay xac nhan: tinh nang replace CUA OUTLOOK hoan toan binh thuong
@@ -272,7 +289,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.31"
+Private Const VER       As String = "4.32"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1005,19 +1022,39 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         Dim ExecDesc As String: ExecDesc = Err.Description
         On Error GoTo Fail
 
-        ' Kieu replace can nhieu thoi gian hon: sau khi dialog Recall dong, Outlook
-        ' con phai TAO cua so soan mail thay the (copy noi dung mail goc) truoc
-        ' khi no xuat hien - 1s la qua ngan (v4.26 that bai toan bo o kieu nay du
-        ' delete-only van on). Poll toi da 4s cho doReplace, giu 1s cho delete-only.
+        ' PHAT HIEN CUA SO THAY THE DUNG CACH: khong dua vao Inspectors.Count nua.
+        ' Du lieu tu ban test v4.31 cho thay InspBefore=InspAfter=2 VA
+        ' StillSameInsp=True -> Outlook TAI SU DUNG chinh cua so dang mo de bien
+        ' no thanh cua so soan mail thay the (khong mo them cua so moi). Voi cach
+        ' kiem tra cu (doi Count phai TANG va ActiveInspector phai KHAC readInsp),
+        ' truong hop nay bi ket luan nham la "that bai" - va tiep theo do code
+        ' goi readInsp.Close olDiscard, tuc la TU TAY DONG + HUY chinh cua so
+        ' thay the vua duoc tao ra! Dung y hien tuong "khong co gi xay ra ca".
+        '
+        ' Dau hieu dung de phan biet: MailItem.Sent
+        '   - Mail GOC (da gui, dang xem trong Sent Items) -> .Sent = True
+        '   - Cua so soan mail THAY THE (draft chua gui)   -> .Sent = False
         Dim inspCountAfter As Long
         Dim stillSameInsp As Boolean
+        Dim gotDraft As Boolean: gotDraft = False
+        Dim curInsp As Object, curItem As Object
         If doReplace Then
-            Dim tWpoll As Date: tWpoll = Now + TimeSerial(0, 0, 4)
+            Dim tWpoll As Date: tWpoll = Now + TimeSerial(0, 0, 5)
             Do
                 DoEvents
                 inspCountAfter = Application.Inspectors.Count
                 stillSameInsp = (Application.ActiveInspector Is readInsp)
-                If inspCountAfter > inspCountBefore And Not stillSameInsp Then Exit Do
+                On Error Resume Next
+                Set curInsp = Application.ActiveInspector
+                Set curItem = Nothing
+                If Not curInsp Is Nothing Then Set curItem = curInsp.CurrentItem
+                If Not curItem Is Nothing Then
+                    If curItem.Class = olMail Then
+                        If curItem.Sent = False Then gotDraft = True
+                    End If
+                End If
+                On Error GoTo Fail
+                If gotDraft Then Exit Do
             Loop While Now < tWpoll
         Else
             Dim tW As Date: tW = Now + TimeSerial(0, 0, 0) + (0.4 / 86400)
@@ -1030,12 +1067,14 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
                       ",WasActive=" & wasActive & " | ExecuteMso:Err=" & ExecErr & _
                       IIf(ExecErr <> 0, " (" & ExecDesc & ")", "") & _
                       " | InspBefore=" & inspCountBefore & ",InspAfter=" & inspCountAfter & _
-                      ",StillSameInsp=" & stillSameInsp
+                      ",StillSameInsp=" & stillSameInsp & ",GotDraft=" & gotDraft
 
         If ExecErr = 0 Then
             If doReplace Then
-                ' Chi coi la thanh cong neu THUC SU co cua so moi mo ra
-                If inspCountAfter > inspCountBefore And Not stillSameInsp Then
+                ' Thanh cong = tim thay 1 mail CHUA GUI (.Sent=False) dang mo -
+                ' do chinh la cua so soan mail thay the, du no la cua so moi hay
+                ' la cua so cu duoc tai su dung.
+                If gotDraft Then
                     gotResult = True
                     Exit For
                 End If
@@ -1065,42 +1104,37 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     Do While Now < tEnd2: DoEvents: Loop
 
     If doReplace Then
-        ' Outlook vua mo cua so soan mail thay the - lay va gui no
-        Dim tEnd3 As Date: tEnd3 = Now + TimeSerial(0, 0, 2)
-        Do While Now < tEnd3: DoEvents: Loop
-
-        ' XAC MINH co cua so MOI thuc su mo ra (khong phai van la readInsp cua
-        ' mail goc) - neu ExecuteMso silent no-op (khong mo duoc dialog Recall),
-        ' ActiveInspector se van la readInsp, va neu khong kiem tra se vo tinh
-        ' ghi de + gui lai CHINH mail goc (dung y hien tuong "chi gui lai, khong
-        ' recall" da gap phai).
-        If Application.Inspectors.Count <= inspCountBefore Then
-            errMsg = "Khong thay cua so mail thay the moi mo ra (Inspectors.Count khong tang) " & _
-                     "- ExecuteMso co the da khong thuc su mo dialog Recall, huy de tranh gui nham."
-            On Error Resume Next
-            readInsp.Close olDiscard
-            On Error GoTo Fail
+        ' Toi day gotDraft=True (da xac nhan trong retry loop): dang co 1 mail
+        ' CHUA GUI mo tren man hinh = cua so soan mail thay the. Lay chinh no.
+        Dim replInsp As Object
+        Set replInsp = Application.ActiveInspector
+        If replInsp Is Nothing Then
+            errMsg = "Mat cua so soan mail thay the truoc khi kip ghi noi dung."
             GoTo FailNoErrObj
         End If
 
-        Dim replInsp As Object
-        Set replInsp = Application.ActiveInspector
-        If replInsp Is readInsp Then
-            errMsg = "Cua so active van la mail goc (khong phai cua so thay the moi) " & _
+        Dim replMail As Object
+        Set replMail = replInsp.CurrentItem
+        If replMail Is Nothing Then
+            errMsg = "Khong doc duoc CurrentItem cua cua so mail thay the."
+            GoTo FailNoErrObj
+        End If
+
+        ' Chot an toan cuoi cung: TUYET DOI khong ghi de/gui neu day khong phai
+        ' la mail chua gui - tranh lap lai su co "ghi de + gui lai chinh mail goc".
+        If replMail.Class <> olMail Then
+            errMsg = "Item dang mo khong phai MailItem - huy de tranh gui nham."
+            GoTo FailNoErrObj
+        End If
+        If replMail.Sent <> False Then
+            errMsg = "Item dang mo la mail DA GUI (.Sent=True), khong phai ban nhap thay the " & _
                      "- huy de tranh ghi de/gui lai chinh mail goc."
             GoTo FailNoErrObj
         End If
-        If Not replInsp Is Nothing Then
-            Dim replMail As Object
-            Set replMail = replInsp.CurrentItem
-            If Not replMail Is Nothing Then
-                If replMail.Class = olMail Then
-                    replMail.Subject = replSubject
-                    replMail.HTMLBody = replHTML
-                    replMail.send
-                End If
-            End If
-        End If
+
+        replMail.Subject = replSubject
+        replMail.HTMLBody = replHTML
+        replMail.send
     End If
 
     On Error Resume Next
