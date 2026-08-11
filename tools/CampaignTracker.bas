@@ -1,11 +1,22 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.23
+' SHB CM Campaign Tracker v4.24
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.23
+'   - Lop kiem tra moi cua v4.23 xac nhan dung nghi ngo: ExecuteMso silent no-op
+'     that (bao "Loi: Khong thay cua so mail thay the moi mo ra"). Theo tai lieu
+'     MS, ExecuteMso khong lam gi (khong bao loi) neu control chua "enabled" -
+'     voi Recall, Outlook can thoi gian de xac dinh mail con recall duoc khong
+'     (co the phai hoi Exchange), delay cu (~1.3s) co ve chua du. Tang delay:
+'     cho mail mo ra 1s -> 3s, cho sau Activate 0.3s -> 2s (tong ~5s truoc khi
+'     goi ExecuteMso). Neu van "Loi" sau khi tang delay, kha nang cao la do
+'     nguyen nhan khac (vd server-side that su khong the recall - da doc/khac
+'     to chuc) chu khong phai do delay nua, luc do nen chuyen sang Redemption.
 '
 ' CHANGES vs v4.22
 '   - Tim ra co che that su gay hien tuong "chi gui lai, khong recall": khi
@@ -188,7 +199,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.23"
+Private Const VER       As String = "4.24"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -847,7 +858,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     ' Mo mail can recall ra cua so rieng de co the goi lenh Ribbon "RecallThisMessage"
     itm.Display
 
-    Dim tOpen As Date: tOpen = Now + TimeSerial(0, 0, 1)
+    Dim tOpen As Date: tOpen = Now + TimeSerial(0, 0, 3)
     Do While Now < tOpen: DoEvents: Loop
 
     Dim readInsp As Object
@@ -864,7 +875,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     On Error Resume Next
     readInsp.Activate
     On Error GoTo Fail
-    Dim tFocus As Date: tFocus = Now + TimeSerial(0, 0, 0) + (0.3 / 86400)
+    Dim tFocus As Date: tFocus = Now + TimeSerial(0, 0, 2)
     Do While Now < tFocus: DoEvents: Loop
     If Not (Application.ActiveInspector Is readInsp) Then
         errMsg = "Cua so mail khong lay duoc focus (Activate that bai) - " & _
