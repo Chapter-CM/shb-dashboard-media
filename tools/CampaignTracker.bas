@@ -1,11 +1,29 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.34
+' SHB CM Campaign Tracker v4.35
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.34
+'   - CHAN DOAN v4.34 DA CHUNG MINH NGUYEN NHAN GOC. Khi chi gui {DOWN} (khong
+'     gui Enter): dialog Recall HIEN RA that, radio "...and replace" DUOC CHON
+'     dung, va sau khi bam OK bang tay thi toan bo phan con lai chay hoan hao
+'     (Tim thay 2 / Da recall 2 / Loi 0, co notification that + mail thay the
+'     duoc gui). => Dialog, ExecuteMso, {DOWN}, va logic phat hien .Sent deu
+'     DUNG. Thu pham duy nhat: phim Enter di QUA SAT phim DOWN - khi gui
+'     "{DOWN}~" cung luc, Enter duoc xu ly TRUOC khi DOWN kip chuyen radio, nen
+'     OK bam voi lua chon mac dinh (delete-only). Dung y hien tuong "chi xoa
+'     khong replace" bao cao ngay tu dau.
+'   - Khong the chen delay giua 2 phim tu VBA vi ExecuteMso mo dialog MODAL va
+'     CHAN toan bo code VBA - moi SendKeys deu phai gui TRUOC khi goi ExecuteMso.
+'     Giai phap: ghi 1 file .vbs tam roi Shell bang wscript (tien trinh RIENG,
+'     chay song song trong luc VBA bi chan): script ngu 1.2s cho dialog hien ra,
+'     gui {DOWN}, ngu them 0.6s cho radio kip doi, roi moi gui Enter.
+'   - Bo hang so chan doan DIAG_REPLACE_NO_ENTER. Tang thoi gian poll tim cua so
+'     thay the 5s -> 8s cho phu hop voi ~1.8s script ngu truoc khi bam OK.
 '
 ' CHANGES vs v4.33
 '   - ExecMs do duoc = 31/31/20ms -> KHONG ket luan duoc, vi do phan giai cua
@@ -314,12 +332,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.34"
-
-' CHAN DOAN (tam thoi): True = kieu replace chi gui {DOWN}, KHONG gui Enter, de
-' dialog Recall DUNG YEN tren man hinh cho ta nhin thay no co mo that khong va
-' radio nao dang duoc chon. Dat lai False sau khi chan doan xong.
-Private Const DIAG_REPLACE_NO_ENTER As Boolean = True
+Private Const VER       As String = "4.35"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1033,17 +1046,23 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         ' luon dong lenh - phai SendKeys TRUOC (dua phim vao hang doi input cua
         ' Windows) roi moi goi ExecuteMso, dialog vua mo len se tu "an" phim.
         If doReplace Then
-            If DIAG_REPLACE_NO_ENTER Then
-                ' CHE DO CHAN DOAN: chi gui {DOWN}, KHONG gui Enter.
-                '   - Neu dialog CO mo va nhan duoc phim -> dialog se DUNG YEN
-                '     tren man hinh cho nguoi dung (ExecuteMso bi chan rat lau,
-                '     ExecMs se rat lon) va nguoi dung NHIN THAY duoc radio nao
-                '     dang duoc chon -> van de chi la o phim Enter/{DOWN}.
-                '   - Neu KHONG co gi hien ra va ExecMs van ~20ms -> lenh Recall
-                '     bi DISABLE, ExecuteMso silent no-op (van de hoan toan khac).
-                SendKeys "{DOWN}", False
-            Else
-                SendKeys "{DOWN}~", False
+            ' NGUYEN NHAN GOC (da chung minh bang chan doan v4.34): dialog CO mo,
+            ' phim {DOWN} CO toi noi va CHON DUNG radio "replace" - chi rieng
+            ' phim Enter di QUA SAT phim DOWN. Khi gui "{DOWN}~" cung luc, Enter
+            ' duoc xu ly TRUOC khi DOWN kip chuyen radio -> OK bam voi lua chon
+            ' mac dinh (delete-only) -> khong co cua so thay the -> GotDraft=False.
+            ' Dung y hien tuong "chi xoa khong replace" bao cao tu dau.
+            '
+            ' Khong the chen delay giua 2 phim tu VBA, vi ExecuteMso CHAN toan bo
+            ' code khi dialog dang mo. Giai phap: nho MOT TIEN TRINH RIENG
+            ' (wscript) gui phim - no chay song song trong luc VBA bi chan, nen
+            ' co the tu ngu giua 2 phim.
+            If Not QueueReplaceKeysExternally() Then
+                errMsg = "Khong tao/chay duoc script gui phim ben ngoai (wscript co the bi chan)."
+                On Error Resume Next
+                readInsp.Close olDiscard
+                On Error GoTo Fail
+                GoTo FailNoErrObj
             End If
         Else
             SendKeys "~", False   ' Enter = OK (mac dinh dang chon "Delete unread copies")
@@ -1082,7 +1101,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         Dim gotDraft As Boolean: gotDraft = False
         Dim curInsp As Object, curItem As Object
         If doReplace Then
-            Dim tWpoll As Date: tWpoll = Now + TimeSerial(0, 0, 5)
+            Dim tWpoll As Date: tWpoll = Now + TimeSerial(0, 0, 8)
             Do
                 DoEvents
                 inspCountAfter = Application.Inspectors.Count
@@ -1195,6 +1214,43 @@ Fail:
     On Error GoTo 0
 FailNoErrObj:
     RecallOneItem = False
+End Function
+
+
+' ================================================================
+' QUEUE REPLACE KEYS EXTERNALLY
+' Ghi 1 file .vbs tam roi chay bang wscript (KHONG cho ket qua - chay
+' song song). Script nay ngu mot chut cho dialog "Message Recall" kip
+' hien ra, gui {DOWN} de chon radio "...and replace", NGU TIEP de radio
+' kip doi, roi moi gui Enter de bam OK.
+'
+' Vi sao phai lam vong ve nhu vay: SendKeys tu VBA phai gui TRUOC khi
+' goi ExecuteMso (ExecuteMso mo dialog MODAL, chan luon code VBA), nen
+' khong cach nao chen delay giua {DOWN} va Enter tu ben trong VBA -
+' hai phim di sat nhau, Enter bam OK truoc khi DOWN kip chuyen radio.
+' Tien trinh wscript rieng thi chay song song, ngu bao lau tuy y.
+' ================================================================
+Private Function QueueReplaceKeysExternally() As Boolean
+    On Error GoTo Fail
+
+    Dim fso As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim vbsPath As String
+    vbsPath = fso.GetSpecialFolder(2) & "\shb_recall_keys.vbs"   ' 2 = TemporaryFolder
+
+    Dim ts As Object: Set ts = fso.CreateTextFile(vbsPath, True)
+    ts.WriteLine "Set sh = CreateObject(""WScript.Shell"")"
+    ts.WriteLine "WScript.Sleep 1200"        ' cho dialog Recall hien ra
+    ts.WriteLine "sh.SendKeys ""{DOWN}"""    ' chon radio "...and replace"
+    ts.WriteLine "WScript.Sleep 600"         ' cho radio doi that su
+    ts.WriteLine "sh.SendKeys ""~"""         ' Enter = OK
+    ts.Close
+
+    Shell "wscript.exe """ & vbsPath & """", vbHide
+    QueueReplaceKeysExternally = True
+    Exit Function
+
+Fail:
+    QueueReplaceKeysExternally = False
 End Function
 
 
