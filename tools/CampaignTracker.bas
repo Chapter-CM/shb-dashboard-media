@@ -1,11 +1,22 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.28
+' SHB CM Campaign Tracker v4.29
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.28
+'   - Nguoi dung xac nhan delete-only mode THAT SU hoat dong (co nhan duoc mail
+'     "Message Recall Success" that tu Exchange, khong phai "thanh cong gia"),
+'     nhung cham (~15-20s/mail do cac lop delay/retry them vao qua nhieu vong
+'     debug truoc). Voi 3000 mail se mat hang gio. Giam bot cac khoang cho
+'     (khong bo han, van giu du an toan da kiem chung): tOpen 3s->1.5s, tFocus
+'     2s->1s, tA (moi lan retry) 1s->0.4s, tW (nhanh delete-only) 1s->0.4s,
+'     tEnd2 1s->0.4s. Uoc tinh con ~3.5-4s/mail cho truong hop thanh cong ngay
+'     lan dau (delete-only, da xac nhan on dinh) thay vi ~6-8s truoc do. Kieu
+'     replace van giu nguyen poll toi da 4s (chua kiem chung on dinh nhu delete).
 '
 ' CHANGES vs v4.27
 '   - Nguoi dung xac nhan: kieu delete-only DA CHAY DUOC on dinh o v4.26, chi
@@ -238,7 +249,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.28"
+Private Const VER       As String = "4.29"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -897,7 +908,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     ' Mo mail can recall ra cua so rieng de co the goi lenh Ribbon "RecallThisMessage"
     itm.Display
 
-    Dim tOpen As Date: tOpen = Now + TimeSerial(0, 0, 3)
+    Dim tOpen As Date: tOpen = Now + TimeSerial(0, 0, 0) + (1.5 / 86400)
     Do While Now < tOpen: DoEvents: Loop
 
     Dim readInsp As Object
@@ -914,7 +925,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
     On Error Resume Next
     readInsp.Activate
     On Error GoTo Fail
-    Dim tFocus As Date: tFocus = Now + TimeSerial(0, 0, 2)
+    Dim tFocus As Date: tFocus = Now + TimeSerial(0, 0, 1)
     Do While Now < tFocus: DoEvents: Loop
     If Not (Application.ActiveInspector Is readInsp) Then
         errMsg = "Cua so mail khong lay duoc focus (Activate that bai) - " & _
@@ -940,7 +951,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         readInsp.Activate
         Dim ActErr As Long: ActErr = Err.Number
         On Error GoTo Fail
-        Dim tA As Date: tA = Now + TimeSerial(0, 0, 1)
+        Dim tA As Date: tA = Now + TimeSerial(0, 0, 0) + (0.4 / 86400)
         Do While Now < tA: DoEvents: Loop
         Dim wasActive As Boolean: wasActive = (Application.ActiveInspector Is readInsp)
 
@@ -976,7 +987,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
                 If inspCountAfter > inspCountBefore And Not stillSameInsp Then Exit Do
             Loop While Now < tWpoll
         Else
-            Dim tW As Date: tW = Now + TimeSerial(0, 0, 1)
+            Dim tW As Date: tW = Now + TimeSerial(0, 0, 0) + (0.4 / 86400)
             Do While Now < tW: DoEvents: Loop
             inspCountAfter = Application.Inspectors.Count
             stillSameInsp = (Application.ActiveInspector Is readInsp)
@@ -1017,7 +1028,7 @@ Private Function RecallOneItem(itm As Object, doReplace As Boolean, _
         GoTo FailNoErrObj
     End If
 
-    Dim tEnd2 As Date: tEnd2 = Now + TimeSerial(0, 0, 1)
+    Dim tEnd2 As Date: tEnd2 = Now + TimeSerial(0, 0, 0) + (0.4 / 86400)
     Do While Now < tEnd2: DoEvents: Loop
 
     If doReplace Then
