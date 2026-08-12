@@ -1,11 +1,20 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.42
+' SHB CM Campaign Tracker v4.43
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.42
+'   - Nguoi dung lo ngai voi campaign lon (vd 3000 mail), Inbox se ngap trong
+'     mail thong bao "Message Recall Success/Failure" (checkbox nay khong the
+'     tat an toan tu trong dialog, xem CHANGES vs v4.41). Them macro moi
+'     CleanRecallNotifications(): quet Inbox, xoa het mail co Subject bat dau
+'     bang "Message Recall Success" hoac "Message Recall Failure". Chay SAU
+'     khi RecallCampaign() da xong (khong dung SendKeys/ExecuteMso gi ca nen
+'     hoan toan khong anh huong den ket qua recall).
 '
 ' CHANGES vs v4.41
 '   - Bo han tuy chon tat notification "Recall Success/Failure": nguoi dung
@@ -61,7 +70,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.42"
+Private Const VER       As String = "4.43"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -756,6 +765,43 @@ Fail:
 FailNoErrObj:
     RecallOneItem = False
 End Function
+
+
+' ================================================================
+' PUBLIC: CleanRecallNotifications
+' Xoa hang loat cac mail thong bao "Message Recall Success/Failure"
+' trong Inbox - dung SAU khi chay RecallCampaign() cho campaign lon
+' (vd 3000 nguoi -> co the nhan ve hang nghin mail thong bao rieng le).
+'
+' AN TOAN HON nhieu so voi tim cach tat checkbox "Tell me if recall
+' succeeds or fails" ngay trong dialog Recall (da thu va lap lai loi
+' cua tinh nang "replace" - Tab/Space lam sai lech lua chon nut OK).
+' Cach nay khong dung SendKeys/ExecuteMso gi ca, chi quet + xoa item
+' co san trong Inbox SAU KHI moi thu da xong, nen khong the anh huong
+' toi ket qua recall.
+' ================================================================
+Public Sub CleanRecallNotifications()
+    Dim ib As folder
+    Set ib = Application.Session.GetDefaultFolder(olFolderInbox)
+
+    Dim n As Long: n = 0
+    Dim i As Long
+    For i = ib.Items.Count To 1 Step -1
+        Dim itm As Object: Set itm = ib.Items(i)
+        Dim subj As String: subj = ""
+        On Error Resume Next
+        subj = itm.subject
+        On Error GoTo 0
+        If Left(subj, 22) = "Message Recall Success" Or _
+           Left(subj, 22) = "Message Recall Failure" Then
+            itm.Delete
+            n = n + 1
+        End If
+    Next i
+
+    MsgBox "Da xoa " & n & " mail thong bao Recall Success/Failure trong Inbox.", _
+           vbInformation, "SHB Tracker v" & VER
+End Sub
 
 
 ' ================================================================
