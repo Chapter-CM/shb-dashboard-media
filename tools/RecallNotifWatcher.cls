@@ -14,10 +14,11 @@ Option Explicit
 ' module nhu CampaignTracker.bas)
 '
 ' Nghe su kien Outlook.Items.ItemAdd tren Inbox - moi khi co mail MOI
-' ve toi Inbox, tu dong kiem tra va XOA NGAY neu la mail thong bao
-' "Message Recall Success/Failure". Chay SONG SONG voi RecallCampaign()
-' dang gui recall (khong can doi recall xong roi chay rieng buoc don
-' dep nhu CleanRecallNotifications()).
+' ve toi Inbox, tu dong kiem tra va XOA VINH VIEN NGAY neu la mail
+' thong bao "Message Recall Success/Failure" (khong qua Deleted Items -
+' xem ghi chu trong InboxItems_ItemAdd). Chay SONG SONG voi
+' RecallCampaign() dang gui recall (khong can doi recall xong roi chay
+' rieng buoc don dep nhu CleanRecallNotifications()).
 '
 ' CACH IMPORT (VBA Editor - Alt+F11):
 '   File > Import File... > chon file RecallNotifWatcher.cls nay.
@@ -42,6 +43,13 @@ Private Sub InboxItems_ItemAdd(ByVal Item As Object)
         Dim subj As String: subj = Item.subject
         If Left(subj, 22) = "Message Recall Success" Or _
            Left(subj, 22) = "Message Recall Failure" Then
+            ' Xoa VINH VIEN, khong qua Deleted Items: goi .Delete 2 LAN LIEN
+            ' TIEP. Lan 1 chuyen item tu Inbox sang Deleted Items (xoa mem
+            ' binh thuong). Lan 2, vi luc nay item da nam trong Deleted Items,
+            ' .Delete tren chinh no se XOA THAT SU (khong con noi nao de
+            ' "chuyen" toi nua) - day la cach chuan de permanent-delete tu VBA
+            ' ma khong can Extended MAPI/Redemption.
+            Item.Delete
             Item.Delete
         End If
     End If

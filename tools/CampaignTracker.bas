@@ -1,11 +1,22 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.44
+' SHB CM Campaign Tracker v4.45
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.44
+'   - Theo yeu cau: xoa thong bao Recall VINH VIEN, khong qua Deleted Items
+'     (truoc do .Delete chi chuyen mem vao Deleted Items). Ca
+'     RecallNotifWatcher.cls (ItemAdd) va CleanRecallNotifications() gio goi
+'     .Delete 2 LAN LIEN TIEP tren cung 1 item: lan 1 chuyen item sang Deleted
+'     Items, lan 2 (item luc nay da nam trong Deleted Items) se xoa that su -
+'     day la cach chuan de permanent-delete tu VBA khong can Extended
+'     MAPI/Redemption. KHONG dong toi Sent Items (mail goc van giu nguyen sau
+'     khi recall, can thiet de RecallCampaign con loc lai dung campaign qua
+'     UserProperties CMSlug).
 '
 ' CHANGES vs v4.43
 '   - Nguoi dung muon xoa thong bao SONG SONG voi luc recall dang chay, khong
@@ -81,7 +92,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.44"
+Private Const VER       As String = "4.45"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -814,13 +825,16 @@ Public Sub CleanRecallNotifications()
         On Error GoTo 0
         If Left(subj, 22) = "Message Recall Success" Or _
            Left(subj, 22) = "Message Recall Failure" Then
+            ' Xoa vinh vien (khong qua Deleted Items) - goi .Delete 2 lan lien
+            ' tiep, giong RecallNotifWatcher.cls (xem ghi chu trong file do).
+            itm.Delete
             itm.Delete
             n = n + 1
         End If
     Next i
 
-    MsgBox "Da xoa " & n & " mail thong bao Recall Success/Failure trong Inbox.", _
-           vbInformation, "SHB Tracker v" & VER
+    MsgBox "Da xoa vinh vien " & n & " mail thong bao Recall Success/Failure " & _
+           "(khong qua Deleted Items).", vbInformation, "SHB Tracker v" & VER
 End Sub
 
 
