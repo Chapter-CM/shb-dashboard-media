@@ -1,11 +1,22 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.43
+' SHB CM Campaign Tracker v4.44
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
+'
+' CHANGES vs v4.43
+'   - Nguoi dung muon xoa thong bao SONG SONG voi luc recall dang chay, khong
+'     phai doi xong roi chay CleanRecallNotifications() rieng. Them class
+'     module moi RecallNotifWatcher.cls (WithEvents Outlook.Items.ItemAdd tren
+'     Inbox) - moi mail moi ve toi se duoc kiem tra ngay, xoa tuc thi neu la
+'     "Message Recall Success/Failure". Them RecallCampaign TU DONG bat watcher
+'     nay (StartRecallNotificationWatcher) truoc khi chay batch. Them 2 macro
+'     StartRecallNotificationWatcher()/StopRecallNotificationWatcher() de bat/
+'     tat rieng khi can. CleanRecallNotifications() (quet don sau) van giu lai
+'     lam phuong an du phong (vd Outlook bi restart giua chung mat watcher).
 '
 ' CHANGES vs v4.42
 '   - Nguoi dung lo ngai voi campaign lon (vd 3000 mail), Inbox se ngap trong
@@ -70,12 +81,15 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.43"
+Private Const VER       As String = "4.44"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
 Private m_Bag(0 To 399) As Object
 Private m_BagN           As Long
+
+' Giu song bien watcher trong suot phien Outlook (xem RecallNotifWatcher.cls)
+Private m_RecallWatcher As RecallNotifWatcher
 
 ' ================================================================
 ' PUBLIC: SendCampaign
@@ -618,6 +632,12 @@ Public Sub RecallCampaign()
     ' Bo tinh nang nay, quay ve dung "~" mot phim - co che DUY NHAT da kiem
     ' chung on dinh 100%. Checkbox se luon giu nguyen trang thai tick mac dinh
     ' cua Outlook (co nhan notification rieng cho tung nguoi).)
+    '
+    ' De khong bi ngap Inbox voi hang nghin mail thong bao "Message Recall
+    ' Success/Failure" (campaign lon), tu dong bat watcher (RecallNotifWatcher.cls)
+    ' - moi thong bao ve toi Inbox se bi xoa NGAY, chay song song voi batch nay,
+    ' khong can doi recall xong roi don dep rieng.
+    StartRecallNotificationWatcher
 
     Dim sentFolder As folder
     Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
@@ -801,6 +821,34 @@ Public Sub CleanRecallNotifications()
 
     MsgBox "Da xoa " & n & " mail thong bao Recall Success/Failure trong Inbox.", _
            vbInformation, "SHB Tracker v" & VER
+End Sub
+
+
+' ================================================================
+' PUBLIC: StartRecallNotificationWatcher / StopRecallNotificationWatcher
+' Bat/tat "nghe" su kien Inbox co mail moi (RecallNotifWatcher.cls) de
+' TU DONG xoa NGAY cac mail "Message Recall Success/Failure" ngay khi
+' chung vua ve toi, chay SONG SONG voi luc RecallCampaign() dang gui -
+' khong can doi xong roi chay CleanRecallNotifications() rieng.
+'
+' RecallCampaign() da TU DONG goi StartRecallNotificationWatcher o dau,
+' nen thong thuong khong can goi tay - 2 macro nay danh cho truong hop
+' muon bat/tat rieng (vd muon watcher chay ca khi khong dung
+' RecallCampaign, hoac muon tat de xem lai thong bao tho).
+'
+' LUU Y: watcher chi song trong PHIEN Outlook hien tai. Neu dong/mo lai
+' Outlook giua luc dang recall, phai chay lai Start.
+' ================================================================
+Public Sub StartRecallNotificationWatcher()
+    If Not m_RecallWatcher Is Nothing Then Exit Sub   ' da bat san, khong bat lai
+
+    Set m_RecallWatcher = New RecallNotifWatcher
+    Set m_RecallWatcher.InboxItems = Application.Session.GetDefaultFolder(olFolderInbox).Items
+End Sub
+
+Public Sub StopRecallNotificationWatcher()
+    Set m_RecallWatcher = Nothing
+    MsgBox "Da tat theo doi tu dong xoa thong bao Recall.", vbInformation, "SHB Tracker v" & VER
 End Sub
 
 
