@@ -1,4 +1,59 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 20/07/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 24/08/2026)
+
+## 🔧 24/08 — Jira dashboard: ẩn Squad/Dự án 0 task, thêm bảng Epic Văn hóa, đổi tiêu chí Xuất sắc nhất — nhánh `claude/dashboard-empty-projects-squads-vrb18p`
+
+**Bối cảnh:** User báo panel "Phân tích theo Đối tượng" trên Jira dashboard (`cm-dashboard`, GitLab
+nội bộ) hiện cả Squad/Dự án không có task nào trong kỳ đang xem, làm dashboard dài không cần thiết.
+
+**File liên quan:** `public/api/jira/index.html` trên GitLab (`cm-dashboard`) — bản đối chiếu lưu tại
+`reference/cm-dashboard-original/public/index.html` trong repo này. **Đây là SPA React, không có
+build step** — sửa trực tiếp trên GitLab (Edit online hoặc Web IDE), không dùng git/CMD từ local vì
+máy user bị khoá PowerShell Constrained Language Mode (không chạy được `New-Object`/`[System.IO.File]`)
+và CMD làm hỏng ký tự tiếng Việt khi truyền qua `-Command`. Cách làm việc đã chốt: user tải file
+`index.html` hiện tại từ GitLab gửi qua chat → Claude sửa đúng chỗ cần bằng Edit tool (không phải viết
+lại cả file) → gửi lại file đã sửa → user dùng nút **Replace** trên GitLab để thay thế → merge.
+
+**Sự cố đã gặp (rút kinh nghiệm):** Lần đầu Claude gửi nhầm bản snapshot cũ trong
+`reference/cm-dashboard-original/` (đã lệch so với bản thật trên GitLab từ trước) để user Replace —
+làm mất một số thay đổi UI + đổi nhầm `logoUrl` sang ảnh cũ. Đã phải **revert commit** ngay trên
+GitLab. Từ đó về sau: **luôn yêu cầu user gửi bản file hiện tại thật từ GitLab trước khi sửa**, không
+bao giờ tự ý dùng bản snapshot cũ để Replace nguyên file nữa.
+
+### Các thay đổi đã áp dụng (theo thứ tự)
+1. **Ẩn Squad/Dự án có 0 task**: `dtSquad`/`dtDuan` (tính từ toàn bộ `ACTIVE_DATA`, không lọc theo kỳ
+   đang xem) → thêm `.filter(x=>x.t>0)` sau khi map, chỉ giữ mục có task trong kỳ/bộ lọc hiện tại.
+2. **Thêm bảng "Văn hóa"** cạnh Squad/Dự án trong panel "Phân tích theo Đối tượng": thêm mảng `dtVH`
+   (nhóm theo `doi_tuong` với `loai==="Van_hoa"`, cùng logic ẩn 0 task), đổi lưới từ `1fr 1fr` (2 cột)
+   sang `1fr 1fr 1fr` (3 cột), thêm card thứ 3 vào mảng render ở `case "doituong"`.
+   - Bug phát sinh: dữ liệu Jira có 2 cách viết "Văn hóa"/"Văn hoá" (khác vị trí dấu) cho tiền tố tên
+     Epic — code chỉ cắt được 1 kiểu, để sót "Văn hoá quy trình xử lý sự cố..." chưa bị cắt tiền tố.
+     Đã sửa `dt.replace("Văn hóa ","").replace("Văn hoá ","")` để cắt cả 2 kiểu.
+   - Tiêu đề cột ban đầu đặt "Epic Văn hóa" — đổi lại thành "Văn hóa" cho khớp style "Squad"/"Dự án".
+3. **Đổi tiêu chí "🏆 Xuất sắc nhất"**: từ xếp theo `%` hoàn thành (`cr`, dòng `topPerformer=...
+   reduce((b,a)=>a.cr>b.cr?a:b)`) sang xếp theo **tổng số task đã hoàn thành nhiều nhất**
+   (`reduce((b,a)=>a.closed>b.closed?a:b)`). Card vẫn hiển thị số `%` như cũ (chưa đổi phần hiển thị,
+   chỉ đổi tiêu chí xếp hạng) — nếu sau này cần hiện số lượng task thay vì %, sửa thêm ở JSX render
+   card `topPerformer` (khu vực gần dòng có nhãn `cfg.ui.completionLabel`/"Hoàn thành").
+
+**Đã xác nhận trên dashboard thật** (ảnh chụp màn hình user gửi): panel chỉ còn Squad/Dự án có task,
+bảng Văn hóa hiển thị đúng tên (không còn thừa "Văn hoá" lặp), pipeline GitLab pass, đã merge vào
+`main` của `cm-dashboard`.
+
+### Quy tắc mới đã lưu (CLAUDE.md mục 7B)
+User xác nhận: khi một thay đổi **đã được áp dụng/merge trực tiếp trên GitLab Internal SHB**
+(production), Claude được phép **tự động** commit + push + tạo PR + merge lên GitHub ngay sau khi
+xong việc, **không cần hỏi lại từng lần** — để bản lưu trên GitHub luôn khớp 1:1 với GitLab. Áp dụng
+cho `reference/cm-dashboard-original/public/index.html` và các file tương tự dùng để đối chiếu với
+GitLab, không áp dụng ngoài mục đích đồng bộ này. Xem chi tiết mục 7B trong `CLAUDE.md`.
+
+**Việc còn dang dở / cần lưu ý cho phiên sau:**
+- Nếu tiếp tục sửa `reference/cm-dashboard-original/public/index.html`: **luôn xin bản file hiện tại
+  từ GitLab trước**, không dùng bản trong repo này làm gốc để Replace nguyên file (chỉ dùng để đọc/
+  đối chiếu code, hoặc sau khi đã đồng bộ lại 1:1 như phiên này).
+- Máy user chạy PowerShell Constrained Language Mode + CMD không xử lý đúng ký tự có dấu → không đề
+  xuất script CMD/PowerShell để sửa file trực tiếp trên máy user nữa, ưu tiên luồng gửi file qua chat.
+
+---
 
 ## 🔧 20/07 — Fix hàng loạt: Lượt tương tác hụt số, quy trình quét tự động, ER/định dạng đúng chuẩn Facebook, gauge Email — nhánh `claude/luot-tuong-tac-sai-gym1kg`
 
