@@ -1073,8 +1073,8 @@ useEffect(()=>{try{localStorage.setItem("shb_presets",JSON.stringify(presets));}
       });
     }
   },[allHangMucChuan.join(',')]);
-  const dtSquad=[...new Set(ACTIVE_DATA.filter(d=>d.loai==="Squad").map(d=>d.doi_tuong))].sort().map(dt=>({name:dt,t:data.filter(d=>d.doi_tuong===dt).length,_f:dt}));
-  const dtDuan=[...new Set(ACTIVE_DATA.filter(d=>d.loai==="Du_an").map(d=>d.doi_tuong))].sort().map(dt=>({name:dt.replace("Dự án ",""),t:data.filter(d=>d.doi_tuong===dt).length,_f:dt}));
+  const dtSquad=[...new Set(ACTIVE_DATA.filter(d=>d.loai==="Squad").map(d=>d.doi_tuong))].sort().map(dt=>({name:dt,t:data.filter(d=>d.doi_tuong===dt).length,_f:dt})).filter(x=>x.t>0);
+  const dtDuan=[...new Set(ACTIVE_DATA.filter(d=>d.loai==="Du_an").map(d=>d.doi_tuong))].sort().map(dt=>({name:dt.replace("Dự án ",""),t:data.filter(d=>d.doi_tuong===dt).length,_f:dt})).filter(x=>x.t>0);
   const vhPie=dynNhomVH.map(n=>({name:getNhomLabel(n),value:data.filter(d=>d.loai==="Van_hoa"&&d.nhom===n).length}));
   const rS=sN?Math.round(data.filter(d=>d.loai==="Squad"&&getGrp(d.status)?.id==="closed").length/sN*100):0;
   const rD=dN?Math.round(data.filter(d=>d.loai==="Du_an"&&getGrp(d.status)?.id==="closed").length/dN*100):0;
