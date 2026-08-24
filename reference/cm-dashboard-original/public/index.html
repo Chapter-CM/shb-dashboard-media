@@ -1032,7 +1032,7 @@ useEffect(()=>{try{localStorage.setItem("shb_presets",JSON.stringify(presets));}
   }).filter(a=>a.t>0).sort((a,b)=>b.t-a.t);
 
   const teamCR=getCompletionRate(data,SG);
-  const topPerformer=assigneeRows.length?assigneeRows.reduce((b,a)=>a.cr>b.cr?a:b):null;
+  const topPerformer=assigneeRows.length?assigneeRows.reduce((b,a)=>a.closed>b.closed?a:b):null;
   const mostOverdue=assigneeRows.length?assigneeRows.reduce((w,a)=>a.od>w.od?a:w):null;
 
   const hmMap={};data.forEach(d=>{hmMap[d.hang_muc]=(hmMap[d.hang_muc]||0)+1;});
