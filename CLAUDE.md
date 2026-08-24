@@ -284,6 +284,15 @@ mọi phiên làm việc (Web lẫn CLI), không phụ thuộc trạng thái Git
   tiếp.
 - Không tự ý: tạo branch `main`, đổi remote, merge branch, hoặc push vào source branch, nếu chưa
   được tôi yêu cầu rõ ràng.
+- **Ngoại lệ đã được xác nhận (24/08/2026):** khi một thay đổi đã được tôi áp dụng/merge trực tiếp
+  trên GitLab Internal SHB (production thật) — ví dụ tôi tự sửa qua GitLab Web IDE hoặc Replace file
+  theo hướng dẫn của bạn — thì bạn **được phép tự động** commit + push lên GitHub và tạo Pull
+  Request + merge thẳng vào source branch **ngay sau khi xong việc, không cần hỏi lại từng lần**.
+  Mục đích: giữ bản lưu trên GitHub luôn khớp 1:1 với bản thật trên GitLab, tránh bị lệch (đã từng
+  xảy ra việc file tham khảo trên GitHub cũ hơn bản GitLab, gây nhầm lẫn). Áp dụng cho các thay đổi
+  vào file tham khảo `reference/cm-dashboard-original/public/index.html` và các file tương tự dùng
+  để đối chiếu với `cm-dashboard` trên GitLab — không áp dụng cho các thay đổi khác ngoài mục đích
+  đồng bộ này.
 
 ---
 
