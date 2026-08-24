@@ -1,0 +1,46 @@
+HUONG DAN DAN VAO ThisOutlookSession (khong phai file .cls/.bas rieng - day
+la module CO SAN trong moi VBA Project cua Outlook, nam trong nhanh
+"Microsoft Outlook Objects" o Project Explorer, KHONG import file duoc,
+phai copy doan code duoi day roi dan truc tiep vao code pane cua no):
+
+1. VBA Editor (Alt+F11) > Project Explorer > mo rong "Microsoft Outlook
+   Objects" > double-click "ThisOutlookSession" de mo code pane cua no.
+2. Neu code pane da co san noi dung (vd Application_Startup cu...), dat
+   con tro xuong CUOI cung, roi dan doan code duoi day vao (KHONG xoa code
+   cu da co san, chi them vao).
+3. Neu code pane dang trong hoan toan, dan thang doan duoi vao.
+4. Debug > Compile VBAProject de kiem tra khong loi.
+5. Luu VBA project (Ctrl+S trong Outlook, khong phai trong VBA Editor).
+
+------------------------------------------------------------------
+Private Sub Application_Reminder(ByVal Item As Object)
+    On Error Resume Next
+    If TypeName(Item) = "TaskItem" Then
+        If Left(Item.subject, 17) = "[SHB-AutoShrink] " Then
+            Dim slugX As String: slugX = Trim(Item.body)
+            If Len(slugX) > 0 Then
+                Call Module1.ShrinkCampaignSentItems(slugX)
+            End If
+            Item.ReminderSet = False
+            Item.Delete
+        End If
+    End If
+    On Error GoTo 0
+End Sub
+------------------------------------------------------------------
+
+GHI CHU:
+- "Module1" trong dong "Call Module1.ShrinkCampaignSentItems(slugX)" phai
+  DUNG TEN module dang chua CampaignTracker.bas trong Project Explorer cua
+  ban (mo Project Explorer de kiem tra ten chinh xac - neu ban dat ten
+  khac "Module1" luc import, doi lai cho khop).
+- Tac dung: sau khi SendCampaign() gui xong ma con mail chua kip rut gon,
+  no dat lich nhac (TaskItem an) 10 phut sau. Khi Outlook "nho" den lich
+  nhac do (dung luc Outlook dang mo), doan code nay se tu dong chay ngam
+  ShrinkCampaignSentItems() mot lan nua roi tu xoa task - khong can ban
+  lam gi them.
+- CO THE hien 1 hop thoai Outlook Reminder nho luc do (do co che Reminder
+  chuan cua Outlook) - neu thay, chi can bo qua (task se tu xoa ngay sau
+  do, thuong truoc khi ban kip thay).
+- Neu dong Outlook truoc khi den han 10 phut, task se cho den lan mo lai
+  Outlook tiep theo moi chay (hanh vi Reminder binh thuong cua Outlook).
