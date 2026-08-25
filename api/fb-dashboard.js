@@ -958,7 +958,7 @@ function mixSection(d){
 }
 function setCtab(t){_ctab=t;paint();}
 function isVideoPost(p){return /Reel|Video|Live/i.test(p.type||'')||pmv(p,'video_view_time')>0||pmv(p,'video_view_three_second')>0;}
-function postLink(p,txt){var l=p.permalink&&p.permalink!=='#'?p.permalink:'';return l?'<a href="'+esc(l)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="nm" style="color:var(--text);text-decoration:underline solid var(--stroke-2)" data-tip="Mở bài trên Facebook ↗">'+esc(txt)+'</a>':'<span class="nm">'+esc(txt)+'</span>';}
+function postLink(p,txt){var l=p.permalink&&p.permalink!=='#'?p.permalink:'';var full=esc((p&&(p.msg||p.title))||txt);return l?'<a href="'+esc(l)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="nm" style="color:var(--text);text-decoration:underline solid var(--stroke-2)" title="'+full+'" data-tip="Mở bài trên Facebook ↗">'+esc(txt)+'</a>':'<span class="nm" title="'+full+'">'+esc(txt)+'</span>';}
 function contentSection(d){
   var F=_filter||{};
   var allRows=d.rows||[];
@@ -1244,7 +1244,7 @@ function executive(d,cur,prev){
     +'<div class="exec-kp"><div class="v">'+nf(viewsV)+'</div><div class="l">Lượt xem</div></div>'
     +'<div class="exec-kp"><div class="v">'+nf(engVv)+'</div><div class="l">Lượt tương tác</div></div>'
     +'<div class="exec-kp"><div class="v">'+nf(s.followers)+'</div><div class="l">Người theo dõi</div></div></div></div>';
-  var top=d.rows.slice(0,5).map(function(r){return '<tr><td><span class="nm">'+esc(r.p.msg.slice(0,46))+'</span></td><td><span class="pill p-neutral">'+esc(r.p.type)+'</span></td><td class="num">'+nf(r.p.views)+'</td><td class="num"><b>'+nf(r.eng)+'</b></td><td class="num">'+r.er+'%</td></tr>';}).join('');
+  var top=d.rows.slice(0,5).map(function(r){return '<tr><td><span class="nm" title="'+esc(r.p.msg)+'">'+esc(r.p.msg.slice(0,46))+'</span></td><td><span class="pill p-neutral">'+esc(r.p.type)+'</span></td><td class="num">'+nf(r.p.views)+'</td><td class="num"><b>'+nf(r.eng)+'</b></td><td class="num">'+r.er+'%</td></tr>';}).join('');
   var ins=insightsOf(d),ih='<div class="ins">';ins.slice(0,4).forEach(function(i){ih+='<div class="in '+(i.t==='warn'?'warn':'good')+'"><div class="mk"></div><div class="x">'+i.x+'</div></div>';});ih+='</div>';
   return masthead('ex')+'<div class="wrap"><section style="padding-top:22px">'+head
     +'<div class="panel"><div class="panel-h">Top 5 bài hiệu quả</div><div class="tw"><table><thead><tr><th>Bài viết</th><th>Loại</th><th class="num">Lượt xem</th><th class="num">Tương tác</th><th class="num">ER</th></tr></thead><tbody>'+top+'</tbody></table></div></div>'
