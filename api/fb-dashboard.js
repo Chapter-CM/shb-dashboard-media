@@ -870,6 +870,11 @@ function heroRow(d,cur,prev,ser){
     PS.views.forEach(function(p){if(inWin(p.ms)&&_iD[p.ms]===undefined)engMiss++;});
   }
   var engWarn=engMiss?' · <span class="ksub-down">⚠ thiếu '+engMiss+' ngày</span>':'';
+  // Lượt cảm xúc chỉ ĐÚNG với bài đã quét chi tiết (reaction_total>0, qua SHBCL_fetchAllPostReactions()).
+  // Bài chưa quét fallback về reactTotal(p.react) (thường =0 với nguồn Group/Content Library) —
+  // khiến tổng hụt so với số Facebook Cảm xúc thật của trang. Đếm rõ số bài còn thiếu để cảnh báo.
+  var reactMissN=cur.filter(function(p){return !(pmv(p,'reaction_total')>0);}).length;
+  var reactWarn=reactMissN?' · <span class="ksub-down">⚠ '+reactMissN+'/'+cur.length+' bài chưa quét chi tiết</span>':'';
   // 20/07/2026: xác nhận trực tiếp trên Facebook — tab "Lượt xem" KHÔNG có thẻ "Người
   // xem" (unique viewers) nào cả (chỉ có Tổng lượt xem/Xem ≥3s/≥1 phút/Thời gian xem).
   // Field "viewers" đang dùng KHÔNG rõ nguồn gốc thật, kể cả khi có số cũ đã bắt được
@@ -878,7 +883,7 @@ function heroRow(d,cur,prev,ser){
     card('Lượt tương tác',tnum(engV),(engDelta?engDelta+' so kỳ trước':'tổng tương tác kỳ này')+engWarn,engAct!=null?('Tổng tương tác Facebook báo cho trang, theo ngày hoạt động.'+(engMiss?' ⚠ Thiếu '+engMiss+' ngày dữ liệu — quét bù ở tab Lượt tương tác.':'')):'Quét lại tab Lượt tương tác để có số này.',{spark:spkEng}),
     card('ER (Engagement Rate)',erAct+'%',(erDelta?erDelta+' so kỳ trước · ':'')+erSub,'(Cảm xúc + Chia sẻ) ÷ Lượt xem, không tính bình luận. Cần quét Cảm xúc chi tiết mới có số.',{spark:spkEr}),
     card('Lượt tiếp cận',tnum(reachSum),(reachDelta?reachDelta+' so kỳ trước · ':'')+'tỉ lệ tiếp cận '+reachRatio+'%','Chỉ số riêng dashboard: tổng người xem mọi bài, TÍNH CẢ TRÙNG. Không phải Reach chuẩn Facebook.',{spark:spkReach}),
-    card('Lượt cảm xúc',tnum(reactSum),reactSum?'tổng cảm xúc kỳ này':'cần quét Cảm xúc chi tiết','Tổng Like/Love/Haha/Wow/Sad/Angry/Care của mọi bài trong kỳ.',{spark:null}),
+    card('Lượt cảm xúc',tnum(reactSum),(reactSum?'tổng cảm xúc kỳ này':'cần quét Cảm xúc chi tiết')+reactWarn,'Tổng Like/Love/Haha/Wow/Sad/Angry/Care của mọi bài trong kỳ.'+(reactMissN?' ⚠ '+reactMissN+' bài chưa quét chi tiết (SHBCL_fetchAllPostReactions) nên số này THẤP HƠN số Facebook thật — quét bù để khớp.':''),{spark:null}),
     card('Lượt hiển thị',tnum(impV),(impDelta?impDelta+' so kỳ trước · ':'')+'tổng từ các bài','Số lần nội dung hiển thị trên màn hình — khác Lượt xem (không tính lượt xem thật).',{spark:spkImp}),
     card('Bình luận',tnum(cmtV),(cmtDelta?cmtDelta+' so kỳ trước · ':'')+'tổng từ các bài','Tổng bình luận, cộng dồn từ các bài trong kỳ.',{spark:spkCmt})
   ].join('');
