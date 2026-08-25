@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.67
+' SHB CM Campaign Tracker v4.68
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -204,10 +204,26 @@ Option Explicit
 '     lai khai bao cung Long -> tran/khong khop kieu. Sua: khai bao "h" theo
 '     dieu kien bien dich #If VBA7 (LongPtr) / #Else (Long) giong cach da
 '     dung cho chinh khai bao SetTimer/KillTimer o tren.
+'
+' CHANGES vs v4.65-4.67 (ban chot sau khi XAC NHAN Timer chay dung)
+'   - Da xac nhan bang log thuc te: Timer nen HOAT DONG (callback duoc
+'     Windows goi lai, "shrunk=1/1") - mail tu rut gon sau vai phut ma
+'     nguoi dung KHONG can bam gi. Da go toan bo code chan doan tam thoi
+'     (macro DebugShowTimerLog + ghi log qua SaveSetting).
+'   - Fix: gui campaign MOI trong luc campaign truoc con dang cho rut gon
+'     thi campaign cu bi bo do dang (quan sat thuc te: mail 1.5 khong duoc
+'     rut gon vi 1.6 gui ngay sau do). Nay StartShrinkTimer() vet not
+'     campaign cu them 1 lan truoc khi chuyen sang theo doi campaign moi.
+'   - Fix an toan: bien module-level cua VBA bi xoa trang khi VBA project
+'     reset, NHUNG timer Windows van song -> callback se chay mai voi slug
+'     rong. Nay callback tu tat timer khi khong con slug, va
+'     StopShrinkTimer() goi KillTimer VO DIEU KIEN (truoc day kiem tra co
+'     m_ShrinkTimerOn - chinh co nay cung bi xoa khi reset nen khong bao
+'     gio tat duoc timer "mo coi").
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.67"
+Private Const VER       As String = "4.68"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -248,13 +264,22 @@ Private m_ShrinkAttempts As Long
 
 ' Bat dau (hoac gia han) timer ngam de tiep tuc thu rut gon slug nay sau
 ' moi 60 giay, toi da 12 lan, cho den khi du (shrunk >= target) hoac het
-' luot thu. Chi ho tro 1 campaign "dang cho" tai 1 thoi diem - neu gui
-' campaign moi trong luc campaign truoc chua rut gon xong, se chuyen sang
-' theo doi campaign moi (campaign cu se duoc bat kip khi ban chay
-' RecallCampaign() cho no sau nay).
+' luot thu. Chi theo doi 1 campaign "dang cho" tai 1 thoi diem - neu gui
+' campaign MOI trong luc campaign truoc chua rut gon xong, thu rut gon
+' campaign cu them 1 lan NGAY tai day truoc khi chuyen sang theo doi
+' campaign moi (khong bo do dang nhu truoc).
 Private Sub StartShrinkTimer(slug As String, target As Long)
     On Error Resume Next
-    If m_ShrinkTimerOn Then KillTimer 0, SHRINK_TIMER_ID
+    If m_ShrinkTimerOn Then
+        KillTimer 0, SHRINK_TIMER_ID
+        m_ShrinkTimerOn = False
+        ' Campaign cu con dang cho -> vet not 1 lan de khong bi bo quen
+        ' (thuong da du thoi gian "chot" neu campaign moi gui sau vai phut).
+        If Len(Trim(m_ShrinkSlug)) > 0 And m_ShrinkSlug <> slug Then
+            Dim dummyDiag As String
+            ShrinkCampaignSentItems m_ShrinkSlug, dummyDiag
+        End If
+    End If
     m_ShrinkSlug = slug
     m_ShrinkTarget = target
     m_ShrinkAttempts = 0
@@ -268,12 +293,14 @@ Private Sub StartShrinkTimer(slug As String, target As Long)
     On Error GoTo 0
 End Sub
 
+' Luon goi KillTimer VO DIEU KIEN (khong phu thuoc co m_ShrinkTimerOn) -
+' vi khi VBA project bi reset, co nay bi xoa ve False trong khi timer cua
+' Windows VAN CON SONG; neu kiem tra co truoc thi se khong bao gio tat duoc
+' timer "mo coi" do. KillTimer voi ID khong ton tai la vo hai.
 Private Sub StopShrinkTimer()
     On Error Resume Next
-    If m_ShrinkTimerOn Then
-        KillTimer 0, SHRINK_TIMER_ID
-        m_ShrinkTimerOn = False
-    End If
+    KillTimer 0, SHRINK_TIMER_ID
+    m_ShrinkTimerOn = False
     On Error GoTo 0
 End Sub
 
@@ -286,17 +313,20 @@ Public Sub ShrinkTimerProc(ByVal hwnd As LongPtr, ByVal uMsg As Long, ByVal nIDE
 Public Sub ShrinkTimerProc(ByVal hwnd As Long, ByVal uMsg As Long, ByVal nIDEvent As Long, ByVal dwTimer As Long)
 #End If
     On Error Resume Next
+
+    ' AN TOAN: bien module-level cua VBA bi xoa trang moi khi VBA project
+    ' reset (loi chua bat, nguoi dung sua code, Outlook reset...) NHUNG timer
+    ' cua Windows thi van tiep tuc "no". Neu gap trang thai do (khong con
+    ' slug de xu ly), tat timer ngay - tranh chay vo han vo ich.
+    If Len(Trim(m_ShrinkSlug)) = 0 Then
+        StopShrinkTimer
+        Exit Sub
+    End If
+
     m_ShrinkAttempts = m_ShrinkAttempts + 1
 
     Dim diag As String: diag = ""
     Dim shrunk As Long: shrunk = ShrinkCampaignSentItems(m_ShrinkSlug, diag)
-
-    ' CHAN DOAN TAM THOI: ghi lai moi lan callback nay THAT SU duoc Windows
-    ' goi + KET QUA rut gon, de biet Timer co chay khong VA co rut gon duoc
-    ' khong. Xem qua macro DebugShowTimerLog() ben duoi.
-    SaveSetting "SHBTracker", "Debug", "LastTimerFire", _
-        Now & " | attempt=" & m_ShrinkAttempts & " | slug=" & m_ShrinkSlug & _
-        " | shrunk=" & shrunk & "/" & m_ShrinkTarget & " | " & Left(diag, 300)
 
     If shrunk >= m_ShrinkTarget Or m_ShrinkAttempts >= SHRINK_TIMER_MAX_ATTEMPTS Then
         StopShrinkTimer
@@ -1070,17 +1100,6 @@ End Function
 '   - Chi recall duoc mail gui noi bo cung to chuc Exchange.
 '   - Nguoi nhan phai dang dung Outlook Desktop (khong phai Web/Mobile).
 '   - Mail phai CHUA duoc mo doc.
-' ================================================================
-' CHAN DOAN TAM THOI: xem lan gan nhat ShrinkTimerProc THAT SU duoc Windows
-' goi lai (ghi boi SaveSetting trong ShrinkTimerProc o tren). Neu bam macro
-' nay va thay "(chua bao gio)" du da doi qua 12 phut sau khi gui, nghia la
-' SetTimer/AddressOf khong hoat dong duoc trong moi truong nay - can doi
-' huong khac. Se xoa macro nay sau khi xac dinh xong nguyen nhan.
-Public Sub DebugShowTimerLog()
-    Dim v As String: v = GetSetting("SHBTracker", "Debug", "LastTimerFire", "(chua bao gio)")
-    MsgBox "Lan gan nhat ShrinkTimerProc duoc goi:" & vbCrLf & v, vbInformation, "Debug Timer"
-End Sub
-
 Public Sub RecallCampaign()
 
     Dim slugRaw As String
