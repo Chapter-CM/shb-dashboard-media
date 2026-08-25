@@ -473,6 +473,21 @@ function spark(vals,color){
   return '<svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none"><polyline points="'+pts.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/></svg>';
 }
 
+/* ts trong DB lưu giờ UTC (ghi bằng new Date().toISOString() ở api/email-track.js),
+   nhưng dateStrings:true của mysql2 trả về dạng "YYYY-MM-DD HH:MM:SS" không có "Z" -
+   new Date() mặc định coi đây là giờ LOCAL của tiến trình (thường là UTC trên
+   container/K8s) → getHours()/getDay() ra sai giờ/thứ thật (VN = UTC+7). Ép luôn về
+   UTC rồi cộng +7h trước khi lấy giờ/thứ, dùng getUTCHours()/getUTCDay() để không bị
+   lệch thêm lần nữa theo timezone máy chạy. */
+function vnTime(ts){
+  var s=String(ts);
+  if(s.indexOf('T')===-1)s=s.replace(' ','T');
+  if(!/Z$/.test(s)&&!/[+-]\d{2}:?\d{2}$/.test(s))s+='Z';
+  var ms=Date.parse(s);
+  if(isNaN(ms))ms=+new Date(ts);
+  return new Date(ms+7*3600*1000);
+}
+
 /* ── data processing ── */
 function deviceOf(ua){
   if(!ua)return 'unknown';
@@ -688,12 +703,12 @@ function process(logs){
   });
 
   var hour=new Array(24).fill(0);
-  arr.forEach(function(s){if(s.openAt){try{hour[new Date(s.openAt).getHours()]++;}catch(e){}}});
+  arr.forEach(function(s){if(s.openAt){try{hour[vnTime(s.openAt).getUTCHours()]++;}catch(e){}}});
 
   /* ══ 6b. HEATMAP GIỜ MỞ · THỨ×GIỜ (9c) — dựng từ timestamp lần mở, không field mới ══ */
   var heatDOW=[];for(var _hd=0;_hd<7;_hd++)heatDOW.push(new Array(24).fill(0));
   arr.forEach(function(s){(s.topEvents||[]).forEach(function(ev){
-    try{var dt=new Date(ev.ts);var jsDay=dt.getDay();var dow=jsDay===0?6:jsDay-1;heatDOW[dow][dt.getHours()]++;}catch(e){}
+    try{var dt=vnTime(ev.ts);var jsDay=dt.getUTCDay();var dow=jsDay===0?6:jsDay-1;heatDOW[dow][dt.getUTCHours()]++;}catch(e){}
   });});
 
   /* ══ 7. CLICK STATS ════════════════════════════════════════════════ */
