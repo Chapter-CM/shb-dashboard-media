@@ -68,6 +68,17 @@ module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   const logs = await fetchLogs().catch(() => []);
+  // ts tu DB la UTC that (ghi bang new Date().toISOString() o api/email-track.js),
+  // nhung mysql2 dateStrings:true tra ve "YYYY-MM-DD HH:MM:SS" khong co "Z" - moi
+  // xu ly (process()/dailySeries()/fmtTime()...) chay CLIENT-SIDE trong trinh duyet
+  // nguoi xem, new Date(chuoi khong Z) bi hieu nham la gio LOCAL cua trinh duyet
+  // (VN, UTC+7) thay vi UTC that -> sai gio/thu/ngay day chuyen o rat nhieu cho.
+  // Chuan hoa "Z" ngay tai day (1 cho duy nhat) de moi noi doc dung UTC that.
+  logs.forEach(function(l) {
+    if (l.timestamp && !/Z$|[+-]\d\d:?\d\d$/.test(l.timestamp)) {
+      l.timestamp = l.timestamp.replace(' ', 'T') + 'Z';
+    }
+  });
   const safe = JSON.stringify(logs).replace(/<\/script>/gi, '<\\/script>');
   res.send('<!DOCTYPE html><html lang="vi"><head>'
     + '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -473,6 +484,21 @@ function spark(vals,color){
   return '<svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none"><polyline points="'+pts.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/></svg>';
 }
 
+/* ts trong DB lưu giờ UTC (ghi bằng new Date().toISOString() ở api/email-track.js),
+   nhưng dateStrings:true của mysql2 trả về dạng "YYYY-MM-DD HH:MM:SS" không có "Z" -
+   new Date() mặc định coi đây là giờ LOCAL của tiến trình (thường là UTC trên
+   container/K8s) → getHours()/getDay() ra sai giờ/thứ thật (VN = UTC+7). Ép luôn về
+   UTC rồi cộng +7h trước khi lấy giờ/thứ, dùng getUTCHours()/getUTCDay() để không bị
+   lệch thêm lần nữa theo timezone máy chạy. */
+function vnTime(ts){
+  var s=String(ts);
+  if(s.indexOf('T')===-1)s=s.replace(' ','T');
+  if(!/Z$/.test(s)&&!/[+-]\d{2}:?\d{2}$/.test(s))s+='Z';
+  var ms=Date.parse(s);
+  if(isNaN(ms))ms=+new Date(ts);
+  return new Date(ms+7*3600*1000);
+}
+
 /* ── data processing ── */
 function deviceOf(ua){
   if(!ua)return 'unknown';
@@ -522,13 +548,31 @@ function process(logs){
     if(l.timestamp<s.first)s.first=l.timestamp;
   }
 
+  /* Lọc "mở giả" từ Outlook người GỬI: xác nhận qua dữ liệu thật (event_id
+     260824173881900002 - "test-recall-team", 24/08) - email bị recall thành
+     công 1 ngày sau (chưa ai bên nhận từng mở), nhưng vẫn có event top chỉ
+     1-2 phút sau sent, UA "Mozilla/4.0 (compatible; ms-office; MSOffice 16)".
+     Đây là Outlook người gửi tự tải ảnh khi lưu bản copy vào Sent Items, không
+     phải người nhận mở. Loại các event top đứng ĐẦU (ngay sau sent) khớp UA
+     này trong vòng 5 phút - các lần mở thật sau đó (kể cả cùng UA, cách xa
+     hơn) vẫn được giữ nguyên. */
+  var SELF_PREVIEW_UA_RE=/ms-office/i;
+  var SELF_PREVIEW_WINDOW_MS=5*60*1000;
+
   /* Sort topEvents ASC rồi tính openCount với 5s dedup window:
      ≤5s = Outlook tự reload (cùng 1 lần mở) → KHÔNG đếm thêm
      >5s = người dùng đóng và mở lại               → +1 lượt     */
   Object.keys(sess).forEach(function(k){
     var s=sess[k];
-    if(s.topEvents.length===0){s.openAt=null;s.ua='';s.openCount=0;return;}
     s.topEvents.sort(function(a,b){return a.ts<b.ts?-1:a.ts>b.ts?1:0;});
+    if(s.sentAt){
+      var sentTs=new Date(s.sentAt).getTime();
+      while(s.topEvents.length&&SELF_PREVIEW_UA_RE.test(s.topEvents[0].ua)&&
+            (new Date(s.topEvents[0].ts).getTime()-sentTs)<=SELF_PREVIEW_WINDOW_MS){
+        s.topEvents.shift();
+      }
+    }
+    if(s.topEvents.length===0){s.opened=s.confirmed;s.openAt=null;s.ua='';s.openCount=0;return;}
     s.openAt=s.topEvents[0].ts;
     s.ua=s.topEvents[0].ua;
     s.openCount=1;
@@ -670,12 +714,12 @@ function process(logs){
   });
 
   var hour=new Array(24).fill(0);
-  arr.forEach(function(s){if(s.openAt){try{hour[new Date(s.openAt).getHours()]++;}catch(e){}}});
+  arr.forEach(function(s){if(s.openAt){try{hour[vnTime(s.openAt).getUTCHours()]++;}catch(e){}}});
 
   /* ══ 6b. HEATMAP GIỜ MỞ · THỨ×GIỜ (9c) — dựng từ timestamp lần mở, không field mới ══ */
   var heatDOW=[];for(var _hd=0;_hd<7;_hd++)heatDOW.push(new Array(24).fill(0));
   arr.forEach(function(s){(s.topEvents||[]).forEach(function(ev){
-    try{var dt=new Date(ev.ts);var jsDay=dt.getDay();var dow=jsDay===0?6:jsDay-1;heatDOW[dow][dt.getHours()]++;}catch(e){}
+    try{var dt=vnTime(ev.ts);var jsDay=dt.getUTCDay();var dow=jsDay===0?6:jsDay-1;heatDOW[dow][dt.getUTCHours()]++;}catch(e){}
   });});
 
   /* ══ 7. CLICK STATS ════════════════════════════════════════════════ */
