@@ -68,6 +68,17 @@ module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   const logs = await fetchLogs().catch(() => []);
+  // ts tu DB la UTC that (ghi bang new Date().toISOString() o api/email-track.js),
+  // nhung mysql2 dateStrings:true tra ve "YYYY-MM-DD HH:MM:SS" khong co "Z" - moi
+  // xu ly (process()/dailySeries()/fmtTime()...) chay CLIENT-SIDE trong trinh duyet
+  // nguoi xem, new Date(chuoi khong Z) bi hieu nham la gio LOCAL cua trinh duyet
+  // (VN, UTC+7) thay vi UTC that -> sai gio/thu/ngay day chuyen o rat nhieu cho.
+  // Chuan hoa "Z" ngay tai day (1 cho duy nhat) de moi noi doc dung UTC that.
+  logs.forEach(function(l) {
+    if (l.timestamp && !/Z$|[+-]\d\d:?\d\d$/.test(l.timestamp)) {
+      l.timestamp = l.timestamp.replace(' ', 'T') + 'Z';
+    }
+  });
   const safe = JSON.stringify(logs).replace(/<\/script>/gi, '<\\/script>');
   res.send('<!DOCTYPE html><html lang="vi"><head>'
     + '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
