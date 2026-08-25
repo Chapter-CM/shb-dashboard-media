@@ -1372,26 +1372,6 @@ useEffect(()=>{try{localStorage.setItem("shb_presets",JSON.stringify(presets));}
       {!isCol&&<><button className="sec-expand no-print" onClick={e=>{e.stopPropagation();setFocusSection(key);}} title="Phóng to section" style={{position:"absolute",top:4,right:30,zIndex:5,width:26,height:26,borderRadius:8,background:"var(--fg-04)",border:"1px solid var(--fg-08)",color:"var(--text-4)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,opacity:0,transition:"opacity .2s"}}>⤢</button>{renderSection(key)}</>}
       {isCol&&<div onClick={()=>cycleSec(key)} style={{padding:"7px 36px 7px 12px",background:"var(--fg-02)",borderRadius:10,border:"1px solid var(--fg-05)",display:"flex",alignItems:"center",gap:8,cursor:"pointer",minHeight:34,transition:"background .12s"}} onMouseEnter={e=>e.currentTarget.style.background="var(--fg-04)"} onMouseLeave={e=>e.currentTarget.style.background="var(--fg-02)"}><div style={{width:3,height:14,background:C.accent,borderRadius:2,flexShrink:0}}/><span style={{fontSize:10,fontWeight:700,color:"var(--text-hd)",textTransform:"uppercase",letterSpacing:"0.8px",whiteSpace:"nowrap",flexShrink:0}}>{cfg.sections[key]?.title||key}</span><span style={{color:"var(--fg-10)"}}>·</span><span style={{fontSize:10,color:"var(--text-dimmer)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{getSecPreview(key)}</span></div>}
     </div>
-    {key==="status"&&(overdueAll.length>0||dueSoon.length>0||noDueData.length>0)&&(()=>{
-      const scrollTable=()=>{const el=document.getElementById("section-table");if(el)el.scrollIntoView({behavior:"smooth"});};
-      const badges=[
-        overdueAll.length>0&&{key:"overdue",ic:"🔴",lb:`${overdueAll.length} đã trễ`,c:C.danger},
-        dueSoon.length>0&&{key:"soon",ic:"⏰",lb:`${dueSoon.length} sắp đến hạn`,c:"#FBBF24"},
-        noDueData.length>0&&{key:"nodue",ic:"📅",lb:`${noDueData.length} chưa có deadline`,c:"#818CF8"},
-      ].filter(Boolean);
-      return(<div style={{background:"rgba(251,113,133,0.06)",backdropFilter:"blur(20px) saturate(180%)",WebkitBackdropFilter:"blur(20px) saturate(180%)",border:`1px solid rgba(251,113,133,0.15)`,borderLeft:`3px solid ${overdueAll.length>0?C.danger:"#FBBF24"}`,borderRadius:12,padding:"10px 16px",boxShadow:"var(--card-glow)",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginTop:-8}}>
-        <span style={{fontSize:15,flexShrink:0}}>⚠️</span>
-        <span style={{fontSize:11,fontWeight:700,color:"var(--text-hd)",letterSpacing:"0.3px",flexShrink:0}}>CẦN CHÚ Ý</span>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-          {badges.map((b,bi)=><React.Fragment key={b.key}>{bi>0&&<span style={{color:"var(--fg-10)",fontSize:12}}>·</span>}
-          <button onClick={()=>{const next=filterAlert===b.key?null:b.key;setFilterAlert(next);scrollTable();}} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",background:filterAlert===b.key?`${b.c}22`:`${b.c}0E`,border:`1px solid ${filterAlert===b.key?b.c:b.c+"30"}`,borderRadius:20,cursor:"pointer",transition:"all .15s",outline:"none",boxShadow:b.key==="overdue"?"var(--glow-danger)":b.key==="soon"?"var(--glow-warning)":"none"}}>
-            <span style={{fontSize:12}}>{b.ic}</span>
-            <span style={{fontSize:12,fontWeight:700,color:b.c}}>{b.lb}</span>
-          </button></React.Fragment>)}
-        </div>
-        {filterAlert&&<button onClick={()=>setFilterAlert(null)} style={{marginLeft:"auto",fontSize:10,color:"var(--text-dimmer)",background:"var(--fg-04)",border:"1px solid var(--fg-07)",borderRadius:6,padding:"3px 8px",cursor:"pointer",flexShrink:0}}>✕ Bỏ lọc</button>}
-      </div>);
-    })()}
     </React.Fragment>);})}
 </div>
       </div>
