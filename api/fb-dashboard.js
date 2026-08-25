@@ -720,10 +720,14 @@ function process(posts){
   sum.avgViewers=sum.nPosts?Math.round(sum.mediaViewers/sum.nPosts):0;          // người xem TB / bài
   // Tỉ lệ reach = Người xem ÷ Lượt xem (chuẩn FB: viewers/views). Không dùng follower.
   sum.reachRate=sum.views?Math.min(100,pc(sum.mediaViewers/sum.views*100)):0;
-  // best time heatmap: 7 days x 24h, weighted by engagement
-  var heat=[];for(var i=0;i<7;i++){heat.push(new Array(24).fill(0));}
-  arr.forEach(function(p){var d=new Date(p.ts);heat[(d.getDay()+6)%7][d.getHours()]+=(p.mediaViewers||0);});  // best time theo NGƯỜI XEM
-  var bestV=0,bestH=0,bestD=0;for(var dd=0;dd<7;dd++)for(var hh=0;hh<24;hh++){if(heat[dd][hh]>bestV){bestV=heat[dd][hh];bestH=hh;bestD=dd;}}
+  // best time heatmap: 7 days x 24h — 1 ma trận theo Người xem, Tương tác, Cảm xúc
+  function mkHeat(valFn){var h=[];for(var i=0;i<7;i++)h.push(new Array(24).fill(0));arr.forEach(function(p){var d=new Date(p.ts);h[(d.getDay()+6)%7][d.getHours()]+=(valFn(p)||0);});return h;}
+  function bestOf(h){var bv=0,bh=0,bd=0;for(var dd=0;dd<7;dd++)for(var hh=0;hh<24;hh++){if(h[dd][hh]>bv){bv=h[dd][hh];bh=hh;bd=dd;}}return {v:bv,h:bh,d:bd};}
+  var heatViewers=mkHeat(function(p){return p.mediaViewers||0;});
+  var heatEng=mkHeat(engOf);
+  var heatReact=mkHeat(reactCountOf);
+  var heat=heatViewers, best=bestOf(heatViewers), bestV=best.v, bestH=best.h, bestD=best.d;
+  var heatBy={viewers:{h:heatViewers,best:bestOf(heatViewers)},eng:{h:heatEng,best:bestOf(heatEng)},react:{h:heatReact,best:bestOf(heatReact)}};
   // by type / topic / project (key có thể là tên field hoặc hàm)
   function agg(key){var fn=typeof key==='function'?key:function(p){return p[key];};var m={};arr.forEach(function(p){var k=fn(p);if(!m[k])m[k]={name:k,n:0,views:0,eng:0,reactSum:0};m[k].n++;m[k].views+=p.views;m[k].eng+=engOf(p);m[k].reactSum+=reactSumOf(p);});return Object.keys(m).map(function(k){var o=m[k];o.er=o.views?pc(o.reactSum/o.views*100):0;return o;}).sort(function(a,b){return b.eng-a.eng;});}
   var avgEr=sum.erRate;
@@ -737,7 +741,7 @@ function process(posts){
   video.avgWatch=vids.length?Math.round(video.watchSum/vids.length):0;
   video.completion=vids.length?pc(video.compSum/vids.length):0;
   video.rows=vids.map(function(p){return {p:p,v:p.video};}).sort(function(a,b){return b.v.mediaViews-a.v.mediaViews;});
-  return {sum:sum,heat:heat,bestH:bestH,bestD:bestD,byType:agg('type'),byTopic:agg('topic'),byProject:agg(projectOf),rows:rows,tiers:tiers,video:video,
+  return {sum:sum,heat:heat,bestH:bestH,bestD:bestD,heatBy:heatBy,byType:agg('type'),byTopic:agg('topic'),byProject:agg(projectOf),rows:rows,tiers:tiers,video:video,
     opts:{type:uniq(posts,'type'),topic:uniq(posts,'topic'),project:distinct(posts,projectOf),slot:distinct(posts,function(p){return slotOf(p.ts);}),dayType:distinct(posts,function(p){return dayTypeOf(p.ts);}),media:distinct(posts,mediaOf)},filterActive:Object.keys(F).some(function(k){return F[k];})};
 }
 function uniq(posts,key){var s={};posts.forEach(function(p){if(p[key])s[p[key]]=1;});return Object.keys(s).sort();}
@@ -921,12 +925,16 @@ function heroChart(d,ser){
     +chart+'</div>';
 }
 function timingPanel(d){
-  var DOW=['T2','T3','T4','T5','T6','T7','CN'],max=1;d.heat.forEach(function(row){row.forEach(function(v){if(v>max)max=v;});});
+  var HM={viewers:{label:'người xem',unit:'người xem'},eng:{label:'tương tác',unit:'lượt tương tác'},react:{label:'cảm xúc',unit:'lượt cảm xúc'}};
+  var hb=(d.heatBy&&d.heatBy[_heatMetric])||{h:d.heat,best:{h:d.bestH,d:d.bestD}};
+  var heat=hb.h,bestD=hb.best.d,bestH=hb.best.h,curM=HM[_heatMetric]||HM.viewers;
+  var DOW=['T2','T3','T4','T5','T6','T7','CN'],max=1;heat.forEach(function(row){row.forEach(function(v){if(v>max)max=v;});});
   var hh='<div class="hh"></div>';for(var h=0;h<24;h++)hh+='<div class="hh">'+(h%3===0?h:'')+'</div>';
-  var grid='';for(var dd=0;dd<7;dd++){grid+='<div class="hr">'+DOW[dd]+'</div>';for(var hr=0;hr<24;hr++){var v=d.heat[dd][hr],op=v?(.15+v/max*.85):.05;grid+='<div class="heatcell" style="opacity:'+op.toFixed(2)+'" title="'+DOW[dd]+' '+hr+'h: '+nf(v)+' người xem"></div>';}}
+  var grid='';for(var dd=0;dd<7;dd++){grid+='<div class="hr">'+DOW[dd]+'</div>';for(var hr=0;hr<24;hr++){var v=heat[dd][hr],op=v?(.15+v/max*.85):.05;grid+='<div class="heatcell" style="opacity:'+op.toFixed(2)+'" title="'+DOW[dd]+' '+hr+'h: '+nf(v)+' '+curM.unit+'"></div>';}}
   var DOWF=['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ nhật'];
-  return '<div class="panel"><div class="panel-h" data-tip="Người xem theo Thứ × Giờ. Ô đậm = giờ vàng có nhiều người xem nhất.">Best time · cao điểm <b style="color:var(--accent)">'+DOWF[d.bestD]+' '+d.bestH+'h</b> <span style="font-weight:600;color:var(--muted);font-size:11px">· theo người xem</span></div><div class="heat">'+hh+grid+'</div>'
-    +'<div class="hm-scale">Thấp<span class="hm-grad"></span>Cao · <b style="color:var(--text-2)">Giờ vàng: '+DOWF[d.bestD]+' '+d.bestH+'h</b></div></div>';
+  return '<div class="panel"><div class="panel-h" data-tip="'+esc(curM.unit)+' theo Thứ × Giờ. Ô đậm = giờ vàng cao điểm nhất."><span>Best time · cao điểm <b style="color:var(--accent)">'+DOWF[bestD]+' '+bestH+'h</b> <span style="font-weight:600;color:var(--muted);font-size:11px">· theo '+curM.label+'</span></span>'
+    +'<div class="metric-toggle"><button class="'+(_heatMetric==='viewers'?'on':'')+'" onclick="setHeatMetric(\'viewers\')">Người xem</button><button class="'+(_heatMetric==='eng'?'on':'')+'" onclick="setHeatMetric(\'eng\')">Tương tác</button><button class="'+(_heatMetric==='react'?'on':'')+'" onclick="setHeatMetric(\'react\')">Cảm xúc</button></div></div><div class="heat">'+hh+grid+'</div>'
+    +'<div class="hm-scale">Thấp<span class="hm-grad"></span>Cao · <b style="color:var(--text-2)">Giờ vàng: '+DOWF[bestD]+' '+bestH+'h</b></div></div>';
 }
 var TYPE_ICON={'Video':'🎬','Reel':'📱','Livestream':'📡','Ảnh':'🖼','Link':'🔗','Text':'📝'};
 function setMixTab(t){_mixTab=t;paint();}
@@ -1253,7 +1261,7 @@ function executive(d,cur,prev){
 }
 
 /* ── app state ── */
-var _days=0,_from=null,_to=null,_mode='op',_theme='dark',_filter={},_density='comfortable',_metric='views',_ctab='posts',_mixTab='views',_inited=false,_tipInited=false,_cmds=[],_cmdSel=0,_cmdFiltered=[];
+var _days=0,_from=null,_to=null,_mode='op',_theme='dark',_filter={},_density='comfortable',_metric='views',_ctab='posts',_mixTab='views',_heatMetric='viewers',_inited=false,_tipInited=false,_cmds=[],_cmdSel=0,_cmdFiltered=[];
 function isoDate(ms){if(!ms)return '';var d=new Date(ms);return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
 function onRange(){var f=(document.getElementById('dt-from')||{}).value,t=(document.getElementById('dt-to')||{}).value;if(!f||!t)return;_from=new Date(f+'T00:00:00').getTime();_to=new Date(t+'T23:59:59').getTime();if(_from>_to){var x=_from;_from=_to;_to=x;}_days=0;paint();}
 try{var _st=localStorage.getItem('shb-fb-theme');if(_st)_theme=_st;}catch(e){}
@@ -1268,6 +1276,7 @@ function toggleMsel(k,e){if(e)e.stopPropagation();_openMsel=(_openMsel===k)?null
 function closeMsel(){if(_openMsel!==null){_openMsel=null;paint();}}
 function mselSearch(q){var dd=document.querySelector('.msel-dd');if(!dd)return;var qq=norm(q);dd.querySelectorAll('.msel-opt').forEach(function(el){var t=el.getAttribute('data-tx')||el.textContent;el.style.display=(qq===''||norm(t).indexOf(qq)>-1)?'':'none';});}
 function setMetric(m){_metric=m;paint();}
+function setHeatMetric(m){_heatMetric=m;paint();}
 function openTopicSel(e){e.stopPropagation();var dd=document.getElementById('topic-dd');if(!dd)return;var open=dd.style.display==='block';dd.style.display=open?'none':'block';if(!open){var inp=dd.querySelector('.csel-inp');if(inp){inp.value='';inp.focus();filterTopicSel('');}}}
 function filterTopicSel(q){var list=document.getElementById('topic-list');if(!list)return;var qq=norm(q);list.querySelectorAll('.csel-opt').forEach(function(el){el.style.display=(qq===''||norm(el.textContent).indexOf(qq)>-1)?'':'none';});}
 function pickTopic(v){setFilter('project',v);var dd=document.getElementById('topic-dd');if(dd)dd.style.display='none';}
