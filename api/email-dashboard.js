@@ -522,13 +522,31 @@ function process(logs){
     if(l.timestamp<s.first)s.first=l.timestamp;
   }
 
+  /* Lọc "mở giả" từ Outlook người GỬI: xác nhận qua dữ liệu thật (event_id
+     260824173881900002 - "test-recall-team", 24/08) - email bị recall thành
+     công 1 ngày sau (chưa ai bên nhận từng mở), nhưng vẫn có event top chỉ
+     1-2 phút sau sent, UA "Mozilla/4.0 (compatible; ms-office; MSOffice 16)".
+     Đây là Outlook người gửi tự tải ảnh khi lưu bản copy vào Sent Items, không
+     phải người nhận mở. Loại các event top đứng ĐẦU (ngay sau sent) khớp UA
+     này trong vòng 5 phút - các lần mở thật sau đó (kể cả cùng UA, cách xa
+     hơn) vẫn được giữ nguyên. */
+  var SELF_PREVIEW_UA_RE=/ms-office/i;
+  var SELF_PREVIEW_WINDOW_MS=5*60*1000;
+
   /* Sort topEvents ASC rồi tính openCount với 5s dedup window:
      ≤5s = Outlook tự reload (cùng 1 lần mở) → KHÔNG đếm thêm
      >5s = người dùng đóng và mở lại               → +1 lượt     */
   Object.keys(sess).forEach(function(k){
     var s=sess[k];
-    if(s.topEvents.length===0){s.openAt=null;s.ua='';s.openCount=0;return;}
     s.topEvents.sort(function(a,b){return a.ts<b.ts?-1:a.ts>b.ts?1:0;});
+    if(s.sentAt){
+      var sentTs=new Date(s.sentAt).getTime();
+      while(s.topEvents.length&&SELF_PREVIEW_UA_RE.test(s.topEvents[0].ua)&&
+            (new Date(s.topEvents[0].ts).getTime()-sentTs)<=SELF_PREVIEW_WINDOW_MS){
+        s.topEvents.shift();
+      }
+    }
+    if(s.topEvents.length===0){s.opened=s.confirmed;s.openAt=null;s.ua='';s.openCount=0;return;}
     s.openAt=s.topEvents[0].ts;
     s.ua=s.topEvents[0].ua;
     s.openCount=1;
