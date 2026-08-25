@@ -1,4 +1,43 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 24/08/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 25/08/2026)
+
+## 🔧 25/08 — FB dashboard: lọc Dự án/Squad theo hashtag `#` thay vì text tự do — nhánh `claude/filter-by-hashtag-posts-rmapvx`, PR [#110](https://github.com/Chapter-CM/shb-dashboard-media/pull/110)
+
+**Bối cảnh:** User muốn panel "Dự án / Squad — bấm để lọc chéo" trên FB dashboard (`api/fb-dashboard.js`)
+nhận diện dự án/squad của bài viết dựa theo **hashtag** thật trong bài (`#sq1`, `#CDS`...) thay vì so
+khớp cụm từ tự do trong nội dung (cách cũ dễ nhận nhầm). Danh sách hashtag chuẩn do user cung cấp qua
+ảnh chụp Google Sheet (`Squad/project/Khác` ↔ `hastag`).
+
+**File liên quan:** `api/fb-dashboard.js`, hàm `projectOf()` (client-side JS, trong `clientCode`,
+khoảng dòng 594-618).
+
+**Thay đổi đã áp dụng:**
+- Thay `PROJECTS` (mảng `[tên hiển thị, [từ khoá text]]`) bằng danh sách hashtag mới: Squad 1–9 (`#sq1`
+  … `#sq9`, riêng Squad 7 = `#Baolanhonline`), CDS, QRC, SLTD, SShield, CTQT, OpenAPI (`#openapi`),
+  Rewards (`#NewRewards`), Sale Apps KHDN (`#HeroAppCorp`), Transformation Talk, EDoc, Saha Branch
+  (`#SahaBranch`), eGP, MDP, SAHA SHOP (`#SAHASHOP`).
+- `projectOf()` viết lại: trích toàn bộ hashtag trong `msg`/`title`/`topic` bằng regex `/#[^\s#]+/g`,
+  chuẩn hoá (bỏ dấu, thường hoá, cắt dấu câu cuối) rồi so khớp **chính xác** với danh sách trên (không
+  còn `indexOf` cụm từ tự do như bản cũ).
+- Riêng **Transformation Talk** không có dấu `#` trong hashtag gốc (`SHBTransformationTalkTap[x]` —
+  có số thứ tự tập ở cuối) → giữ so khớp kiểu tiền tố (`indexOf`) trên toàn văn bản đã chuẩn hoá, không
+  bắt buộc phải có `#`.
+- Đã kiểm tra `node --check` pass và test thủ công `projectOf()` với vài case mẫu (khớp hashtag đúng
+  cột, tiền tố Transformation Talk, không có hashtag → 'Khác') — đều đúng như kỳ vọng.
+
+**Đã xác nhận:** So diff bản GitLab user gửi (trước khi sửa) với bản GitHub cũ (commit `16980fe`) —
+khớp 100%, xác nhận GitHub/GitLab đang đồng bộ ở thời điểm bắt đầu task. Thay đổi hashtag này **mới chỉ
+có trên GitHub** (branch `claude/filter-by-hashtag-posts-rmapvx` / PR #110), **chưa đưa sang GitLab
+Internal SHB** — theo đúng quy trình team (không tự động đồng bộ).
+
+**Việc còn dang dở / cần lưu ý cho phiên sau:**
+- Chờ user review & merge PR #110 trên GitHub.
+- Sau khi merge, GitLab Internal (`cm-dashboard`, file tương ứng chứa `api/fb-dashboard.js` hoặc bản
+  build từ nó) cần được đồng bộ thủ công theo quy trình hiện tại của team — Claude không tự làm.
+- Danh sách hashtag lấy từ ảnh chụp Google Sheet do user cung cấp trong chat, chưa có file/URL sheet
+  gốc lưu trong repo — nếu sheet gốc thay đổi (thêm/sửa squad), cần user cung cấp lại danh sách mới để
+  cập nhật `PROJECTS`.
+
+---
 
 ## 🔧 24/08 — Jira dashboard: ẩn Squad/Dự án 0 task, thêm bảng Epic Văn hóa, đổi tiêu chí Xuất sắc nhất — nhánh `claude/dashboard-empty-projects-squads-vrb18p`
 
