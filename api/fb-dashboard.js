@@ -591,20 +591,32 @@ const JS = (function () {
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function norm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d');}
 function jsq(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
-// Nhận diện Dự án/Squad từ nội dung bài (không phân biệt hoa thường / dấu). Khớp đầu tiên thắng;
-// xếp cụm cụ thể trước cụm chung. Không khớp -> 'Khác'.
+// Nhận diện Dự án/Squad từ hashtag (#tag) trong nội dung bài (không phân biệt hoa thường / dấu).
+// Khớp đầu tiên thắng. Riêng 'Transformation Talk' dùng tiền tố không có # (vd SHBTransformationTalkTap5).
+// Không khớp -> 'Khác'.
 var PROJECTS=[
-  ['SAHA Next Gen',['saha next gen','next gen','nextgen']],['SAHA Branch',['saha branch']],['SHB SAHA App',['saha app']],
-  ['SSP',['ssp']],['KPI',['kpi']],['ALM',['alm']],['EGP',['egp']],
-  ['Edoc',['edoc','e-doc']],['Website',['website']],['Reward',['reward']],
-  ['Sinh lời Tự động',['sinh loi tu dong','sinh loi']],
-  ['CCS/CDS',['ccs','cds']],
-  ['SHB Future Lead',['future lead','futurelead']],
-  ['SHB Transformation Talk',['transformation talk','transformation']],
-  ['Sunline',['sunline']],
-  ['Chuyển tiền quốc tế',['chuyen tien quoc te','ctqt']]
+  ['Squad 1',['sq1']],['Squad 2',['sq2']],['Squad 3',['sq3']],['Squad 4',['sq4']],
+  ['Squad 5',['sq5']],['Squad 6',['sq6']],['Squad 7',['baolanhonline']],['Squad 8',['sq8']],['Squad 9',['sq9']],
+  ['CDS',['cds']],['QRC',['qrc']],['SLTD',['sltd']],['SShield',['sshield']],['CTQT',['ctqt']],
+  ['OpenAPI',['openapi']],['Rewards',['newrewards']],['Sale Apps KHDN',['heroappcorp']],
+  ['Transformation Talk',['shbtransformationtalktap']],['EDoc',['edoc']],['Saha Branch',['sahabranch']],
+  ['eGP',['egp']],['MDP',['mdp']],['SAHA SHOP',['sahashop']]
 ];
-function projectOf(p){var t=norm(((p&&(p.msg||p.title))||'')+' '+((p&&p.topic)||''));for(var i=0;i<PROJECTS.length;i++){var ks=PROJECTS[i][1];for(var j=0;j<ks.length;j++){if(t.indexOf(ks[j])>-1)return PROJECTS[i][0];}}return 'Khác';}
+function cleanTag(s){return norm(String(s).replace(/[.,!?;:()\[\]{}"'`]+$/g,''));}
+function projectOf(p){
+  var raw=((p&&(p.msg||p.title))||'')+' '+((p&&p.topic)||'');
+  var tagsInText=(raw.match(/#[^\s#]+/g)||[]).map(function(t){return cleanTag(t.slice(1));});
+  var full=norm(raw);
+  for(var i=0;i<PROJECTS.length;i++){
+    var ks=PROJECTS[i][1];
+    for(var j=0;j<ks.length;j++){
+      var k=ks[j];
+      if(tagsInText.indexOf(k)>-1)return PROJECTS[i][0];
+      if(k==='shbtransformationtalktap'&&full.indexOf(k)>-1)return PROJECTS[i][0];
+    }
+  }
+  return 'Khác';
+}
 function nf(n){return (Math.round(n)||0).toLocaleString('vi-VN');}
 // Số rút gọn kiểu VN: 132700 -> "132,7K", 1230000 -> "1,2M". Dưới 10K giữ nguyên đầy đủ.
 // Không viết tắt số (không K/M) — luôn hiển thị đầy đủ theo định dạng VN.
