@@ -485,9 +485,15 @@
         var res = await fetch(tmpl.url, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: newBody });
         var text = await res.text();
         var j = null; try { j = JSON.parse(text); } catch (e) {}
-        var summary = j && j.data && j.data.node && j.data.node.top_reactions && j.data.node.top_reactions.summary;
-        if (!Array.isArray(summary)) { fail++; continue; }
-        var total = summary.reduce(function (t, s) { return t + (s.reaction_count || 0); }, 0);
+        var tr = j && j.data && j.data.node && j.data.node.top_reactions;
+        if (!tr) { fail++; continue; }
+        // QUAN TRỌNG (fix 25/08): "summary" chỉ liệt kê TOP vài loại cảm xúc phổ biến nhất để
+        // hiển thị icon dưới bài — KHÔNG chắc đủ mọi loại, cộng dồn summary bị HỤT so với thật.
+        // "count" mới là tổng thật Facebook trả sẵn (đúng số hiển thị "N lượt cảm xúc" trên bài).
+        // Ưu tiên count; chỉ cộng dồn summary khi count không có/không hợp lệ (fallback cũ).
+        var total = typeof tr.count === 'number' ? tr.count
+          : (Array.isArray(tr.summary) ? tr.summary.reduce(function (t, s) { return t + (s.reaction_count || 0); }, 0) : null);
+        if (total == null) { fail++; continue; }
         row.metrics = row.metrics || {};
         row.metrics.reaction_total = total; // gộp vào object đang có sẵn — KHÔNG tạo object mới, tránh mất field cũ
         REACTION_TOTALS[pid] = total; // nhớ lại cho các lần Content Library tự tải lại sau này trong phiên
