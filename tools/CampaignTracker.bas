@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.66
+' SHB CM Campaign Tracker v4.67
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -207,7 +207,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.66"
+Private Const VER       As String = "4.67"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -287,14 +287,16 @@ Public Sub ShrinkTimerProc(ByVal hwnd As Long, ByVal uMsg As Long, ByVal nIDEven
 #End If
     On Error Resume Next
     m_ShrinkAttempts = m_ShrinkAttempts + 1
-    ' CHAN DOAN TAM THOI: ghi lai moi lan callback nay THAT SU duoc Windows
-    ' goi, de kiem tra xem SetTimer/AddressOf co hoat dong hay khong. Xem
-    ' ket qua qua macro DebugShowTimerLog() ben duoi.
-    SaveSetting "SHBTracker", "Debug", "LastTimerFire", _
-        Now & " | attempt=" & m_ShrinkAttempts & " | slug=" & m_ShrinkSlug
 
     Dim diag As String: diag = ""
     Dim shrunk As Long: shrunk = ShrinkCampaignSentItems(m_ShrinkSlug, diag)
+
+    ' CHAN DOAN TAM THOI: ghi lai moi lan callback nay THAT SU duoc Windows
+    ' goi + KET QUA rut gon, de biet Timer co chay khong VA co rut gon duoc
+    ' khong. Xem qua macro DebugShowTimerLog() ben duoi.
+    SaveSetting "SHBTracker", "Debug", "LastTimerFire", _
+        Now & " | attempt=" & m_ShrinkAttempts & " | slug=" & m_ShrinkSlug & _
+        " | shrunk=" & shrunk & "/" & m_ShrinkTarget & " | " & Left(diag, 300)
 
     If shrunk >= m_ShrinkTarget Or m_ShrinkAttempts >= SHRINK_TIMER_MAX_ATTEMPTS Then
         StopShrinkTimer
