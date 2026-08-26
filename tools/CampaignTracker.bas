@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.73
+' SHB CM Campaign Tracker v4.74
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -232,10 +232,25 @@ Option Explicit
 '     Da sua ca 2 ham quet Sent Items cua TAT CA account trong profile
 '     (giong co che da ap dung cho ArchiveModule.bas truoc do), dedup
 '     theo StoreID de khong quet trung 1 mailbox 2 lan.
+'
+' CHANGES vs v4.73
+'   - Nguoi dung bao anh nhung (chen qua Insert > Pictures, co gan
+'     hyperlink) trong campaign gui hang loat KHONG hien thi o nguoi
+'     nhan, du gui thanh cong - nghi ngo lien quan toi buoc draft.Copy()
+'     roi gan lai m.HTMLBody bang chuoi HTML cu trong DoFullMode(). Xac
+'     nhan day la loi kinh dien cua Outlook VBA: draft.Copy() co the sinh
+'     Content-ID MOI cho tung anh nhung trong ban copy, khong con khop
+'     voi chuoi "cid:..." cu con nam trong HTMLBody (chuoi nay khong doi
+'     kem theo). Them GetAttachmentCid()/FixInlineImageCids(): ghi lai
+'     Content-ID GOC cua tung anh nhung truoc vong lap, sau moi lan
+'     draft.Copy() se doi chieu Content-ID MOI cua ban copy va thay the
+'     lai trong HTML truoc khi gan HTMLBody - anh nhung se hien dung tro
+'     lai. (Rieng anh dang link ngoai/URL that su thi khong lien quan loi
+'     nay, chi anh huong anh NHUNG thuc su qua Insert > Pictures.)
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.73"
+Private Const VER       As String = "4.74"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -581,6 +596,23 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         Exit Sub
     End If
 
+    ' Ghi lai Content-ID GOC cua tung file dinh kem (anh nhung - inline
+    ' image) trong draft, THEO THU TU - de sau nay so sanh voi Content-ID
+    ' cua ban Copy() tuong ung (xem FixInlineImageCids). Outlook co the
+    ' TU SINH Content-ID MOI cho anh nhung khi Copy() 1 MailItem, khien
+    ' chuoi "cid:..." cu con trong HTMLBody khong con khop - day la
+    ' nguyen nhan anh nhung (chen qua Insert > Pictures) bi "vo" (khong
+    ' hien) o nguoi nhan, du gui thanh cong.
+    Dim origCids() As String
+    Dim origCidCount As Long: origCidCount = draft.Attachments.Count
+    If origCidCount > 0 Then
+        ReDim origCids(1 To origCidCount)
+        Dim ci As Long
+        For ci = 1 To origCidCount
+            origCids(ci) = GetAttachmentCid(draft.Attachments(ci))
+        Next ci
+    End If
+
     Dim baseHTML As String: baseHTML = draft.HTMLBody
 
     ' Inject preview text as hidden preheader
@@ -660,6 +692,11 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         Next j
 
         m.Recipients.Add rcpt
+
+        ' Sua lai "cid:..." trong HTML neu Outlook da sinh Content-ID MOI
+        ' cho anh nhung trong ban Copy() nay (xem ghi chu tai origCids o tren).
+        If origCidCount > 0 Then FixInlineImageCids m, thisHTML, origCids
+
         m.HTMLBody = thisHTML
 
         ' Tag campaign info truc tiep vao mail de RecallCampaign() loc lai duoc sau nay
@@ -746,6 +783,42 @@ NextPerson:
     End If
     If sentFail > 0 Then doneMsg = doneMsg & vbCrLf & vbCrLf & "Chi tiet loi:" & failDiag
     MsgBox doneMsg, vbInformation, "SHB Tracker v" & VER
+End Sub
+
+
+' Doc Content-ID (PR_ATTACH_CONTENT_ID) cua 1 file dinh kem - chi anh
+' nhung (inline image) moi co gia tri nay, file dinh kem thuong khong co
+' nen ham tra ve chuoi rong la binh thuong.
+Private Function GetAttachmentCid(att As Attachment) As String
+    Dim cid As String: cid = ""
+    On Error Resume Next
+    cid = att.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001E")
+    On Error GoTo 0
+    GetAttachmentCid = cid
+End Function
+
+' Sau khi draft.Copy(), Outlook co the sinh Content-ID MOI cho tung anh
+' nhung trong ban copy (khac voi Content-ID goc con dang tham chieu boi
+' chuoi "cid:..." trong html). Doi chieu theo THU TU file dinh kem (Copy()
+' giu nguyen thu tu) va thay the cid cu bang cid moi tuong ung ngay trong
+' bien html (ByRef) truoc khi gan m.HTMLBody - tranh anh bi "vo" o nguoi
+' nhan du gui thanh cong.
+Private Sub FixInlineImageCids(m As MailItem, ByRef html As String, origCids() As String)
+    On Error Resume Next
+    Dim n As Long: n = m.Attachments.Count
+    Dim k As Long
+    For k = 1 To n
+        If k <= UBound(origCids) Then
+            If Len(origCids(k)) > 0 Then
+                Dim newCid As String
+                newCid = GetAttachmentCid(m.Attachments(k))
+                If Len(newCid) > 0 And newCid <> origCids(k) Then
+                    html = Replace(html, "cid:" & origCids(k), "cid:" & newCid)
+                End If
+            End If
+        End If
+    Next k
+    On Error GoTo 0
 End Sub
 
 
