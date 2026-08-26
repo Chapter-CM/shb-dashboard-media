@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.76
+' SHB CM Campaign Tracker v4.77
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -275,10 +275,18 @@ Option Explicit
 '     hoac dong chi la 1 link http/https tran, lay dong dau tien co chu
 '     THUC SU lam preview text - khong con nguy co link "tho" lot vao
 '     preview nua.
+'
+' CHANGES vs v4.76
+'   - Nguoi dung muon TU GO preview text bang tay (tieng Viet co dau)
+'     thay vi luon phai lay tu dong tu noi dung mail. Them InputBox rieng
+'     cho preview text (buoc 3.5/4), goi y san gia tri tu FindFirstNon-
+'     LinkLine() nhung cho sua/go lai tuy y - InputBox dung String Unicode
+'     binh thuong nen go tieng Viet co dau khong bi loi mat dau (khac
+'     voi SaveSetting/GetSetting da gap loi nay o cho khac trong file).
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.76"
+Private Const VER       As String = "4.77"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -451,15 +459,21 @@ Public Sub SendCampaign()
     If Len(Trim(mType)) = 0 Then mType = "info"
     mType = Trim(mType)
 
-    ' Preview text: tu dong lay DONG DAU TIEN CO CHU THUC SU cua email body,
-    ' BO QUA cac dong chi la 1 link tran (http/https) - neu khong, dong
-    ' link do se bi nhet thang vao preheader an va "lo" ra ngoai phan
-    ' preview cua Outlook (nguoi dung bao gap dung truong hop nay: dong
-    ' dau tien cua mail vo tinh la 1 link, khien link "tho" hien ra
-    ' ngay ngoai preview thay vi cau chu binh thuong).
-    prevTxt = FindFirstNonLinkLine(draft.body)
+    ' Preview text: goi y san bang dong dau tien CO CHU THUC SU cua email
+    ' body (BO QUA dong chi la 1 link tran http/https - tranh link "tho"
+    ' lot vao preview nhu truoc day), nhung cho phep nguoi dung TU GO/SUA
+    ' lai truc tiep bang tieng Viet co dau qua InputBox - InputBox dung
+    ' chuoi Unicode binh thuong, KHONG dinh loi mat dau nhu SaveSetting/
+    ' GetSetting (Windows Registry, chi ho tro ANSI) tung gap o noi khac
+    ' trong file nay.
+    Dim suggestedPrev As String
+    suggestedPrev = FindFirstNonLinkLine(draft.body)
+    prevTxt = InputBox("Preview text (doan chu xam hien duoi Subject trong Inbox nguoi nhan)." & vbCrLf & _
+                       "De trong se tu dong lay cau dau tien cua noi dung mail:", _
+                       "SHB Tracker - Preview text", suggestedPrev)
+    prevTxt = Trim(prevTxt)
     If Len(prevTxt) > 120 Then prevTxt = Left(prevTxt, 120)
-    If Len(Trim(prevTxt)) = 0 Then prevTxt = "(trong)"
+    If Len(prevTxt) = 0 Then prevTxt = "(trong)"
 
     Dim slug As String: slug = MakeSlug(campName)
 
