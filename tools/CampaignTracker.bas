@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.72
+' SHB CM Campaign Tracker v4.73
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -221,10 +221,21 @@ Option Explicit
 '     m_ShrinkTimerOn - chinh co nay cung bi xoa khi reset nen khong bao
 '     gio tat duoc timer "mo coi").
 '
+' CHANGES vs v4.72
+'   - RecallCampaign() bao "khong tim thay mail" du campaign vua gui xong
+'     that su van con trong Sent Items - nguyen nhan: ca RecallCampaign()
+'     lan ShrinkCampaignSentItems() van chi dung GetDefaultFolder(olFolder-
+'     SentMail), tuc CHI quet Sent Items cua 1 account MAC DINH duy nhat
+'     trong profile. Neu campaign gui tu 1 account KHAC (khong phai mac
+'     dinh) - vd profile co nhieu account cung luc - ham se quet nham
+'     Sent Items rong/sai cua account mac dinh va khong bao gio tim ra.
+'     Da sua ca 2 ham quet Sent Items cua TAT CA account trong profile
+'     (giong co che da ap dung cho ArchiveModule.bas truoc do), dedup
+'     theo StoreID de khong quet trung 1 mailbox 2 lan.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.72"
+Private Const VER       As String = "4.73"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -749,16 +760,13 @@ End Sub
 ' dung nguoi nhan da nhan. Chay SAU khi ca batch da gui xong (khong phai
 ' ngay tung mail) de tranh loi sua MailItem ngay sau .send().
 ' ================================================================
+' Quet Sent Items cua TAT CA account trong profile (khong chi account mac
+' dinh) - GetDefaultFolder(olFolderSentMail) truoc day chi tra ve Sent
+' Items cua 1 account MAC DINH duy nhat, nen neu campaign gui tu account
+' khac se khong bao gio tim thay. Dedup theo StoreID nhu ArchiveModule.bas.
 Public Function ShrinkCampaignSentItems(slug As String, _
                                           Optional ByRef diag As String = "") As Long
     Dim n As Long: n = 0
-
-    Dim sentFolder As folder
-    Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
-    If sentFolder Is Nothing Then
-        ShrinkCampaignSentItems = 0
-        Exit Function
-    End If
 
     Dim placeholder As String
     placeholder = "[Noi dung da duoc rut gon de tiet kiem dung luong hop thu - " & _
@@ -780,58 +788,82 @@ Public Function ShrinkCampaignSentItems(slug As String, _
     Dim matched As Long: matched = 0
     Dim scanned As Long: scanned = 0
     Dim sampleDiag As String: sampleDiag = ""
-    Dim i As Long
-    For i = sentFolder.Items.Count To 1 Step -1
-        Dim itm As Object: Set itm = sentFolder.Items(i)
-        If TypeName(itm) = "MailItem" Then
-            Dim itmSlug As String: itmSlug = "(khong doc duoc)"
-            Dim upErr As Long: upErr = 0
-            On Error Resume Next
-            Err.Clear
-            itmSlug = itm.UserProperties("CMSlug").Value
-            upErr = Err.Number
-            On Error GoTo 0
 
-            Dim isShrinkMatch As Boolean: isShrinkMatch = False
-            If itmSlug = slug Then
-                isShrinkMatch = True
-            ElseIf hasCampInfo Then
-                On Error Resume Next
-                If itm.subject = knownSubject And _
-                   itm.SentOn >= tCampStart - tBuf And _
-                   itm.SentOn <= tCampEnd + tBuf Then
-                    isShrinkMatch = True
-                End If
-                On Error GoTo 0
-            End If
+    Dim seenStoreIDs As String: seenStoreIDs = "|"
+    Dim acc As Object, store As Object, sentFolder As folder, storeID As String
+    For Each acc In Application.Session.Accounts
+        On Error Resume Next
+        Set store = Nothing
+        Set store = acc.DeliveryStore
+        On Error GoTo 0
+        If store Is Nothing Then GoTo NextAccount
+        storeID = ""
+        On Error Resume Next
+        storeID = store.StoreID
+        On Error GoTo 0
+        If Len(storeID) = 0 Or InStr(seenStoreIDs, "|" & storeID & "|") > 0 Then GoTo NextAccount
+        seenStoreIDs = seenStoreIDs & storeID & "|"
 
-            If isShrinkMatch Then
-                matched = matched + 1
+        Set sentFolder = Nothing
+        On Error Resume Next
+        Set sentFolder = store.GetDefaultFolder(olFolderSentMail)
+        On Error GoTo 0
+        If sentFolder Is Nothing Then GoTo NextAccount
+
+        Dim i As Long
+        For i = sentFolder.Items.Count To 1 Step -1
+            Dim itm As Object: Set itm = sentFolder.Items(i)
+            If TypeName(itm) = "MailItem" Then
+                Dim itmSlug As String: itmSlug = "(khong doc duoc)"
+                Dim upErr As Long: upErr = 0
                 On Error Resume Next
                 Err.Clear
-                itm.HTMLBody = placeholderHTML
-                itm.Save
-                If Err.Number = 0 Then
-                    n = n + 1
-                Else
-                    If Len(diag) < 800 Then
-                        diag = diag & vbCrLf & "  - " & itm.subject & ": #" & Err.Number & " " & Err.Description
+                itmSlug = itm.UserProperties("CMSlug").Value
+                upErr = Err.Number
+                On Error GoTo 0
+
+                Dim isShrinkMatch As Boolean: isShrinkMatch = False
+                If itmSlug = slug Then
+                    isShrinkMatch = True
+                ElseIf hasCampInfo Then
+                    On Error Resume Next
+                    If itm.subject = knownSubject And _
+                       itm.SentOn >= tCampStart - tBuf And _
+                       itm.SentOn <= tCampEnd + tBuf Then
+                        isShrinkMatch = True
+                    End If
+                    On Error GoTo 0
+                End If
+
+                If isShrinkMatch Then
+                    matched = matched + 1
+                    On Error Resume Next
+                    Err.Clear
+                    itm.HTMLBody = placeholderHTML
+                    itm.Save
+                    If Err.Number = 0 Then
+                        n = n + 1
+                    Else
+                        If Len(diag) < 800 Then
+                            diag = diag & vbCrLf & "  - " & itm.subject & ": #" & Err.Number & " " & Err.Description
+                        End If
+                    End If
+                    On Error GoTo 0
+                End If
+                ' Chan doan: ghi lai 3 mail gan nhat (bat ke co khop slug hay
+                ' khong) de xem gia tri CMSlug thuc su doc duoc la gi.
+                If scanned < 3 Then
+                    scanned = scanned + 1
+                    If upErr <> 0 Then
+                        sampleDiag = sampleDiag & vbCrLf & "  - [" & itm.subject & "] loi doc UserProperty #" & upErr
+                    Else
+                        sampleDiag = sampleDiag & vbCrLf & "  - [" & itm.subject & "] CMSlug doc duoc = '" & itmSlug & "'"
                     End If
                 End If
-                On Error GoTo 0
             End If
-            ' Chan doan: ghi lai 3 mail gan nhat (bat ke co khop slug hay
-            ' khong) de xem gia tri CMSlug thuc su doc duoc la gi.
-            If scanned < 3 Then
-                scanned = scanned + 1
-                If upErr <> 0 Then
-                    sampleDiag = sampleDiag & vbCrLf & "  - [" & itm.subject & "] loi doc UserProperty #" & upErr
-                Else
-                    sampleDiag = sampleDiag & vbCrLf & "  - [" & itm.subject & "] CMSlug doc duoc = '" & itmSlug & "'"
-                End If
-            End If
-        End If
-    Next i
+        Next i
+NextAccount:
+    Next acc
 
     If matched = 0 Then
         diag = "(khong tim thay mail nao co CMSlug = '" & slug & "'" & _
@@ -1141,13 +1173,6 @@ Public Sub RecallCampaign()
     Set m_RecallWatcher.DeletedItemsItems = Application.Session.GetDefaultFolder(olFolderDeletedItems).Items
     On Error GoTo 0
 
-    Dim sentFolder As folder
-    Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
-    If sentFolder Is Nothing Then
-        MsgBox "Khong tim thay folder Sent Items.", vbExclamation, "SHB Tracker - Recall"
-        Exit Sub
-    End If
-
     Dim matched As Long: matched = 0
     Dim recalled As Long: recalled = 0
     Dim failed As Long: failed = 0
@@ -1176,65 +1201,91 @@ Public Sub RecallCampaign()
     Dim sampleDiag As String: sampleDiag = ""
     Dim sampled As Long: sampled = 0
 
+    ' Quet Sent Items cua TAT CA account trong profile - xem ghi chu tuong
+    ' tu tai ShrinkCampaignSentItems() o tren.
+    Dim seenStoreIDs As String: seenStoreIDs = "|"
+    Dim acc As Object, store As Object, sentFolder As folder, storeID As String
     Dim itm As Object
     Dim i As Long
-    For i = sentFolder.Items.Count To 1 Step -1
-        Set itm = sentFolder.Items(i)
-        If TypeName(itm) = "MailItem" Then
-            Dim itmSlug As String: itmSlug = ""
-            On Error Resume Next
-            itmSlug = itm.UserProperties("CMSlug").Value
-            On Error GoTo 0
+    For Each acc In Application.Session.Accounts
+        On Error Resume Next
+        Set store = Nothing
+        Set store = acc.DeliveryStore
+        On Error GoTo 0
+        If store Is Nothing Then GoTo NextAccount
 
-            Dim isMatch As Boolean: isMatch = False
-            If itmSlug = slug Then
-                isMatch = True
-            ElseIf hasCampInfo Then
+        storeID = ""
+        On Error Resume Next
+        storeID = store.StoreID
+        On Error GoTo 0
+        If Len(storeID) = 0 Or InStr(seenStoreIDs, "|" & storeID & "|") > 0 Then GoTo NextAccount
+        seenStoreIDs = seenStoreIDs & storeID & "|"
+
+        Set sentFolder = Nothing
+        On Error Resume Next
+        Set sentFolder = store.GetDefaultFolder(olFolderSentMail)
+        On Error GoTo 0
+        If sentFolder Is Nothing Then GoTo NextAccount
+
+        For i = sentFolder.Items.Count To 1 Step -1
+            Set itm = sentFolder.Items(i)
+            If TypeName(itm) = "MailItem" Then
+                Dim itmSlug As String: itmSlug = ""
                 On Error Resume Next
-                If itm.subject = knownSubject And _
-                   itm.SentOn >= tCampStart - tBuf And _
-                   itm.SentOn <= tCampEnd + tBuf Then
+                itmSlug = itm.UserProperties("CMSlug").Value
+                On Error GoTo 0
+
+                Dim isMatch As Boolean: isMatch = False
+                If itmSlug = slug Then
                     isMatch = True
-                End If
-                On Error GoTo 0
-            End If
-
-            ' Chan doan: ghi lai Subject/SentOn thuc te cua 3 mail gan nhat
-            ' (bat ke co khop hay khong) de so sanh voi gia tri da luu.
-            If sampled < 3 Then
-                sampled = sampled + 1
-                On Error Resume Next
-                sampleDiag = sampleDiag & vbCrLf & "  - subj='" & itm.subject & _
-                             "' sentOn=" & Format(itm.SentOn, "yyyy-mm-dd hh:nn:ss")
-                On Error GoTo 0
-            End If
-
-            If isMatch Then
-                matched = matched + 1
-                Dim itmErr As String: itmErr = ""
-                If RecallOneItem(itm, itmErr) Then
-                    recalled = recalled + 1
-                Else
-                    failed = failed + 1
-                    If Len(failDiag) < 1000 Then
-                        failDiag = failDiag & vbCrLf & "  - " & itm.subject & ": " & itmErr
+                ElseIf hasCampInfo Then
+                    On Error Resume Next
+                    If itm.subject = knownSubject And _
+                       itm.SentOn >= tCampStart - tBuf And _
+                       itm.SentOn <= tCampEnd + tBuf Then
+                        isMatch = True
                     End If
+                    On Error GoTo 0
                 End If
 
-                ' Nhan tien rut gon ban luu Sent Items cua mail nay - luc nay
-                ' item da "on dinh" du lau trong Sent Items (thoi gian tu luc
-                ' gui toi luc RecallCampaign() duoc goi thuong du de Exchange
-                ' "chot" xong item, khac voi luc rut gon ngay sau gui bi tre).
-                On Error Resume Next
-                itm.HTMLBody = placeholderHTML
-                itm.Save
-                If Err.Number = 0 Then shrunkR = shrunkR + 1
-                On Error GoTo 0
+                ' Chan doan: ghi lai Subject/SentOn thuc te cua 3 mail gan nhat
+                ' (bat ke co khop hay khong) de so sanh voi gia tri da luu.
+                If sampled < 3 Then
+                    sampled = sampled + 1
+                    On Error Resume Next
+                    sampleDiag = sampleDiag & vbCrLf & "  - subj='" & itm.subject & _
+                                 "' sentOn=" & Format(itm.SentOn, "yyyy-mm-dd hh:nn:ss")
+                    On Error GoTo 0
+                End If
 
-                DoEvents
+                If isMatch Then
+                    matched = matched + 1
+                    Dim itmErr As String: itmErr = ""
+                    If RecallOneItem(itm, itmErr) Then
+                        recalled = recalled + 1
+                    Else
+                        failed = failed + 1
+                        If Len(failDiag) < 1000 Then
+                            failDiag = failDiag & vbCrLf & "  - " & itm.subject & ": " & itmErr
+                        End If
+                    End If
+
+                    ' Nhan tien rut gon ban luu Sent Items cua mail nay - luc nay
+                    ' item da "on dinh" du lau trong Sent Items (thoi gian tu luc
+                    ' gui toi luc RecallCampaign() duoc goi thuong du de Exchange
+                    ' "chot" xong item, khac voi luc rut gon ngay sau gui bi tre).
+                    On Error Resume Next
+                    itm.HTMLBody = placeholderHTML
+                    itm.Save
+                    If Err.Number = 0 Then shrunkR = shrunkR + 1
+                    On Error GoTo 0
+
+                    DoEvents
+                End If
             End If
-        End If
-    Next i
+        Next i
+NextAccount:
+    Next acc
 
     If matched = 0 Then
         Dim noMatchMsg As String
