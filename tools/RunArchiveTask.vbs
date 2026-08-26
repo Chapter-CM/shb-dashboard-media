@@ -25,7 +25,7 @@
 ' ================================================================
 
 Dim MODULE_NAME
-MODULE_NAME = "Module1" ' <-- DOI cho khop ten module thuc te tren may nay
+MODULE_NAME = "Module2" ' <-- DOI cho khop ten module thuc te tren may nay (module chua ArchiveModule.bas)
 
 Dim outlookApp
 On Error Resume Next
