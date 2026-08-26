@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Archive Module v1.2
+' SHB CM Archive Module v1.3
 ' Module VBA RIENG, DOC LAP hoan toan voi CampaignTracker.bas (Module1) -
 ' khong dung chung bien/hang so nao voi Module1, chi doc UserProperty
 ' "CMSlug" da duoc CampaignTracker.bas gan san vao mail luc gui (SendCampaign).
@@ -23,6 +23,14 @@ Option Explicit
 ' cung duoc, trong khi GetDefaultFolder(olFolderSentMail) truoc day chi
 ' tra ve Sent Items cua 1 account mac dinh duy nhat.
 '
+' v1.3: Doi dich lay theo folder "Muc da Gui" trong PST Archives (khong
+' phai folder "Archive" chung chung nhu truoc) - vi PST nay dung ten
+' tieng Viet cho folder tuong duong Sent Items, khong co folder ten
+' "Sent Items" rieng. Ben trong "Muc da Gui" nay, tu dong tao/dung 1
+' subfolder RIENG cho tung account gui (dat ten theo dia chi email cua
+' account) - mail tu account nao thi ve dung subfolder cua account do,
+' khong con don chung vao 1 cho.
+'
 ' 2 macro:
 '   - ArchiveNow() : khong tham so, gan vao nut Ribbon/Quick Access
 '     Toolbar - bam la hoi xac nhan roi chay Archive NGAY LAP TUC cho TAT CA
@@ -39,7 +47,7 @@ Option Explicit
 
 Private Const ARCHIVE_AFTER_HOURS As Long = 24
 Private Const ARCHIVE_STORE_NAME  As String = "Archives"
-Private Const ARCHIVE_FOLDER_NAME As String = "Archive"
+Private Const ARCHIVE_FOLDER_NAME As String = "Mục đã Gửi"
 Private Const ARCHIVE_LOG_PATH    As String = "C:\SHBTrackerLogs\archive-log.txt"
 
 Public Sub ArchiveNow()
@@ -117,6 +125,25 @@ Private Sub ArchiveCampaignSentItems(ByVal Silent As Boolean, ByVal IgnoreAge As
                 If Not sentFolder Is Nothing Then
                     accountsScanned = accountsScanned + 1
 
+                    ' Ten subfolder rieng cho account nay ben trong targetFolder -
+                    ' uu tien dia chi email (acc.SmtpAddress), neu khong lay
+                    ' duoc thi dung DisplayName lam ten thay the.
+                    Dim accName As String
+                    accName = ""
+                    On Error Resume Next
+                    accName = acc.SmtpAddress
+                    On Error GoTo 0
+                    If Len(Trim(accName)) = 0 Then
+                        On Error Resume Next
+                        accName = acc.DisplayName
+                        On Error GoTo 0
+                    End If
+                    If Len(Trim(accName)) = 0 Then accName = "Khac"
+
+                    Dim accFolder As Object
+                    Set accFolder = GetOrCreateSubfolder(targetFolder, accName)
+                    If accFolder Is Nothing Then Set accFolder = targetFolder
+
                     Dim i As Long
                     Dim itm As Object
                     Dim itmSlug As String
@@ -136,7 +163,7 @@ Private Sub ArchiveCampaignSentItems(ByVal Silent As Boolean, ByVal IgnoreAge As
                                 If IgnoreAge Or itm.SentOn <= cutoff Then
                                     On Error Resume Next
                                     Err.Clear
-                                    itm.Move targetFolder
+                                    itm.Move accFolder
                                     If Err.Number = 0 Then
                                         moved = moved + 1
                                     Else
@@ -165,6 +192,35 @@ Private Sub ArchiveCampaignSentItems(ByVal Silent As Boolean, ByVal IgnoreAge As
     End If
 End Sub
 
+' Bo dau tieng Viet + chuyen thuong, chi dung ky tu ASCII - de so sanh
+' ten folder an toan ke ca khi ARCHIVE_FOLDER_NAME (co dau) bi hong dau
+' luc copy/paste qua nhieu lop (da tung gap truong hop tuong tu voi
+' comment truoc day) - luc do van con nhan dien duoc qua ban khong dau.
+Private Function NormalizeVN(ByVal s As String) As String
+    Dim r As String
+    r = LCase(s)
+    r = Replace(Replace(Replace(Replace(Replace(r, "à", "a"), "á", "a"), "ạ", "a"), "ả", "a"), "ã", "a")
+    r = Replace(Replace(Replace(Replace(Replace(r, "â", "a"), "ầ", "a"), "ấ", "a"), "ậ", "a"), "ẩ", "a")
+    r = Replace(r, "ẫ", "a")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ă", "a"), "ằ", "a"), "ắ", "a"), "ặ", "a"), "ẳ", "a")
+    r = Replace(r, "ẵ", "a")
+    r = Replace(Replace(Replace(Replace(Replace(r, "è", "e"), "é", "e"), "ẹ", "e"), "ẻ", "e"), "ẽ", "e")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ê", "e"), "ề", "e"), "ế", "e"), "ệ", "e"), "ể", "e")
+    r = Replace(r, "ễ", "e")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ì", "i"), "í", "i"), "ị", "i"), "ỉ", "i"), "ĩ", "i")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ò", "o"), "ó", "o"), "ọ", "o"), "ỏ", "o"), "õ", "o")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ô", "o"), "ồ", "o"), "ố", "o"), "ộ", "o"), "ổ", "o")
+    r = Replace(r, "ỗ", "o")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ơ", "o"), "ờ", "o"), "ớ", "o"), "ợ", "o"), "ở", "o")
+    r = Replace(r, "ỡ", "o")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ù", "u"), "ú", "u"), "ụ", "u"), "ủ", "u"), "ũ", "u")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ư", "u"), "ừ", "u"), "ứ", "u"), "ự", "u"), "ử", "u")
+    r = Replace(r, "ữ", "u")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ỳ", "y"), "ý", "y"), "ỵ", "y"), "ỷ", "y"), "ỹ", "y")
+    r = Replace(r, "đ", "d")
+    NormalizeVN = r
+End Function
+
 Private Function FindArchiveTargetFolder(ByRef diag As String) As Object
     Dim fld As Object
     On Error Resume Next
@@ -183,6 +239,13 @@ Private Function FindArchiveTargetFolder(ByRef diag As String) As Object
         namesTried = namesTried & "[" & topFld.Name & "] "
         If InStr(LCase(topFld.Name), "archiv") > 0 Then
             For Each sub1 In topFld.Folders
+                If InStr(NormalizeVN(sub1.Name), "da gui") > 0 Or _
+                   InStr(LCase(sub1.Name), "sent items") > 0 Then
+                    Set FindArchiveTargetFolder = sub1
+                    Exit Function
+                End If
+            Next sub1
+            For Each sub1 In topFld.Folders
                 If InStr(LCase(sub1.Name), "archiv") > 0 Then
                     Set FindArchiveTargetFolder = sub1
                     Exit Function
@@ -195,6 +258,20 @@ Private Function FindArchiveTargetFolder(ByRef diag As String) As Object
 
     diag = "Cac store hien co: " & namesTried
     Set FindArchiveTargetFolder = Nothing
+End Function
+
+' Tra ve subfolder ten "accName" ben trong "parentFld" - tao moi neu chua co.
+Private Function GetOrCreateSubfolder(parentFld As Object, ByVal accName As String) As Object
+    Dim f As Object
+    On Error Resume Next
+    Set f = parentFld.Folders(accName)
+    On Error GoTo 0
+    If f Is Nothing Then
+        On Error Resume Next
+        Set f = parentFld.Folders.Add(accName)
+        On Error GoTo 0
+    End If
+    Set GetOrCreateSubfolder = f
 End Function
 
 Private Sub LogArchiveRun(ByVal logLine As String)
