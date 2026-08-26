@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.78
+' SHB CM Campaign Tracker v4.79
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -296,10 +296,23 @@ Option Explicit
 '     "thong-bao-...") thay vi bi cut mat. Luu y: cac campaign da gui
 '     TRUOC ban nay van giu slug cu (da luu trong UserProperty/Registry),
 '     chi cac campaign gui SAU khi cap nhat moi co slug day du.
+'
+' CHANGES vs v4.78
+'   - Nguoi dung bao RecallCampaign() voi campaign lon cham gap doi so
+'     voi luc gui - phan tich dung: giai doan 1 (vong lap tu dong mo tung
+'     mail + bam Recall qua SendKeys/ExecuteMso) va giai doan 2 (Outlook
+'     thuc su truyen di cac mail "yeu cau thu hoi" dang xep trong Outbox
+'     qua Exchange - ban chat cung la gui mail, ton thoi gian tuong tu
+'     luc gui ban dau) truoc day chay TUAN TU: doi het giai doan 1 xong
+'     Outlook moi bat dau giai doan 2. Them SendAndReceive dinh ky (moi
+'     20 mail, trong ScanFolderForRecall) + 1 lan cuoi cung sau vong lap
+'     - de Outlook bat dau truyen Outbox NGAY trong luc vong lap van con
+'     chay, giup 2 giai doan chay gan nhu song song thay vi noi duoi
+'     nhau, giam dang ke tong thoi gian Recall.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.78"
+Private Const VER       As String = "4.79"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1420,6 +1433,22 @@ Private Sub ScanFolderForRecall(fld As folder, slug As String, hasCampInfo As Bo
                 On Error GoTo 0
 
                 DoEvents
+
+                ' Day Outbox NGAY TRONG LUC vong lap con dang chay - moi lenh
+                ' Recall thuc chat la 1 mail "yeu cau thu hoi" xep vao Outbox,
+                ' phai duoc Exchange gui di that su moi co hieu luc. Truoc day
+                ' toan bo request nay bi don lai, chi gui hang loat SAU KHI ca
+                ' vong lap tu dong bam Recall (SendKeys/ExecuteMso) chay xong -
+                ' 2 giai doan chay TUAN TU nen tong thoi gian ~gap doi so voi
+                ' luc gui ban dau. Goi SendAndReceive dinh ky (moi 20 mail) de
+                ' Outlook bat dau truyen Outbox NGAY, chay song song voi phan
+                ' con lai cua vong lap thay vi doi don het moi gui.
+                If recalled Mod 20 = 0 Then
+                    On Error Resume Next
+                    Application.GetNamespace("MAPI").SendAndReceive False
+                    On Error GoTo 0
+                    DoEvents
+                End If
             End If
         End If
     Next i
@@ -1546,6 +1575,12 @@ NextAccount:
         MsgBox noMatchMsg, vbExclamation, "SHB Tracker - Recall"
         Exit Sub
     End If
+
+    ' Day not Outbox lan cuoi cho phan request Recall con lai (neu duoi
+    ' 20 mail chua kip trigger o tren, hoac 20 mail cuoi cung cua batch).
+    On Error Resume Next
+    Application.GetNamespace("MAPI").SendAndReceive False
+    On Error GoTo 0
 
     Dim doneMsg As String
     doneMsg = "Hoan thanh Recall cho campaign '" & slug & "'!" & vbCrLf & _
