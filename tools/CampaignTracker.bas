@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.68
+' SHB CM Campaign Tracker v4.72
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -224,7 +224,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.68"
+Private Const VER       As String = "4.72"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -855,6 +855,17 @@ Private Sub DoFastMode(draft As MailItem, slug As String, squad As String, _
                  "&campaign=" & UrlEnc(slug) & _
                  "&squad=" & UrlEnc(squad) & _
                  "&type=" & UrlEnc(mType)
+
+    ' Gan tag CMSlug/CMEID nhu Full Mode - de ArchiveModule.bas (chi doc
+    ' UserProperty CMSlug) cung nhan dien va archive duoc mail gui bang
+    ' che do Nhanh nay, khong chi rieng Full Mode.
+    On Error Resume Next
+    draft.UserProperties.Add "CMSlug", olText
+    draft.UserProperties("CMSlug").Value = slug
+    draft.UserProperties.Add "CMEID", olText
+    draft.UserProperties("CMEID").Value = eid0 & "0000"
+    On Error GoTo 0
+
     draft.send
     MsgBox "Da gui (Nhanh).", vbInformation, "SHB Tracker v" & VER
 End Sub
