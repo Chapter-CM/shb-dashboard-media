@@ -1411,13 +1411,11 @@ Private Sub CleanRecallNotifications()
 End Sub
 
 
-' Archive: chuyen mail campaign (CMSlug) qua ARCHIVE_AFTER_HOURS gio sang folder Archive - xem ArchiveNow/ArchiveOldCampaignSentItems ben duoi.
 Private Const ARCHIVE_AFTER_HOURS As Long = 24
 Private Const ARCHIVE_STORE_NAME  As String = "Archives"
 Private Const ARCHIVE_FOLDER_NAME As String = "Archive"
 Private Const ARCHIVE_LOG_PATH    As String = "C:\SHBTrackerLogs\archive-log.txt"
 
-' ArchiveNow: gan nut nay vao Ribbon/QAT (File > Options > Customize Ribbon > Macros > ArchiveNow) de bam chay Archive ngay, khong doi lich 12 tieng.
 Public Sub ArchiveNow()
     If MsgBox("Chuyen ngay cac mail campaign (gui qua macro nay) da qua " & _
               ARCHIVE_AFTER_HOURS & " gio, tu Sent Items sang " & ARCHIVE_STORE_NAME & _
@@ -1497,7 +1495,6 @@ Public Sub ArchiveOldCampaignSentItems(Optional ByVal Silent As Boolean = True)
 End Sub
 
 
-' FindArchiveTargetFolder: tim folder Archive dung ten (ARCHIVE_STORE_NAME/ARCHIVE_FOLDER_NAME), fallback do gan theo tu khoa "archiv" neu ten khac di.
 Private Function FindArchiveTargetFolder(ByRef diag As String) As folder
     Dim fld As folder
     On Error Resume Next
@@ -1532,7 +1529,6 @@ Private Function FindArchiveTargetFolder(ByRef diag As String) As folder
 End Function
 
 
-' LogArchiveRun: ghi 1 dong log ra file text (khong dung MsgBox de tranh treo dialog khi chay ngam qua Task Scheduler).
 Private Sub LogArchiveRun(ByVal line As String)
     On Error Resume Next
     Dim dirPath As String
