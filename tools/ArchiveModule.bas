@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Archive Module v1.0
+' SHB CM Archive Module v1.1
 ' Module VBA RIENG, DOC LAP hoan toan voi CampaignTracker.bas (Module1) -
 ' khong dung chung bien/hang so nao voi Module1, chi doc UserProperty
 ' "CMSlug" da duoc CampaignTracker.bas gan san vao mail luc gui (SendCampaign).
@@ -19,12 +19,16 @@ Option Explicit
 '
 ' 2 macro:
 '   - ArchiveNow() : khong tham so, gan vao nut Ribbon/Quick Access
-'     Toolbar - bam la hoi xac nhan roi chay Archive NGAY, hien MsgBox
-'     ket qua.
+'     Toolbar - bam la hoi xac nhan roi chay Archive NGAY LAP TUC cho TAT CA
+'     mail campaign (gui qua macro), KE CA mail vua gui chua du 24 gio -
+'     bo qua han ARCHIVE_AFTER_HOURS vi day la thao tac nguoi dung chu dong
+'     bam, khac voi ban chay ngam theo lich (van gioi han 24h nhu binh
+'     thuong). Hien MsgBox ket qua.
 '   - ArchiveOldCampaignSentItems(Silent) : Silent:=True (mac dinh) chay
-'     im lang khong MsgBox, chi ghi log ra file text - dung cho Windows
-'     Task Scheduler goi dinh ky 12 tieng/lan qua script COM ben ngoai
-'     (xem tools/RunArchiveTask.vbs, sua MODULE_NAME thanh "ArchiveModule").
+'     im lang khong MsgBox, chi ghi log ra file text, CHI chuyen mail da
+'     qua ARCHIVE_AFTER_HOURS - dung cho Windows Task Scheduler goi dinh
+'     ky 12 tieng/lan qua script COM ben ngoai (xem tools/RunArchiveTask.vbs,
+'     sua MODULE_NAME thanh "ArchiveModule").
 ' ================================================================
 
 Private Const ARCHIVE_AFTER_HOURS As Long = 24
@@ -34,16 +38,20 @@ Private Const ARCHIVE_LOG_PATH    As String = "C:\SHBTrackerLogs\archive-log.txt
 
 Public Sub ArchiveNow()
     Dim ans As Integer
-    ans = MsgBox("Chuyen ngay cac mail campaign (gui qua macro) da qua " & _
-              ARCHIVE_AFTER_HOURS & " gio, tu Sent Items sang " & ARCHIVE_STORE_NAME & _
-              " > " & ARCHIVE_FOLDER_NAME & "?", _
+    ans = MsgBox("Chuyen NGAY TAT CA mail campaign (gui qua macro) tu Sent Items sang " & _
+              ARCHIVE_STORE_NAME & " > " & ARCHIVE_FOLDER_NAME & _
+              " - ke ca mail vua gui chua du " & ARCHIVE_AFTER_HOURS & " gio?", _
               vbYesNo + vbQuestion, "SHB Tracker - Archive Now")
     If ans = vbNo Then Exit Sub
 
-    ArchiveOldCampaignSentItems False
+    ArchiveCampaignSentItems False, True
 End Sub
 
 Public Sub ArchiveOldCampaignSentItems(Optional ByVal Silent As Boolean = True)
+    ArchiveCampaignSentItems Silent, False
+End Sub
+
+Private Sub ArchiveCampaignSentItems(ByVal Silent As Boolean, ByVal IgnoreAge As Boolean)
     Dim sentFolder As Object
     Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
     If sentFolder Is Nothing Then
@@ -90,7 +98,7 @@ Public Sub ArchiveOldCampaignSentItems(Optional ByVal Silent As Boolean = True)
 
             If hasSlug Then
                 scanned = scanned + 1
-                If itm.SentOn <= cutoff Then
+                If IgnoreAge Or itm.SentOn <= cutoff Then
                     On Error Resume Next
                     Err.Clear
                     itm.Move targetFolder
@@ -108,7 +116,7 @@ Public Sub ArchiveOldCampaignSentItems(Optional ByVal Silent As Boolean = True)
     Dim summary As String
     summary = Format(Now, "yyyy-mm-dd HH:nn:ss") & " - Quet: " & scanned & _
               " mail campaign trong Sent Items | Da chuyen: " & moved & _
-              " | Loi: " & failed & " | Nguong: " & ARCHIVE_AFTER_HOURS & "h"
+              " | Loi: " & failed & " | Nguong: " & IIf(IgnoreAge, "Bo qua (ArchiveNow)", ARCHIVE_AFTER_HOURS & "h")
     LogArchiveRun summary
 
     If Not Silent Then
