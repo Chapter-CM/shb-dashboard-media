@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Archive Module v1.4
+' SHB CM Archive Module v1.5
 ' Module VBA RIENG, DOC LAP hoan toan voi CampaignTracker.bas (Module1) -
 ' khong dung chung bien/hang so nao voi Module1, chi doc UserProperty
 ' "CMSlug" da duoc CampaignTracker.bas gan san vao mail luc gui (SendCampaign).
@@ -75,7 +75,7 @@ Private Const ARCHIVE_LOG_PATH    As String = "C:\SHBTrackerLogs\archive-log.txt
 #End If
 
 Private Const ARCHIVE_TIMER_ID As Long = 918274 ' khac ID voi timer Shrink ben Module1
-Private Const ARCHIVE_TIMER_INTERVAL_MS As Long = 12 * 60 * 60 * 1000 ' 12 tieng
+Private Const ARCHIVE_TIMER_INTERVAL_MS As Long = 43200000 ' 12 tieng (12*60*60*1000ms)
 
 ' ================================================================
 ' CACH CAI (CHI 2 BUOC, LAP LAI TREN MOI MAY):
