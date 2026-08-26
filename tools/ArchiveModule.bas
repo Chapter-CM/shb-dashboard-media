@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Archive Module v1.3
+' SHB CM Archive Module v1.4
 ' Module VBA RIENG, DOC LAP hoan toan voi CampaignTracker.bas (Module1) -
 ' khong dung chung bien/hang so nao voi Module1, chi doc UserProperty
 ' "CMSlug" da duoc CampaignTracker.bas gan san vao mail luc gui (SendCampaign).
@@ -31,7 +31,7 @@ Option Explicit
 ' account) - mail tu account nao thi ve dung subfolder cua account do,
 ' khong con don chung vao 1 cho.
 '
-' 2 macro:
+' 2 macro chinh:
 '   - ArchiveNow() : khong tham so, gan vao nut Ribbon/Quick Access
 '     Toolbar - bam la hoi xac nhan roi chay Archive NGAY LAP TUC cho TAT CA
 '     mail campaign (gui qua macro), KE CA mail vua gui chua du 24 gio -
@@ -40,15 +40,92 @@ Option Explicit
 '     thuong). Hien MsgBox ket qua.
 '   - ArchiveOldCampaignSentItems(Silent) : Silent:=True (mac dinh) chay
 '     im lang khong MsgBox, chi ghi log ra file text, CHI chuyen mail da
-'     qua ARCHIVE_AFTER_HOURS - dung cho Windows Task Scheduler goi dinh
-'     ky 12 tieng/lan qua script COM ben ngoai (xem tools/RunArchiveTask.vbs,
-'     sua MODULE_NAME thanh "ArchiveModule").
+'     qua ARCHIVE_AFTER_HOURS.
+'
+' v1.4: THAY THE HOAN TOAN Windows Task Scheduler + script .vbs ben ngoai
+' (qua phuc tap de cai lap lai tren nhieu may) bang Windows Timer chay
+' NGAM TRONG CHINH VBA - giong het co che tu dong rut gon Sent Items da
+' co san trong CampaignTracker.bas (SetTimer/KillTimer qua user32).
+' Chi can IMPORT DUY NHAT file .bas nay + dan 1 dong goi StartArchiveAutoTimer
+' vao ThisOutlookSession (Application_Startup) la xong - KHONG can Task
+' Scheduler, KHONG can biet duong dan file .vbs, KHONG can lap lai tung
+' buoc phuc tap tren moi may.
+' Xem huong dan chi tiet ngay tren StartArchiveAutoTimer() ben duoi.
 ' ================================================================
 
 Private Const ARCHIVE_AFTER_HOURS As Long = 24
 Private Const ARCHIVE_STORE_NAME  As String = "Archives"
 Private Const ARCHIVE_FOLDER_NAME As String = "Mục đã Gửi"
 Private Const ARCHIVE_LOG_PATH    As String = "C:\SHBTrackerLogs\archive-log.txt"
+
+' ================================================================
+' WINDOWS TIMER - chay ngam de tu dong goi ArchiveOldCampaignSentItems
+' moi 12 tieng, khong can Task Scheduler, khong can Outlook Reminder/popup.
+' ================================================================
+#If VBA7 Then
+    Private Declare PtrSafe Function SetTimer Lib "user32" _
+        (ByVal hwnd As LongPtr, ByVal nIDEvent As LongPtr, ByVal uElapse As Long, ByVal lpTimerFunc As LongPtr) As LongPtr
+    Private Declare PtrSafe Function KillTimer Lib "user32" _
+        (ByVal hwnd As LongPtr, ByVal nIDEvent As LongPtr) As Long
+#Else
+    Private Declare Function SetTimer Lib "user32" _
+        (ByVal hwnd As Long, ByVal nIDEvent As Long, ByVal uElapse As Long, ByVal lpTimerFunc As Long) As Long
+    Private Declare Function KillTimer Lib "user32" _
+        (ByVal hwnd As Long, ByVal nIDEvent As Long) As Long
+#End If
+
+Private Const ARCHIVE_TIMER_ID As Long = 918274 ' khac ID voi timer Shrink ben Module1
+Private Const ARCHIVE_TIMER_INTERVAL_MS As Long = 12 * 60 * 60 * 1000 ' 12 tieng
+
+' ================================================================
+' CACH CAI (CHI 2 BUOC, LAP LAI TREN MOI MAY):
+'   1. Import file ArchiveModule.bas nay (File > Import File...) - VBA
+'      se tu tao 1 module moi (vd Module2, ArchiveModule... tuy may).
+'   2. Mo ThisOutlookSession (Alt+F11 > Microsoft Outlook Objects >
+'      ThisOutlookSession) - neu da co San Sub Application_Startup thi
+'      chi them 1 dong goi ben trong; neu chua co, dan nguyen doan sau:
+'
+'      Private Sub Application_Startup()
+'          Call Module2.StartArchiveAutoTimer  ' doi "Module2" thanh
+'      End Sub                                  ' dung ten module o buoc 1
+'
+'   Xong - moi lan mo Outlook, timer se tu bat, cu moi 12 tieng tu goi
+'   Archive 1 lan, hoan toan ngam, khong popup, khong can Task Scheduler,
+'   khong can biet duong dan file gi ca.
+'
+'   LUU Y: timer chi song trong luc Outlook dang mo (giong Windows
+'   Reminder/Task Scheduler binh thuong cung can may dang bat). Neu dong
+'   Outlook, lan mo lai tiep theo se tu bat lai tu dau - khong sao vi
+'   ArchiveOldCampaignSentItems tu kiem tra tuoi tung mail (SentOn) chu
+'   khong dua vao "da doi du 12 tieng chua", nen du timer bi ngat quang
+'   thi lan chay tiep theo van archive dung cac mail da qua 24 gio.
+' ================================================================
+Public Sub StartArchiveAutoTimer()
+    On Error Resume Next
+#If VBA7 Then
+    Dim h As LongPtr
+#Else
+    Dim h As Long
+#End If
+    h = SetTimer(0, ARCHIVE_TIMER_ID, ARCHIVE_TIMER_INTERVAL_MS, AddressOf ArchiveTimerProc)
+    On Error GoTo 0
+End Sub
+
+Public Sub StopArchiveAutoTimer()
+    On Error Resume Next
+    KillTimer 0, ARCHIVE_TIMER_ID
+    On Error GoTo 0
+End Sub
+
+#If VBA7 Then
+Public Sub ArchiveTimerProc(ByVal hwnd As LongPtr, ByVal uMsg As Long, ByVal nIDEvent As LongPtr, ByVal dwTimer As Long)
+#Else
+Public Sub ArchiveTimerProc(ByVal hwnd As Long, ByVal uMsg As Long, ByVal nIDEvent As Long, ByVal dwTimer As Long)
+#End If
+    On Error Resume Next
+    ArchiveOldCampaignSentItems True
+    On Error GoTo 0
+End Sub
 
 Public Sub ArchiveNow()
     Dim ans As Integer
