@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.71
+' SHB CM Campaign Tracker v4.68
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -221,40 +221,10 @@ Option Explicit
 '     m_ShrinkTimerOn - chinh co nay cung bi xoa khi reset nen khong bao
 '     gio tat duoc timer "mo coi").
 '
-' CHANGES vs v4.68
-'   - Nguoi dung can GIAI PHONG THEM dung luong: mail campaign da rut gon
-'     van nam mai trong Sent Items, khong bao gio don di. Them 2 macro moi
-'     (khong dung gi den cac co che Recall/Shrink o tren, doc lap hoan
-'     toan) de TIEP TUC chuyen cac mail campaign (nhan dien qua CMSlug -
-'     tuc CHI mail gui bang chinh macro nay, KHONG dung mail thuong nguoi
-'     dung tu gui tay) tu Sent Items sang folder Archive rieng:
-'       - ArchiveOldCampaignSentItems(Silent) : quet toan bo Sent Items,
-'         chuyen cac mail co CMSlug va da gui QUA 24 GIO sang Archive.
-'         Silent:=True (mac dinh, dung khi goi tu Windows Task Scheduler
-'         chay ngam dinh ky 12 tieng/lan qua script COM ben ngoai - xem
-'         tools/RunArchiveTask.vbs va tools/TaskScheduler-Setup.txt) se
-'         KHONG hien MsgBox nao (tranh treo dialog luc khong ai ngoi may),
-'         chi ghi log ra file text de kiem tra sau.
-'       - ArchiveNow() : ban khong tham so, danh de GAN VAO NUT RIBBON/
-'         Quick Access Toolbar (giong cach nut SendTrackedEmail dang co
-'         san) - bam la hoi xac nhan roi chay Archive NGAY LAP TUC, hien
-'         MsgBox ket qua, khong can doi lich 12 tieng.
-'     Folder dich xac dinh qua FindArchiveTargetFolder(): tim dung theo
-'     ARCHIVE_STORE_NAME/ARCHIVE_FOLDER_NAME (sua lai cho khop ten hien
-'     tren may ban qua Data File Properties > Filename neu can), co
-'     fallback do gan theo tu khoa "archiv" neu ten khac di chut it.
-'
-' CHANGES vs v4.69
-'   - Loi Compile error "Only comments may appear after End Sub, End
-'     Function, or End Property" ngay dong Private Const ARCHIVE_AFTER_HOURS -
-'     cung loi da tung gap o v4.53 (khoi comment dai bi rung mat dau nhay
-'     dau dong ' qua nhieu lop copy/paste). Rut gon 3 khoi comment dai
-'     (ArchiveOldCampaignSentItems, ArchiveNow, FindArchiveTargetFolder,
-'     LogArchiveRun) thanh 1 dong duy nhat moi cho de giam nguy co lap lai.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.71"
+Private Const VER       As String = "4.68"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1408,136 +1378,4 @@ Private Sub CleanRecallNotifications()
 
     MsgBox "Da xoa " & n & " mail thong bao Recall Success/Failure trong Inbox.", _
            vbInformation, "SHB Tracker v" & VER
-End Sub
-
-
-Private Const ARCHIVE_AFTER_HOURS As Long = 24
-Private Const ARCHIVE_STORE_NAME  As String = "Archives"
-Private Const ARCHIVE_FOLDER_NAME As String = "Archive"
-Private Const ARCHIVE_LOG_PATH    As String = "C:\SHBTrackerLogs\archive-log.txt"
-
-Public Sub ArchiveNow()
-    If MsgBox("Chuyen ngay cac mail campaign (gui qua macro nay) da qua " & _
-              ARCHIVE_AFTER_HOURS & " gio, tu Sent Items sang " & ARCHIVE_STORE_NAME & _
-              " > " & ARCHIVE_FOLDER_NAME & "?", _
-              vbYesNo + vbQuestion, "SHB Tracker - Archive Now") = vbNo Then Exit Sub
-
-    ArchiveOldCampaignSentItems False
-End Sub
-
-
-Public Sub ArchiveOldCampaignSentItems(Optional ByVal Silent As Boolean = True)
-    Dim sentFolder As folder
-    Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
-    If sentFolder Is Nothing Then
-        LogArchiveRun "Loi: khong tim thay Sent Items."
-        If Not Silent Then MsgBox "Khong tim thay folder Sent Items.", vbExclamation, "SHB Tracker - Archive"
-        Exit Sub
-    End If
-
-    Dim targetFolder As folder
-    Dim findDiag As String: findDiag = ""
-    Set targetFolder = FindArchiveTargetFolder(findDiag)
-    If targetFolder Is Nothing Then
-        LogArchiveRun "Loi: khong tim thay folder Archive dich. " & findDiag
-        If Not Silent Then
-            MsgBox "Khong tim thay folder Archive dich (" & ARCHIVE_STORE_NAME & " > " & _
-                   ARCHIVE_FOLDER_NAME & ")." & vbCrLf & findDiag & vbCrLf & vbCrLf & _
-                   "Kiem tra lai ten store/folder that su tren may nay va sua ARCHIVE_STORE_NAME/" & _
-                   "ARCHIVE_FOLDER_NAME trong code.", vbExclamation, "SHB Tracker - Archive"
-        End If
-        Exit Sub
-    End If
-
-    Dim cutoff As Date: cutoff = Now - (ARCHIVE_AFTER_HOURS / 24#)
-    Dim moved As Long: moved = 0
-    Dim failed As Long: failed = 0
-    Dim scanned As Long: scanned = 0
-
-    Dim i As Long
-    For i = sentFolder.Items.Count To 1 Step -1
-        Dim itm As Object: Set itm = sentFolder.Items(i)
-        If TypeName(itm) = "MailItem" Then
-            Dim itmSlug As String: itmSlug = ""
-            On Error Resume Next
-            Err.Clear
-            itmSlug = itm.UserProperties("CMSlug").Value
-            Dim hasSlug As Boolean: hasSlug = (Err.Number = 0 And Len(itmSlug) > 0)
-            On Error GoTo 0
-
-            If hasSlug Then
-                scanned = scanned + 1
-                If itm.SentOn <= cutoff Then
-                    On Error Resume Next
-                    Err.Clear
-                    itm.Move targetFolder
-                    If Err.Number = 0 Then
-                        moved = moved + 1
-                    Else
-                        failed = failed + 1
-                    End If
-                    On Error GoTo 0
-                End If
-            End If
-        End If
-    Next i
-
-    Dim summary As String
-    summary = Format(Now, "yyyy-mm-dd HH:nn:ss") & " - Quet: " & scanned & _
-              " mail campaign trong Sent Items | Da chuyen: " & moved & _
-              " | Loi: " & failed & " | Nguong: " & ARCHIVE_AFTER_HOURS & "h"
-    LogArchiveRun summary
-
-    If Not Silent Then
-        MsgBox "Hoan thanh Archive!" & vbCrLf & "Da chuyen: " & moved & vbCrLf & "Loi: " & failed, _
-               vbInformation, "SHB Tracker - Archive"
-    End If
-End Sub
-
-
-Private Function FindArchiveTargetFolder(ByRef diag As String) As folder
-    Dim fld As folder
-    On Error Resume Next
-    Set fld = Application.Session.Folders(ARCHIVE_STORE_NAME).Folders(ARCHIVE_FOLDER_NAME)
-    On Error GoTo 0
-    If Not fld Is Nothing Then
-        Set FindArchiveTargetFolder = fld
-        Exit Function
-    End If
-
-    ' Fallback: do gan dung theo tu khoa "archiv"
-    Dim topFld As folder
-    Dim namesTried As String: namesTried = ""
-    For Each topFld In Application.Session.Folders
-        namesTried = namesTried & "[" & topFld.Name & "] "
-        If InStr(LCase(topFld.Name), "archiv") > 0 Then
-            Dim sub1 As folder
-            For Each sub1 In topFld.Folders
-                If InStr(LCase(sub1.Name), "archiv") > 0 Then
-                    Set FindArchiveTargetFolder = sub1
-                    Exit Function
-                End If
-            Next sub1
-            ' Khong co folder con phu hop -> dung luon store nay
-            Set FindArchiveTargetFolder = topFld
-            Exit Function
-        End If
-    Next topFld
-
-    diag = "Cac store hien co: " & namesTried
-    Set FindArchiveTargetFolder = Nothing
-End Function
-
-
-Private Sub LogArchiveRun(ByVal line As String)
-    On Error Resume Next
-    Dim dirPath As String
-    dirPath = Left(ARCHIVE_LOG_PATH, InStrRev(ARCHIVE_LOG_PATH, "\") - 1)
-    If Len(Dir(dirPath, vbDirectory)) = 0 Then MkDir dirPath
-
-    Dim f As Integer: f = FreeFile
-    Open ARCHIVE_LOG_PATH For Append As #f
-    Print #f, line
-    Close #f
-    On Error GoTo 0
 End Sub
