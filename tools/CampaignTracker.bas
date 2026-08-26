@@ -1118,6 +1118,32 @@ Private Const ARCHIVE_STORE_NAME  As String = "Archives"
 Private Const ARCHIVE_FOLDER_NAME As String = "Archive"
 Private Const ARCHIVE_LOG_PATH    As String = "C:\SHBTrackerLogs\archive-log.txt"
 
+' ================================================================
+' PUBLIC: ArchiveNow
+' Ban KHONG tham so, danh de GAN VAO NUT RIBBON hoac Quick Access
+' Toolbar (giong cach nut "Project1.SendTrackedEmail" dang co san) -
+' bam la chay Archive NGAY, khong can doi lich Task Scheduler 12 tieng.
+' Co xac nhan truoc va hien MsgBox ket qua ngay sau khi xong (khac voi
+' ArchiveOldCampaignSentItems() goi tu Task Scheduler - chay im lang,
+' chi ghi log).
+'
+' CACH GAN NUT (Outlook Desktop):
+'   File > Options > Customize Ribbon (hoac Quick Access Toolbar) >
+'   o cot trai "Choose commands from:" chon "Macros" > chon
+'   "Project1.ArchiveNow" (hoac ten Project/Module thuc te tren may ban -
+'   xem lai huong dan trong tools/RunArchiveTask.vbs neu module ten
+'   khac "Module1") > Add >> > dat ten/icon tuy y > OK.
+' ================================================================
+Public Sub ArchiveNow()
+    If MsgBox("Chuyen ngay cac mail campaign (gui qua macro nay) da qua " & _
+              ARCHIVE_AFTER_HOURS & " gio, tu Sent Items sang " & ARCHIVE_STORE_NAME & _
+              " > " & ARCHIVE_FOLDER_NAME & "?", _
+              vbYesNo + vbQuestion, "SHB Tracker - Archive Now") = vbNo Then Exit Sub
+
+    ArchiveOldCampaignSentItems False
+End Sub
+
+
 Public Sub ArchiveOldCampaignSentItems(Optional ByVal Silent As Boolean = True)
     Dim sentFolder As folder
     Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
