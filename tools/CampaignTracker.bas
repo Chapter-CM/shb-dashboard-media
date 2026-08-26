@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.74
+' SHB CM Campaign Tracker v4.75
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -247,10 +247,26 @@ Option Explicit
 '     lai trong HTML truoc khi gan HTMLBody - anh nhung se hien dung tro
 '     lai. (Rieng anh dang link ngoai/URL that su thi khong lien quan loi
 '     nay, chi anh huong anh NHUNG thuc su qua Insert > Pictures.)
+'
+' CHANGES vs v4.74
+'   - Nguoi dung bao rut gon (Shrink) khong con hoat dong sau khi doi
+'     sang quet da-account (v4.73) - trong khi ban v4.68 truoc do rut
+'     gon rat tot. Nghi ngo acc.DeliveryStore khong tra ve duoc voi kieu
+'     account/profile nao do tren may nguoi dung (loi bi nuot boi On
+'     Error Resume Next, khong hien ra), khien vong lap da-account bo
+'     sot toan bo, khac voi truoc day GetDefaultFolder() luon chac chan
+'     tra ve it nhat 1 folder. Them lop DU PHONG cho ca ShrinkCampaign-
+'     SentItems() va RecallCampaign(): neu vong lap da-account khong quet
+'     duoc account nao (accountsScanned = 0), tu dong quay lai dung cach
+'     cu GetDefaultFolder(olFolderSentMail) nhu v4.68 - dam bao khong bao
+'     gio te hon ban cu, du van uu tien quet da-account truoc. Tach logic
+'     quet 1 folder ra rieng (ScanFolderForShrink/ScanFolderForRecall) de
+'     dung chung cho ca 2 duong (da-account va du phong), tranh sao chep
+'     code 2 lan de giam nguy co lech logic.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.74"
+Private Const VER       As String = "4.75"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -837,6 +853,68 @@ End Sub
 ' dinh) - GetDefaultFolder(olFolderSentMail) truoc day chi tra ve Sent
 ' Items cua 1 account MAC DINH duy nhat, nen neu campaign gui tu account
 ' khac se khong bao gio tim thay. Dedup theo StoreID nhu ArchiveModule.bas.
+' Quet 1 folder Sent Items, rut gon cac mail khop slug/Subject+SentOn -
+' tach rieng thanh Sub de dung chung cho ca vong lap da-account va
+' phan du phong (fallback) trong ShrinkCampaignSentItems() ben duoi.
+Private Sub ScanFolderForShrink(fld As folder, slug As String, hasCampInfo As Boolean, _
+                                  knownSubject As String, tCampStart As Date, tCampEnd As Date, _
+                                  tBuf As Date, placeholderHTML As String, _
+                                  ByRef diag As String, ByRef matched As Long, ByRef n As Long, _
+                                  ByRef scanned As Long, ByRef sampleDiag As String)
+    Dim i As Long
+    For i = fld.Items.Count To 1 Step -1
+        Dim itm As Object: Set itm = fld.Items(i)
+        If TypeName(itm) = "MailItem" Then
+            Dim itmSlug As String: itmSlug = "(khong doc duoc)"
+            Dim upErr As Long: upErr = 0
+            On Error Resume Next
+            Err.Clear
+            itmSlug = itm.UserProperties("CMSlug").Value
+            upErr = Err.Number
+            On Error GoTo 0
+
+            Dim isShrinkMatch As Boolean: isShrinkMatch = False
+            If itmSlug = slug Then
+                isShrinkMatch = True
+            ElseIf hasCampInfo Then
+                On Error Resume Next
+                If itm.subject = knownSubject And _
+                   itm.SentOn >= tCampStart - tBuf And _
+                   itm.SentOn <= tCampEnd + tBuf Then
+                    isShrinkMatch = True
+                End If
+                On Error GoTo 0
+            End If
+
+            If isShrinkMatch Then
+                matched = matched + 1
+                On Error Resume Next
+                Err.Clear
+                itm.HTMLBody = placeholderHTML
+                itm.Save
+                If Err.Number = 0 Then
+                    n = n + 1
+                Else
+                    If Len(diag) < 800 Then
+                        diag = diag & vbCrLf & "  - " & itm.subject & ": #" & Err.Number & " " & Err.Description
+                    End If
+                End If
+                On Error GoTo 0
+            End If
+            ' Chan doan: ghi lai 3 mail gan nhat (bat ke co khop slug hay
+            ' khong) de xem gia tri CMSlug thuc su doc duoc la gi.
+            If scanned < 3 Then
+                scanned = scanned + 1
+                If upErr <> 0 Then
+                    sampleDiag = sampleDiag & vbCrLf & "  - [" & itm.subject & "] loi doc UserProperty #" & upErr
+                Else
+                    sampleDiag = sampleDiag & vbCrLf & "  - [" & itm.subject & "] CMSlug doc duoc = '" & itmSlug & "'"
+                End If
+            End If
+        End If
+    Next i
+End Sub
+
 Public Function ShrinkCampaignSentItems(slug As String, _
                                           Optional ByRef diag As String = "") As Long
     Dim n As Long: n = 0
@@ -861,6 +939,7 @@ Public Function ShrinkCampaignSentItems(slug As String, _
     Dim matched As Long: matched = 0
     Dim scanned As Long: scanned = 0
     Dim sampleDiag As String: sampleDiag = ""
+    Dim accountsScanned As Long: accountsScanned = 0
 
     Dim seenStoreIDs As String: seenStoreIDs = "|"
     Dim acc As Object, store As Object, sentFolder As folder, storeID As String
@@ -883,60 +962,27 @@ Public Function ShrinkCampaignSentItems(slug As String, _
         On Error GoTo 0
         If sentFolder Is Nothing Then GoTo NextAccount
 
-        Dim i As Long
-        For i = sentFolder.Items.Count To 1 Step -1
-            Dim itm As Object: Set itm = sentFolder.Items(i)
-            If TypeName(itm) = "MailItem" Then
-                Dim itmSlug As String: itmSlug = "(khong doc duoc)"
-                Dim upErr As Long: upErr = 0
-                On Error Resume Next
-                Err.Clear
-                itmSlug = itm.UserProperties("CMSlug").Value
-                upErr = Err.Number
-                On Error GoTo 0
-
-                Dim isShrinkMatch As Boolean: isShrinkMatch = False
-                If itmSlug = slug Then
-                    isShrinkMatch = True
-                ElseIf hasCampInfo Then
-                    On Error Resume Next
-                    If itm.subject = knownSubject And _
-                       itm.SentOn >= tCampStart - tBuf And _
-                       itm.SentOn <= tCampEnd + tBuf Then
-                        isShrinkMatch = True
-                    End If
-                    On Error GoTo 0
-                End If
-
-                If isShrinkMatch Then
-                    matched = matched + 1
-                    On Error Resume Next
-                    Err.Clear
-                    itm.HTMLBody = placeholderHTML
-                    itm.Save
-                    If Err.Number = 0 Then
-                        n = n + 1
-                    Else
-                        If Len(diag) < 800 Then
-                            diag = diag & vbCrLf & "  - " & itm.subject & ": #" & Err.Number & " " & Err.Description
-                        End If
-                    End If
-                    On Error GoTo 0
-                End If
-                ' Chan doan: ghi lai 3 mail gan nhat (bat ke co khop slug hay
-                ' khong) de xem gia tri CMSlug thuc su doc duoc la gi.
-                If scanned < 3 Then
-                    scanned = scanned + 1
-                    If upErr <> 0 Then
-                        sampleDiag = sampleDiag & vbCrLf & "  - [" & itm.subject & "] loi doc UserProperty #" & upErr
-                    Else
-                        sampleDiag = sampleDiag & vbCrLf & "  - [" & itm.subject & "] CMSlug doc duoc = '" & itmSlug & "'"
-                    End If
-                End If
-            End If
-        Next i
+        accountsScanned = accountsScanned + 1
+        ScanFolderForShrink sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
+                             tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag
 NextAccount:
     Next acc
+
+    ' Du phong: neu vi ly do nao do khong quet duoc account nao qua vong
+    ' lap tren (vd acc.DeliveryStore khong tra ve duoc voi kieu account/
+    ' profile nao do), quay lai dung cach cu (v4.68) de KHONG BAO GIO te
+    ' hon truoc - GetDefaultFolder luon tra ve it nhat Sent Items cua
+    ' account mac dinh.
+    If accountsScanned = 0 Then
+        Set sentFolder = Nothing
+        On Error Resume Next
+        Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
+        On Error GoTo 0
+        If Not sentFolder Is Nothing Then
+            ScanFolderForShrink sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
+                                 tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag
+        End If
+    End If
 
     If matched = 0 Then
         diag = "(khong tim thay mail nao co CMSlug = '" & slug & "'" & _
@@ -1217,6 +1263,76 @@ End Function
 '   - Chi recall duoc mail gui noi bo cung to chuc Exchange.
 '   - Nguoi nhan phai dang dung Outlook Desktop (khong phai Web/Mobile).
 '   - Mail phai CHUA duoc mo doc.
+' Quet 1 folder Sent Items va thu recall cac mail khop - tach rieng thanh
+' Sub de dung chung cho ca vong lap da-account va phan du phong (fallback)
+' trong RecallCampaign() ben duoi.
+Private Sub ScanFolderForRecall(fld As folder, slug As String, hasCampInfo As Boolean, _
+                                  knownSubject As String, tCampStart As Date, tCampEnd As Date, _
+                                  tBuf As Date, placeholderHTML As String, _
+                                  ByRef matched As Long, ByRef recalled As Long, ByRef failed As Long, _
+                                  ByRef failDiag As String, ByRef shrunkR As Long, _
+                                  ByRef sampled As Long, ByRef sampleDiag As String)
+    Dim i As Long
+    Dim itm As Object
+    For i = fld.Items.Count To 1 Step -1
+        Set itm = fld.Items(i)
+        If TypeName(itm) = "MailItem" Then
+            Dim itmSlug As String: itmSlug = ""
+            On Error Resume Next
+            itmSlug = itm.UserProperties("CMSlug").Value
+            On Error GoTo 0
+
+            Dim isMatch As Boolean: isMatch = False
+            If itmSlug = slug Then
+                isMatch = True
+            ElseIf hasCampInfo Then
+                On Error Resume Next
+                If itm.subject = knownSubject And _
+                   itm.SentOn >= tCampStart - tBuf And _
+                   itm.SentOn <= tCampEnd + tBuf Then
+                    isMatch = True
+                End If
+                On Error GoTo 0
+            End If
+
+            ' Chan doan: ghi lai Subject/SentOn thuc te cua 3 mail gan nhat
+            ' (bat ke co khop hay khong) de so sanh voi gia tri da luu.
+            If sampled < 3 Then
+                sampled = sampled + 1
+                On Error Resume Next
+                sampleDiag = sampleDiag & vbCrLf & "  - subj='" & itm.subject & _
+                             "' sentOn=" & Format(itm.SentOn, "yyyy-mm-dd hh:nn:ss")
+                On Error GoTo 0
+            End If
+
+            If isMatch Then
+                matched = matched + 1
+                Dim itmErr As String: itmErr = ""
+                If RecallOneItem(itm, itmErr) Then
+                    recalled = recalled + 1
+                Else
+                    failed = failed + 1
+                    If Len(failDiag) < 1000 Then
+                        failDiag = failDiag & vbCrLf & "  - " & itm.subject & ": " & itmErr
+                    End If
+                End If
+
+                ' Nhan tien rut gon ban luu Sent Items cua mail nay - luc nay
+                ' item da "on dinh" du lau trong Sent Items (thoi gian tu luc
+                ' gui toi luc RecallCampaign() duoc goi thuong du de Exchange
+                ' "chot" xong item, khac voi luc rut gon ngay sau gui bi tre).
+                On Error Resume Next
+                itm.HTMLBody = placeholderHTML
+                itm.Save
+                If Err.Number = 0 Then shrunkR = shrunkR + 1
+                On Error GoTo 0
+
+                DoEvents
+            End If
+        End If
+    Next i
+End Sub
+
 Public Sub RecallCampaign()
 
     Dim slugRaw As String
@@ -1276,10 +1392,9 @@ Public Sub RecallCampaign()
 
     ' Quet Sent Items cua TAT CA account trong profile - xem ghi chu tuong
     ' tu tai ShrinkCampaignSentItems() o tren.
+    Dim accountsScanned As Long: accountsScanned = 0
     Dim seenStoreIDs As String: seenStoreIDs = "|"
     Dim acc As Object, store As Object, sentFolder As folder, storeID As String
-    Dim itm As Object
-    Dim i As Long
     For Each acc In Application.Session.Accounts
         On Error Resume Next
         Set store = Nothing
@@ -1300,65 +1415,26 @@ Public Sub RecallCampaign()
         On Error GoTo 0
         If sentFolder Is Nothing Then GoTo NextAccount
 
-        For i = sentFolder.Items.Count To 1 Step -1
-            Set itm = sentFolder.Items(i)
-            If TypeName(itm) = "MailItem" Then
-                Dim itmSlug As String: itmSlug = ""
-                On Error Resume Next
-                itmSlug = itm.UserProperties("CMSlug").Value
-                On Error GoTo 0
-
-                Dim isMatch As Boolean: isMatch = False
-                If itmSlug = slug Then
-                    isMatch = True
-                ElseIf hasCampInfo Then
-                    On Error Resume Next
-                    If itm.subject = knownSubject And _
-                       itm.SentOn >= tCampStart - tBuf And _
-                       itm.SentOn <= tCampEnd + tBuf Then
-                        isMatch = True
-                    End If
-                    On Error GoTo 0
-                End If
-
-                ' Chan doan: ghi lai Subject/SentOn thuc te cua 3 mail gan nhat
-                ' (bat ke co khop hay khong) de so sanh voi gia tri da luu.
-                If sampled < 3 Then
-                    sampled = sampled + 1
-                    On Error Resume Next
-                    sampleDiag = sampleDiag & vbCrLf & "  - subj='" & itm.subject & _
-                                 "' sentOn=" & Format(itm.SentOn, "yyyy-mm-dd hh:nn:ss")
-                    On Error GoTo 0
-                End If
-
-                If isMatch Then
-                    matched = matched + 1
-                    Dim itmErr As String: itmErr = ""
-                    If RecallOneItem(itm, itmErr) Then
-                        recalled = recalled + 1
-                    Else
-                        failed = failed + 1
-                        If Len(failDiag) < 1000 Then
-                            failDiag = failDiag & vbCrLf & "  - " & itm.subject & ": " & itmErr
-                        End If
-                    End If
-
-                    ' Nhan tien rut gon ban luu Sent Items cua mail nay - luc nay
-                    ' item da "on dinh" du lau trong Sent Items (thoi gian tu luc
-                    ' gui toi luc RecallCampaign() duoc goi thuong du de Exchange
-                    ' "chot" xong item, khac voi luc rut gon ngay sau gui bi tre).
-                    On Error Resume Next
-                    itm.HTMLBody = placeholderHTML
-                    itm.Save
-                    If Err.Number = 0 Then shrunkR = shrunkR + 1
-                    On Error GoTo 0
-
-                    DoEvents
-                End If
-            End If
-        Next i
+        accountsScanned = accountsScanned + 1
+        ScanFolderForRecall sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
+                             tBuf, placeholderHTML, matched, recalled, failed, failDiag, _
+                             shrunkR, sampled, sampleDiag
 NextAccount:
     Next acc
+
+    ' Du phong: giong ShrinkCampaignSentItems(), neu khong quet duoc
+    ' account nao qua vong lap tren thi quay lai dung cach cu (v4.68).
+    If accountsScanned = 0 Then
+        Set sentFolder = Nothing
+        On Error Resume Next
+        Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
+        On Error GoTo 0
+        If Not sentFolder Is Nothing Then
+            ScanFolderForRecall sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
+                                 tBuf, placeholderHTML, matched, recalled, failed, failDiag, _
+                                 shrunkR, sampled, sampleDiag
+        End If
+    End If
 
     If matched = 0 Then
         Dim noMatchMsg As String
