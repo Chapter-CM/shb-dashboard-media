@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Archive Module v1.1
+' SHB CM Archive Module v1.2
 ' Module VBA RIENG, DOC LAP hoan toan voi CampaignTracker.bas (Module1) -
 ' khong dung chung bien/hang so nao voi Module1, chi doc UserProperty
 ' "CMSlug" da duoc CampaignTracker.bas gan san vao mail luc gui (SendCampaign).
@@ -16,6 +16,12 @@ Option Explicit
 ' Sent Items sang folder Archive chi dinh (sua ARCHIVE_STORE_NAME/
 ' ARCHIVE_FOLDER_NAME ben duoi cho khop ten hien tren may ban neu can -
 ' xem qua Data File Properties > Filename de xac nhan dung store).
+'
+' v1.2: Quet Sent Items cua TAT CA account trong profile (Application.
+' Session.Accounts), khong chi rieng account mac dinh - vi profile co
+' the co nhieu account cung luc va campaign co the gui tu account nao
+' cung duoc, trong khi GetDefaultFolder(olFolderSentMail) truoc day chi
+' tra ve Sent Items cua 1 account mac dinh duy nhat.
 '
 ' 2 macro:
 '   - ArchiveNow() : khong tham so, gan vao nut Ribbon/Quick Access
@@ -51,15 +57,14 @@ Public Sub ArchiveOldCampaignSentItems(Optional ByVal Silent As Boolean = True)
     ArchiveCampaignSentItems Silent, False
 End Sub
 
+' Quet Sent Items cua TAT CA account dang co trong profile Outlook hien
+' tai (khong chi rieng account mac dinh) - vi GetDefaultFolder(olFolderSentMail)
+' chi tra ve Sent Items cua 1 account MAC DINH duy nhat, trong khi profile
+' co the co nhieu account cung luc (vd dung.ha4@shb.com.vn va
+' CCE_PROJECT@shb.com.vn) va campaign co the gui tu bat ky account nao.
+' Dedup theo StoreID de khong quet trung 1 store 2 lan (truong hop nhieu
+' account tro chung 1 mailbox/delivery store).
 Private Sub ArchiveCampaignSentItems(ByVal Silent As Boolean, ByVal IgnoreAge As Boolean)
-    Dim sentFolder As Object
-    Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
-    If sentFolder Is Nothing Then
-        LogArchiveRun "Loi: khong tim thay Sent Items."
-        If Not Silent Then MsgBox "Khong tim thay folder Sent Items.", vbExclamation, "SHB Tracker - Archive"
-        Exit Sub
-    End If
-
     Dim findDiag As String
     findDiag = ""
     Dim targetFolder As Object
@@ -81,46 +86,81 @@ Private Sub ArchiveCampaignSentItems(ByVal Silent As Boolean, ByVal IgnoreAge As
     failed = 0
     Dim scanned As Long
     scanned = 0
+    Dim accountsScanned As Long
+    accountsScanned = 0
 
-    Dim i As Long
-    Dim itm As Object
-    Dim itmSlug As String
-    Dim hasSlug As Boolean
-    For i = sentFolder.Items.Count To 1 Step -1
-        Set itm = sentFolder.Items(i)
-        If TypeName(itm) = "MailItem" Then
-            itmSlug = ""
+    Dim seenStoreIDs As String
+    seenStoreIDs = "|"
+
+    Dim acc As Object
+    Dim store As Object
+    Dim sentFolder As Object
+    Dim storeID As String
+    For Each acc In Application.Session.Accounts
+        On Error Resume Next
+        Set store = Nothing
+        Set store = acc.DeliveryStore
+        On Error GoTo 0
+        If Not store Is Nothing Then
+            storeID = ""
             On Error Resume Next
-            Err.Clear
-            itmSlug = itm.UserProperties("CMSlug").Value
-            hasSlug = (Err.Number = 0 And Len(itmSlug) > 0)
+            storeID = store.StoreID
             On Error GoTo 0
+            If Len(storeID) > 0 And InStr(seenStoreIDs, "|" & storeID & "|") = 0 Then
+                seenStoreIDs = seenStoreIDs & storeID & "|"
 
-            If hasSlug Then
-                scanned = scanned + 1
-                If IgnoreAge Or itm.SentOn <= cutoff Then
-                    On Error Resume Next
-                    Err.Clear
-                    itm.Move targetFolder
-                    If Err.Number = 0 Then
-                        moved = moved + 1
-                    Else
-                        failed = failed + 1
-                    End If
-                    On Error GoTo 0
+                Set sentFolder = Nothing
+                On Error Resume Next
+                Set sentFolder = store.GetDefaultFolder(olFolderSentMail)
+                On Error GoTo 0
+
+                If Not sentFolder Is Nothing Then
+                    accountsScanned = accountsScanned + 1
+
+                    Dim i As Long
+                    Dim itm As Object
+                    Dim itmSlug As String
+                    Dim hasSlug As Boolean
+                    For i = sentFolder.Items.Count To 1 Step -1
+                        Set itm = sentFolder.Items(i)
+                        If TypeName(itm) = "MailItem" Then
+                            itmSlug = ""
+                            On Error Resume Next
+                            Err.Clear
+                            itmSlug = itm.UserProperties("CMSlug").Value
+                            hasSlug = (Err.Number = 0 And Len(itmSlug) > 0)
+                            On Error GoTo 0
+
+                            If hasSlug Then
+                                scanned = scanned + 1
+                                If IgnoreAge Or itm.SentOn <= cutoff Then
+                                    On Error Resume Next
+                                    Err.Clear
+                                    itm.Move targetFolder
+                                    If Err.Number = 0 Then
+                                        moved = moved + 1
+                                    Else
+                                        failed = failed + 1
+                                    End If
+                                    On Error GoTo 0
+                                End If
+                            End If
+                        End If
+                    Next i
                 End If
             End If
         End If
-    Next i
+    Next acc
 
     Dim summary As String
-    summary = Format(Now, "yyyy-mm-dd HH:nn:ss") & " - Quet: " & scanned & _
+    summary = Format(Now, "yyyy-mm-dd HH:nn:ss") & " - Quet " & accountsScanned & " account | " & scanned & _
               " mail campaign trong Sent Items | Da chuyen: " & moved & _
               " | Loi: " & failed & " | Nguong: " & IIf(IgnoreAge, "Bo qua (ArchiveNow)", ARCHIVE_AFTER_HOURS & "h")
     LogArchiveRun summary
 
     If Not Silent Then
-        MsgBox "Hoan thanh Archive!" & vbCrLf & "Da chuyen: " & moved & vbCrLf & "Loi: " & failed, _
+        MsgBox "Hoan thanh Archive!" & vbCrLf & "Da quet: " & accountsScanned & " account" & vbCrLf & _
+               "Da chuyen: " & moved & vbCrLf & "Loi: " & failed, _
                vbInformation, "SHB Tracker - Archive"
     End If
 End Sub
