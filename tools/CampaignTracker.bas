@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.69
+' SHB CM Campaign Tracker v4.70
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -243,10 +243,18 @@ Option Explicit
 '     ARCHIVE_STORE_NAME/ARCHIVE_FOLDER_NAME (sua lai cho khop ten hien
 '     tren may ban qua Data File Properties > Filename neu can), co
 '     fallback do gan theo tu khoa "archiv" neu ten khac di chut it.
+'
+' CHANGES vs v4.69
+'   - Loi Compile error "Only comments may appear after End Sub, End
+'     Function, or End Property" ngay dong Private Const ARCHIVE_AFTER_HOURS -
+'     cung loi da tung gap o v4.53 (khoi comment dai bi rung mat dau nhay
+'     dau dong ' qua nhieu lop copy/paste). Rut gon 3 khoi comment dai
+'     (ArchiveOldCampaignSentItems, ArchiveNow, FindArchiveTargetFolder,
+'     LogArchiveRun) thanh 1 dong duy nhat moi cho de giam nguy co lap lai.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.69"
+Private Const VER       As String = "4.70"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1403,45 +1411,13 @@ Private Sub CleanRecallNotifications()
 End Sub
 
 
-' ================================================================
-' PUBLIC: ArchiveOldCampaignSentItems
-' Chay ngam dinh ky (goi tu Windows Task Scheduler qua script COM ben
-' ngoai, xem tools/RunArchiveTask.vbs) - MOI 12 tieng/lan, KHONG can
-' Outlook dang mo san (script se tu mo Outlook neu chua chay).
-'
-' Chi chuyen cac mail DA GUI QUA MACRO NAY (nhan dien qua UserProperty
-' CMSlug - giong co che RecallCampaign() dang dung) va DA QUA
-' ARCHIVE_AFTER_HOURS ke tu luc gui, tu Sent Items sang folder Archive
-' chi dinh (xem ARCHIVE_STORE_NAME/ARCHIVE_FOLDER_NAME ben duoi - doi
-' lai cho khop ten hien tren may cua ban neu can, vd qua
-' Data File Properties > Filename de xac nhan dung store).
-'
-' Silent:=True (mac dinh khi goi tu Task Scheduler) - KHONG hien MsgBox
-' (tranh treo dialog khong ai bam luc chay ngam ban dem), thay vao do
-' ghi log ra file text de kiem tra sau. Silent:=False (goi tay tu
-' Alt+F8) se hien MsgBox tom tat nhu cac macro khac.
-' ================================================================
+' Archive: chuyen mail campaign (CMSlug) qua ARCHIVE_AFTER_HOURS gio sang folder Archive - xem ArchiveNow/ArchiveOldCampaignSentItems ben duoi.
 Private Const ARCHIVE_AFTER_HOURS As Long = 24
 Private Const ARCHIVE_STORE_NAME  As String = "Archives"
 Private Const ARCHIVE_FOLDER_NAME As String = "Archive"
 Private Const ARCHIVE_LOG_PATH    As String = "C:\SHBTrackerLogs\archive-log.txt"
 
-' ================================================================
-' PUBLIC: ArchiveNow
-' Ban KHONG tham so, danh de GAN VAO NUT RIBBON hoac Quick Access
-' Toolbar (giong cach nut "Project1.SendTrackedEmail" dang co san) -
-' bam la chay Archive NGAY, khong can doi lich Task Scheduler 12 tieng.
-' Co xac nhan truoc va hien MsgBox ket qua ngay sau khi xong (khac voi
-' ArchiveOldCampaignSentItems() goi tu Task Scheduler - chay im lang,
-' chi ghi log).
-'
-' CACH GAN NUT (Outlook Desktop):
-'   File > Options > Customize Ribbon (hoac Quick Access Toolbar) >
-'   o cot trai "Choose commands from:" chon "Macros" > chon
-'   "Project1.ArchiveNow" (hoac ten Project/Module thuc te tren may ban -
-'   xem lai huong dan trong tools/RunArchiveTask.vbs neu module ten
-'   khac "Module1") > Add >> > dat ten/icon tuy y > OK.
-' ================================================================
+' ArchiveNow: gan nut nay vao Ribbon/QAT (File > Options > Customize Ribbon > Macros > ArchiveNow) de bam chay Archive ngay, khong doi lich 12 tieng.
 Public Sub ArchiveNow()
     If MsgBox("Chuyen ngay cac mail campaign (gui qua macro nay) da qua " & _
               ARCHIVE_AFTER_HOURS & " gio, tu Sent Items sang " & ARCHIVE_STORE_NAME & _
@@ -1521,14 +1497,7 @@ Public Sub ArchiveOldCampaignSentItems(Optional ByVal Silent As Boolean = True)
 End Sub
 
 
-' ================================================================
-' FIND ARCHIVE TARGET FOLDER
-' Tim theo dung ten store/folder (ARCHIVE_STORE_NAME/ARCHIVE_FOLDER_NAME).
-' Neu khong khop chinh xac, fallback: tim store dau tien co ten chua
-' "archiv" (khong phan biet hoa/thuong) roi lay folder con dau tien co
-' ten chua "archiv" ben trong no - de macro van chay duoc tren may khac
-' co ten hien thi hoi khac (vd do ngon ngu Outlook khac nhau).
-' ================================================================
+' FindArchiveTargetFolder: tim folder Archive dung ten (ARCHIVE_STORE_NAME/ARCHIVE_FOLDER_NAME), fallback do gan theo tu khoa "archiv" neu ten khac di.
 Private Function FindArchiveTargetFolder(ByRef diag As String) As folder
     Dim fld As folder
     On Error Resume Next
@@ -1563,11 +1532,7 @@ Private Function FindArchiveTargetFolder(ByRef diag As String) As folder
 End Function
 
 
-' ================================================================
-' LOG ARCHIVE RUN - ghi 1 dong log ra file text (khong dung MsgBox de
-' khong treo dialog khi chay ngam qua Task Scheduler luc khong ai ngoi
-' may). Tao thu muc log neu chua co.
-' ================================================================
+' LogArchiveRun: ghi 1 dong log ra file text (khong dung MsgBox de tranh treo dialog khi chay ngam qua Task Scheduler).
 Private Sub LogArchiveRun(ByVal line As String)
     On Error Resume Next
     Dim dirPath As String
