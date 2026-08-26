@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.75
+' SHB CM Campaign Tracker v4.76
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -263,10 +263,22 @@ Option Explicit
 '     quet 1 folder ra rieng (ScanFolderForShrink/ScanFolderForRecall) de
 '     dung chung cho ca 2 duong (da-account va du phong), tranh sao chep
 '     code 2 lan de giam nguy co lech logic.
+'
+' CHANGES vs v4.75
+'   - Nguoi dung bao link tracking "tho" bi lo ra ngay trong phan preview
+'     cua Outlook (doan chu xam duoi Subject trong danh sach Inbox).
+'     Nguyen nhan: prevTxt (preview text) truoc day tu dong lay NGUYEN
+'     dong dau tien cua draft.body, khong loc gi ca - neu dong dau tien
+'     do vo tinh la 1 link tran, chinh link do bi nhet thang vao preheader
+'     an (hidden div ngay sau <body>) roi "lo" ra thanh preview. Them
+'     FindFirstNonLinkLine(): duyet tung dong cua body, BO QUA dong trong
+'     hoac dong chi la 1 link http/https tran, lay dong dau tien co chu
+'     THUC SU lam preview text - khong con nguy co link "tho" lot vao
+'     preview nua.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.75"
+Private Const VER       As String = "4.76"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -380,6 +392,27 @@ End Sub
 ' ================================================================
 ' PUBLIC: SendCampaign
 ' ================================================================
+' Tim dong VAN BAN THUC SU dau tien trong noi dung mail, bo qua cac
+' dong trong hoac chi la 1 link tran (http/https) - dung de tu dong
+' chon preview text, tranh nhet link "tho" vao preheader an.
+Private Function FindFirstNonLinkLine(ByVal bodyText As String) As String
+    Dim norm As String
+    norm = Replace(bodyText, vbCrLf, vbLf)
+    norm = Replace(norm, vbCr, vbLf)
+    Dim lines() As String: lines = Split(norm, vbLf)
+    Dim k As Long
+    For k = 0 To UBound(lines)
+        Dim ln As String: ln = Trim(lines(k))
+        If Len(ln) > 0 Then
+            If LCase(Left(ln, 7)) <> "http://" And LCase(Left(ln, 8)) <> "https://" Then
+                FindFirstNonLinkLine = ln
+                Exit Function
+            End If
+        End If
+    Next k
+    FindFirstNonLinkLine = ""
+End Function
+
 Public Sub SendCampaign()
 
     Dim insp As Object
@@ -418,13 +451,13 @@ Public Sub SendCampaign()
     If Len(Trim(mType)) = 0 Then mType = "info"
     mType = Trim(mType)
 
-    ' Preview text: doc tu dong dau email body
-    prevTxt = Trim(draft.body)
-    Dim nlPos As Long
-    nlPos = InStr(prevTxt, vbCrLf)
-    If nlPos = 0 Then nlPos = InStr(prevTxt, vbLf)
-    If nlPos = 0 Then nlPos = InStr(prevTxt, vbCr)
-    If nlPos > 0 Then prevTxt = Trim(Left(prevTxt, nlPos - 1))
+    ' Preview text: tu dong lay DONG DAU TIEN CO CHU THUC SU cua email body,
+    ' BO QUA cac dong chi la 1 link tran (http/https) - neu khong, dong
+    ' link do se bi nhet thang vao preheader an va "lo" ra ngoai phan
+    ' preview cua Outlook (nguoi dung bao gap dung truong hop nay: dong
+    ' dau tien cua mail vo tinh la 1 link, khien link "tho" hien ra
+    ' ngay ngoai preview thay vi cau chu binh thuong).
+    prevTxt = FindFirstNonLinkLine(draft.body)
     If Len(prevTxt) > 120 Then prevTxt = Left(prevTxt, 120)
     If Len(Trim(prevTxt)) = 0 Then prevTxt = "(trong)"
 
