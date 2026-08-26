@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.60
+' SHB CM Campaign Tracker v4.69
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -154,10 +154,99 @@ Option Explicit
 '     Items - khi thong bao vua bi chuyen toi do, xoa THEM 1 LAN NUA ngay
 '     tai do de xoa VINH VIEN (hanh vi chuan Outlook: xoa item dang o san
 '     trong Deleted Items = xoa han, khong con noi de chuyen tiep).
+'
+' CHANGES vs v4.60
+'   - Recall gap van khong tim thay mail o may/campaign thuc te (dung Subject
+'     + SentOn nhung matched=0), dau khong ro nguyen nhan qua vai lan test.
+'     Them chan doan chi tiet vao thong bao "khong tim thay": hien ro Subject/
+'     khoang thoi gian da luu (LoadCampaignInfo) VA Subject/SentOn thuc te cua
+'     3 mail gan nhat trong Sent Items, de so sanh truc tiep va xac dinh dung
+'     cho lech (vd khac Subject do ky tu dac biet, hoac SentOn ngoai khoang
+'     thoi gian du kien).
+'
+' CHANGES vs v4.61
+'   - Chan doan lo ro nguyen nhan that: Subject da luu bi mat 1 ky tu co dau
+'     tieng Viet (bien thanh dau "?") khi luu qua SaveSetting/GetSetting
+'     (Windows Registry chi ho tro ANSI/ASCII co ban qua API nay). Subject
+'     sai lech (mat du lieu Unicode) nen KHONG BAO GIO
+'     khop voi Subject that trong Sent Items. Sua: them Utf8ToHex()/HexToUtf8()
+'     (dung ADODB.Stream, cung co che voi UrlEnc() da co san) - ma hoa Subject
+'     sang chuoi HEX (chi 0-9/A-F, an toan tuyet doi) truoc khi SaveSetting,
+'     giai ma lai luc GetSetting. Cac campaign gui TRUOC ban nay van co the bi
+'     sai (da luu hong roi) - can gui lai/cho CMSlug on dinh; campaign gui SAU
+'     ban nay se luu dung Unicode, tim nhanh hoat dong binh thuong.
+'
+' CHANGES vs v4.62
+'   - Campaign lon (200+ nguoi) van khong rut gon duoc du doi HANG GIO - loi
+'     RIENG: ShrinkCampaignSentItems() (goi trong luc gui va luc RecallCampaign)
+'     chi duoc sua tim nhanh o RecallCampaign(), QUEN sua chinh ham nay - van
+'     chi dua vao CMSlug (co the khong bao gio doc duoc on dinh voi mot so
+'     mailbox/campaign). Sua: them cung dieu kien Subject + SentOn nhu
+'     RecallCampaign() vao ShrinkCampaignSentItems() - rut gon trong luc gui
+'     (SHRINK_EVERY, cuoi SendCampaign) gio cung tim nhanh duoc, khong con
+'     phu thuoc hoan toan vao CMSlug nua.
+'
+' CHANGES vs v4.63
+'   - Nguoi dung nhan manh: "gui xong la phai TU rut gon", khong chap nhan
+'     phai bam RecallCampaign() rieng, khong doi (block), khong popup. Them
+'     Windows Timer chay NGAM HOAN TOAN (SetTimer/KillTimer qua user32,
+'     AddressOf ShrinkTimerProc): neu cuoi SendCampaign() van con mail chua
+'     rut gon duoc, tu dong dat lich kiem tra lai moi 60 giay (toi da 12 lan
+'     = 12 phut), khong can nguoi dung lam gi, khong hien them hop thoai nao.
+'     Day la lua chon ky thuat DUY NHAT dap ung duoc yeu cau "tu dong hoan
+'     toan, khong cho, khong popup" - da tung ngan ngai vi lo rui ro timing,
+'     nhung cac phuong an khac (Reminder popup, cho block) deu bi tu choi.
+'
+' CHANGES vs v4.64
+'   - Loi runtime "Type mismatch" ngay dong SetTimer(...) - tren may 64-bit
+'     (Office 64-bit, pho bien hien nay), API user32 tra ve kieu LongPtr
+'     (8 byte) chu khong phai Long thuong (4 byte); bien "h" nhan ket qua
+'     lai khai bao cung Long -> tran/khong khop kieu. Sua: khai bao "h" theo
+'     dieu kien bien dich #If VBA7 (LongPtr) / #Else (Long) giong cach da
+'     dung cho chinh khai bao SetTimer/KillTimer o tren.
+'
+' CHANGES vs v4.65-4.67 (ban chot sau khi XAC NHAN Timer chay dung)
+'   - Da xac nhan bang log thuc te: Timer nen HOAT DONG (callback duoc
+'     Windows goi lai, "shrunk=1/1") - mail tu rut gon sau vai phut ma
+'     nguoi dung KHONG can bam gi. Da go toan bo code chan doan tam thoi
+'     (macro DebugShowTimerLog + ghi log qua SaveSetting).
+'   - Fix: gui campaign MOI trong luc campaign truoc con dang cho rut gon
+'     thi campaign cu bi bo do dang (quan sat thuc te: mail 1.5 khong duoc
+'     rut gon vi 1.6 gui ngay sau do). Nay StartShrinkTimer() vet not
+'     campaign cu them 1 lan truoc khi chuyen sang theo doi campaign moi.
+'   - Fix an toan: bien module-level cua VBA bi xoa trang khi VBA project
+'     reset, NHUNG timer Windows van song -> callback se chay mai voi slug
+'     rong. Nay callback tu tat timer khi khong con slug, va
+'     StopShrinkTimer() goi KillTimer VO DIEU KIEN (truoc day kiem tra co
+'     m_ShrinkTimerOn - chinh co nay cung bi xoa khi reset nen khong bao
+'     gio tat duoc timer "mo coi").
+'
+' CHANGES vs v4.68
+'   - Nguoi dung can GIAI PHONG THEM dung luong: mail campaign da rut gon
+'     van nam mai trong Sent Items, khong bao gio don di. Them 2 macro moi
+'     (khong dung gi den cac co che Recall/Shrink o tren, doc lap hoan
+'     toan) de TIEP TUC chuyen cac mail campaign (nhan dien qua CMSlug -
+'     tuc CHI mail gui bang chinh macro nay, KHONG dung mail thuong nguoi
+'     dung tu gui tay) tu Sent Items sang folder Archive rieng:
+'       - ArchiveOldCampaignSentItems(Silent) : quet toan bo Sent Items,
+'         chuyen cac mail co CMSlug va da gui QUA 24 GIO sang Archive.
+'         Silent:=True (mac dinh, dung khi goi tu Windows Task Scheduler
+'         chay ngam dinh ky 12 tieng/lan qua script COM ben ngoai - xem
+'         tools/RunArchiveTask.vbs va tools/TaskScheduler-Setup.txt) se
+'         KHONG hien MsgBox nao (tranh treo dialog luc khong ai ngoi may),
+'         chi ghi log ra file text de kiem tra sau.
+'       - ArchiveNow() : ban khong tham so, danh de GAN VAO NUT RIBBON/
+'         Quick Access Toolbar (giong cach nut SendTrackedEmail dang co
+'         san) - bam la hoi xac nhan roi chay Archive NGAY LAP TUC, hien
+'         MsgBox ket qua, khong can doi lich 12 tieng.
+'     Folder dich xac dinh qua FindArchiveTargetFolder(): tim dung theo
+'     ARCHIVE_STORE_NAME/ARCHIVE_FOLDER_NAME (sua lai cho khop ten hien
+'     tren may ban qua Data File Properties > Filename neu can), co
+'     fallback do gan theo tu khoa "archiv" neu ten khac di chut it.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.60"
+Private Const VER       As String = "4.69"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -166,6 +255,107 @@ Private m_BagN           As Long
 
 ' Giu song bien watcher trong suot phien Outlook (xem RecallNotifWatcher.cls)
 Private m_RecallWatcher As RecallNotifWatcher
+
+' ================================================================
+' WINDOWS TIMER - chay ngam HOAN TOAN de tu dong rut gon Sent Items sau
+' khi gui, KHONG can bam RecallCampaign(), KHONG hien popup, KHONG chan
+' (block) SendCampaign. Day la cach DUY NHAT dap ung dung yeu cau "gui
+' xong la tu rut gon" ke ca voi 1 mail (Exchange van can vai phut de mail
+' "chot", nhung nguoi dung khong phai cho hay bam gi ca - Outlook tu goi
+' lai ham rut gon o "hau truong" qua co che Timer chuan cua Windows).
+' ================================================================
+#If VBA7 Then
+    Private Declare PtrSafe Function SetTimer Lib "user32" _
+        (ByVal hwnd As LongPtr, ByVal nIDEvent As LongPtr, ByVal uElapse As Long, ByVal lpTimerFunc As LongPtr) As LongPtr
+    Private Declare PtrSafe Function KillTimer Lib "user32" _
+        (ByVal hwnd As LongPtr, ByVal nIDEvent As LongPtr) As Long
+#Else
+    Private Declare Function SetTimer Lib "user32" _
+        (ByVal hwnd As Long, ByVal nIDEvent As Long, ByVal uElapse As Long, ByVal lpTimerFunc As Long) As Long
+    Private Declare Function KillTimer Lib "user32" _
+        (ByVal hwnd As Long, ByVal nIDEvent As Long) As Long
+#End If
+
+Private Const SHRINK_TIMER_ID As Long = 918273
+Private Const SHRINK_TIMER_INTERVAL_MS As Long = 60000    ' kiem tra lai moi 60 giay
+Private Const SHRINK_TIMER_MAX_ATTEMPTS As Long = 12       ' toi da 12 phut
+
+Private m_ShrinkTimerOn As Boolean
+Private m_ShrinkSlug As String
+Private m_ShrinkTarget As Long      ' so mail can rut gon (sentOK cua campaign)
+Private m_ShrinkAttempts As Long
+
+' Bat dau (hoac gia han) timer ngam de tiep tuc thu rut gon slug nay sau
+' moi 60 giay, toi da 12 lan, cho den khi du (shrunk >= target) hoac het
+' luot thu. Chi theo doi 1 campaign "dang cho" tai 1 thoi diem - neu gui
+' campaign MOI trong luc campaign truoc chua rut gon xong, thu rut gon
+' campaign cu them 1 lan NGAY tai day truoc khi chuyen sang theo doi
+' campaign moi (khong bo do dang nhu truoc).
+Private Sub StartShrinkTimer(slug As String, target As Long)
+    On Error Resume Next
+    If m_ShrinkTimerOn Then
+        KillTimer 0, SHRINK_TIMER_ID
+        m_ShrinkTimerOn = False
+        ' Campaign cu con dang cho -> vet not 1 lan de khong bi bo quen
+        ' (thuong da du thoi gian "chot" neu campaign moi gui sau vai phut).
+        If Len(Trim(m_ShrinkSlug)) > 0 And m_ShrinkSlug <> slug Then
+            Dim dummyDiag As String
+            ShrinkCampaignSentItems m_ShrinkSlug, dummyDiag
+        End If
+    End If
+    m_ShrinkSlug = slug
+    m_ShrinkTarget = target
+    m_ShrinkAttempts = 0
+#If VBA7 Then
+    Dim h As LongPtr
+#Else
+    Dim h As Long
+#End If
+    h = SetTimer(0, SHRINK_TIMER_ID, SHRINK_TIMER_INTERVAL_MS, AddressOf ShrinkTimerProc)
+    m_ShrinkTimerOn = (h <> 0)
+    On Error GoTo 0
+End Sub
+
+' Luon goi KillTimer VO DIEU KIEN (khong phu thuoc co m_ShrinkTimerOn) -
+' vi khi VBA project bi reset, co nay bi xoa ve False trong khi timer cua
+' Windows VAN CON SONG; neu kiem tra co truoc thi se khong bao gio tat duoc
+' timer "mo coi" do. KillTimer voi ID khong ton tai la vo hai.
+Private Sub StopShrinkTimer()
+    On Error Resume Next
+    KillTimer 0, SHRINK_TIMER_ID
+    m_ShrinkTimerOn = False
+    On Error GoTo 0
+End Sub
+
+' Ham callback Windows goi lai moi khi Timer "no" - PHAI la Public Sub trong
+' 1 standard module (khong duoc dat trong Class Module) de AddressOf hoat
+' dong dung. Chay hoan toan ngam, khong hien gi ca tru khi that su xong.
+#If VBA7 Then
+Public Sub ShrinkTimerProc(ByVal hwnd As LongPtr, ByVal uMsg As Long, ByVal nIDEvent As LongPtr, ByVal dwTimer As Long)
+#Else
+Public Sub ShrinkTimerProc(ByVal hwnd As Long, ByVal uMsg As Long, ByVal nIDEvent As Long, ByVal dwTimer As Long)
+#End If
+    On Error Resume Next
+
+    ' AN TOAN: bien module-level cua VBA bi xoa trang moi khi VBA project
+    ' reset (loi chua bat, nguoi dung sua code, Outlook reset...) NHUNG timer
+    ' cua Windows thi van tiep tuc "no". Neu gap trang thai do (khong con
+    ' slug de xu ly), tat timer ngay - tranh chay vo han vo ich.
+    If Len(Trim(m_ShrinkSlug)) = 0 Then
+        StopShrinkTimer
+        Exit Sub
+    End If
+
+    m_ShrinkAttempts = m_ShrinkAttempts + 1
+
+    Dim diag As String: diag = ""
+    Dim shrunk As Long: shrunk = ShrinkCampaignSentItems(m_ShrinkSlug, diag)
+
+    If shrunk >= m_ShrinkTarget Or m_ShrinkAttempts >= SHRINK_TIMER_MAX_ATTEMPTS Then
+        StopShrinkTimer
+    End If
+    On Error GoTo 0
+End Sub
 
 ' ================================================================
 ' PUBLIC: SendCampaign
@@ -266,9 +456,15 @@ End Sub
 ' SAVE/LOAD CAMPAIGN INFO - de RecallCampaign() tim mail NGAY duoc, khong
 ' can doi UserProperty CMSlug on dinh (xem ghi chu tai noi goi).
 ' ================================================================
+' QUAN TRONG: SaveSetting/GetSetting (Windows Registry) chi luu duoc chuoi
+' ANSI/ASCII co ban - cac ky tu tieng Viet co dau se bi hong thanh
+' "?" khi luu, lam Subject doc lai KHONG con khop voi Subject that trong
+' Sent Items. De tranh mat du lieu, ma hoa Subject sang HEX (chi gom 0-9/A-F,
+' an toan tuyet doi voi moi ky tu Unicode) truoc khi SaveSetting, giai ma lai
+' luc GetSetting - xem Utf8ToHex/HexToUtf8 ben duoi.
 Private Sub SaveCampaignInfo(slug As String, subj As String, tStart As Date, tEnd As Date)
     On Error Resume Next
-    SaveSetting "SHBTracker", "Campaigns", slug, subj & "|" & CDbl(tStart) & "|" & CDbl(tEnd)
+    SaveSetting "SHBTracker", "Campaigns", slug, Utf8ToHex(subj) & "|" & CDbl(tStart) & "|" & CDbl(tEnd)
     On Error GoTo 0
 End Sub
 
@@ -285,11 +481,76 @@ Private Function LoadCampaignInfo(slug As String, ByRef subj As String, _
         LoadCampaignInfo = False
         Exit Function
     End If
-    subj = parts(0)
+    subj = HexToUtf8(parts(0))
     tStart = CDate(CDbl(parts(1)))
     tEnd = CDate(CDbl(parts(2)))
     LoadCampaignInfo = (Err.Number = 0)
     On Error GoTo 0
+End Function
+
+' Ma hoa chuoi Unicode sang chuoi HEX ASCII an toan (dung UTF-8 byte, giong
+' co che UrlEnc() da co san trong file nay) - de luu qua SaveSetting khong
+' bi mat ky tu co dau.
+Private Function Utf8ToHex(s As String) As String
+    If Len(s) = 0 Then Utf8ToHex = "": Exit Function
+    On Error GoTo FallbackHex
+
+    Dim stm As Object: Set stm = CreateObject("ADODB.Stream")
+    stm.Open
+    stm.Type = 2: stm.Charset = "UTF-8"
+    stm.WriteText s
+    stm.Position = 0
+    stm.Type = 1
+    Dim rawB() As Byte: rawB = stm.Read
+    stm.Close: Set stm = Nothing
+
+    Dim bStart As Long: bStart = 0
+    If UBound(rawB) >= 2 Then
+        If rawB(0) = 239 And rawB(1) = 187 And rawB(2) = 191 Then bStart = 3
+    End If
+
+    Dim r As String: r = ""
+    Dim bi As Long
+    For bi = bStart To UBound(rawB)
+        r = r & Right("0" & Hex(rawB(bi)), 2)
+    Next bi
+    Utf8ToHex = r
+    Exit Function
+
+FallbackHex:
+    On Error GoTo 0
+    Utf8ToHex = ""
+End Function
+
+Private Function HexToUtf8(h As String) As String
+    If Len(h) = 0 Then HexToUtf8 = "": Exit Function
+    On Error GoTo FallbackDec
+
+    Dim stm As Object: Set stm = CreateObject("ADODB.Stream")
+    stm.Open
+    stm.Type = 1
+
+    Dim i As Long
+    For i = 1 To Len(h) Step 2
+        Dim b As Byte: b = CByte("&H" & mid(h, i, 2))
+        stm.Write CByteArray(b)
+    Next i
+
+    stm.Position = 0
+    stm.Type = 2: stm.Charset = "UTF-8"
+    HexToUtf8 = stm.ReadText
+    stm.Close: Set stm = Nothing
+    Exit Function
+
+FallbackDec:
+    On Error GoTo 0
+    HexToUtf8 = ""
+End Function
+
+' ADODB.Stream.Write can 1 mang Byte, khong nhan truc tiep 1 gia tri Byte don.
+Private Function CByteArray(b As Byte) As Variant
+    Dim arr(0) As Byte: arr(0) = b
+    CByteArray = arr
 End Function
 
 
@@ -488,8 +749,11 @@ NextPerson:
               vbCrLf & "Da rut gon Sent Items: " & shrunk & " / " & sentOK
 
     If shrunk < sentOK Then
+        ' Bat Windows Timer chay ngam - tu dong thu lai moi 60 giay, toi da
+        ' 12 phut, KHONG can nguoi dung bam gi, KHONG hien popup nao them.
+        StartShrinkTimer slug, sentOK
         doneMsg = doneMsg & vbCrLf & "(Con " & (sentOK - shrunk) & " mail Exchange chua 'chot' kip - " & _
-                  "se tu rut gon khi ban chay RecallCampaign() sau nay.)"
+                  "se TU DONG rut gon ngam trong vai phut toi, khong can lam gi them.)"
     End If
     If sentFail > 0 Then doneMsg = doneMsg & vbCrLf & vbCrLf & "Chi tiet loi:" & failDiag
     MsgBox doneMsg, vbInformation, "SHB Tracker v" & VER
@@ -525,6 +789,16 @@ Public Function ShrinkCampaignSentItems(slug As String, _
     placeholderHTML = "<html><body style=""font-family:Segoe UI,Arial,sans-serif;" & _
                        "color:#666;font-size:13px;"">" & placeholder & "</body></html>"
 
+    ' Cung cach tim NHANH nhu RecallCampaign() - Subject + khoang thoi gian
+    ' gui (thuoc tinh GOC, doc duoc TUC THI) lam dieu kien BO SUNG, khong chi
+    ' dua vao CMSlug (co the mat vai phut moi doc duoc). Neu khong co, ham
+    ' nay se KHONG BAO GIO bat kip duoc mail moi gui, du goi lai bao nhieu
+    ' lan / doi bao lau di nua.
+    Dim knownSubject As String, tCampStart As Date, tCampEnd As Date
+    Dim hasCampInfo As Boolean
+    hasCampInfo = LoadCampaignInfo(slug, knownSubject, tCampStart, tCampEnd)
+    Dim tBuf As Date: tBuf = TimeSerial(0, 1, 0)
+
     Dim matched As Long: matched = 0
     Dim scanned As Long: scanned = 0
     Dim sampleDiag As String: sampleDiag = ""
@@ -539,7 +813,21 @@ Public Function ShrinkCampaignSentItems(slug As String, _
             itmSlug = itm.UserProperties("CMSlug").Value
             upErr = Err.Number
             On Error GoTo 0
+
+            Dim isShrinkMatch As Boolean: isShrinkMatch = False
             If itmSlug = slug Then
+                isShrinkMatch = True
+            ElseIf hasCampInfo Then
+                On Error Resume Next
+                If itm.subject = knownSubject And _
+                   itm.SentOn >= tCampStart - tBuf And _
+                   itm.SentOn <= tCampEnd + tBuf Then
+                    isShrinkMatch = True
+                End If
+                On Error GoTo 0
+            End If
+
+            If isShrinkMatch Then
                 matched = matched + 1
                 On Error Resume Next
                 Err.Clear
@@ -568,7 +856,10 @@ Public Function ShrinkCampaignSentItems(slug As String, _
     Next i
 
     If matched = 0 Then
-        diag = "(khong tim thay mail nao co CMSlug = '" & slug & "'. 3 mail gan nhat trong Sent Items:" & sampleDiag & ")"
+        diag = "(khong tim thay mail nao co CMSlug = '" & slug & "'" & _
+               IIf(hasCampInfo, " (co thong tin Subject/thoi gian da luu nhung cung khong khop)", _
+                   " (khong co thong tin Subject/thoi gian da luu)") & _
+               ". 3 mail gan nhat trong Sent Items:" & sampleDiag & ")"
     End If
 
     ShrinkCampaignSentItems = n
@@ -832,7 +1123,6 @@ End Function
 '   - Chi recall duoc mail gui noi bo cung to chuc Exchange.
 '   - Nguoi nhan phai dang dung Outlook Desktop (khong phai Web/Mobile).
 '   - Mail phai CHUA duoc mo doc.
-' ================================================================
 Public Sub RecallCampaign()
 
     Dim slugRaw As String
@@ -894,6 +1184,9 @@ Public Sub RecallCampaign()
     ' lech chut it) - khong lam han hep dieu kien qua muc.
     Dim tBuf As Date: tBuf = TimeSerial(0, 1, 0)
 
+    Dim sampleDiag As String: sampleDiag = ""
+    Dim sampled As Long: sampled = 0
+
     Dim itm As Object
     Dim i As Long
     For i = sentFolder.Items.Count To 1 Step -1
@@ -914,6 +1207,16 @@ Public Sub RecallCampaign()
                    itm.SentOn <= tCampEnd + tBuf Then
                     isMatch = True
                 End If
+                On Error GoTo 0
+            End If
+
+            ' Chan doan: ghi lai Subject/SentOn thuc te cua 3 mail gan nhat
+            ' (bat ke co khop hay khong) de so sanh voi gia tri da luu.
+            If sampled < 3 Then
+                sampled = sampled + 1
+                On Error Resume Next
+                sampleDiag = sampleDiag & vbCrLf & "  - subj='" & itm.subject & _
+                             "' sentOn=" & Format(itm.SentOn, "yyyy-mm-dd hh:nn:ss")
                 On Error GoTo 0
             End If
 
@@ -953,6 +1256,11 @@ Public Sub RecallCampaign()
                 "Khong tim thay thong tin campaign da luu (co the do slug/ten nhap sai, " & _
                 "hoac campaign nay gui truoc khi cap nhat macro co tinh nang tim nhanh). " & _
                 "Kiem tra lai dung ten/slug da dung luc gui."
+        Else
+            noMatchMsg = noMatchMsg & vbCrLf & vbCrLf & _
+                "Thong tin da luu: Subject='" & knownSubject & "', tu " & _
+                Format(tCampStart, "yyyy-mm-dd hh:nn:ss") & " den " & Format(tCampEnd, "yyyy-mm-dd hh:nn:ss") & _
+                vbCrLf & "3 mail gan nhat trong Sent Items:" & sampleDiag
         End If
         MsgBox noMatchMsg, vbExclamation, "SHB Tracker - Recall"
         Exit Sub
