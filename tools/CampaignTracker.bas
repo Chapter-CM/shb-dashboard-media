@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.77
+' SHB CM Campaign Tracker v4.78
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -283,10 +283,23 @@ Option Explicit
 '     LinkLine() nhung cho sua/go lai tuy y - InputBox dung String Unicode
 '     binh thuong nen go tieng Viet co dau khong bi loi mat dau (khac
 '     voi SaveSetting/GetSetting da gap loi nay o cho khac trong file).
+'
+' CHANGES vs v4.77
+'   - Nguoi dung bao ten chien dich go tieng Viet co dau hien DUNG trong
+'     Subject email (khong qua MakeSlug) nhung Dashboard (doc truong
+'     "campaign" - chinh la slug - tu API tracking) lai hien SAI/thieu
+'     chu. Nguyen nhan: MakeSlug() truoc day LOAI BO HOAN TOAN ky tu co
+'     dau (vd "Thong bao" -> "thng-bo", mat han chu "o" va "a" cua "ô","á")
+'     thay vi chuyen ve khong dau. Them StripVNDiacritics() (giong
+'     NormalizeVN() da dung cho ArchiveModule.bas) goi TRUOC buoc loc
+'     ASCII trong MakeSlug() - tu nay slug se giu day du chu (vd
+'     "thong-bao-...") thay vi bi cut mat. Luu y: cac campaign da gui
+'     TRUOC ban nay van giu slug cu (da luu trong UserProperty/Registry),
+'     chi cac campaign gui SAU khi cap nhat moi co slug day du.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.77"
+Private Const VER       As String = "4.78"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1282,12 +1295,44 @@ End Function
 ' ================================================================
 ' MAKE SLUG - ASCII only
 ' ================================================================
+' Bo dau tieng Viet + chuyen thuong - dung TRUOC khi loc ASCII trong
+' MakeSlug(), de vd "Thong bao" -> "thong-bao" thay vi bi mat het chu
+' thanh "thng-bo" (truoc day MakeSlug loai bo HOAN TOAN ky tu co dau
+' thay vi chuyen ve khong dau, khien slug hien tren Dashboard bi cut mat
+' chu dau du Subject email van hien dung binh thuong - Subject khong di
+' qua ham nay).
+Private Function StripVNDiacritics(ByVal s As String) As String
+    Dim r As String
+    r = LCase(s)
+    r = Replace(Replace(Replace(Replace(Replace(r, "à", "a"), "á", "a"), "ạ", "a"), "ả", "a"), "ã", "a")
+    r = Replace(Replace(Replace(Replace(Replace(r, "â", "a"), "ầ", "a"), "ấ", "a"), "ậ", "a"), "ẩ", "a")
+    r = Replace(r, "ẫ", "a")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ă", "a"), "ằ", "a"), "ắ", "a"), "ặ", "a"), "ẳ", "a")
+    r = Replace(r, "ẵ", "a")
+    r = Replace(Replace(Replace(Replace(Replace(r, "è", "e"), "é", "e"), "ẹ", "e"), "ẻ", "e"), "ẽ", "e")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ê", "e"), "ề", "e"), "ế", "e"), "ệ", "e"), "ể", "e")
+    r = Replace(r, "ễ", "e")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ì", "i"), "í", "i"), "ị", "i"), "ỉ", "i"), "ĩ", "i")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ò", "o"), "ó", "o"), "ọ", "o"), "ỏ", "o"), "õ", "o")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ô", "o"), "ồ", "o"), "ố", "o"), "ộ", "o"), "ổ", "o")
+    r = Replace(r, "ỗ", "o")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ơ", "o"), "ờ", "o"), "ớ", "o"), "ợ", "o"), "ở", "o")
+    r = Replace(r, "ỡ", "o")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ù", "u"), "ú", "u"), "ụ", "u"), "ủ", "u"), "ũ", "u")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ư", "u"), "ừ", "u"), "ứ", "u"), "ự", "u"), "ử", "u")
+    r = Replace(r, "ữ", "u")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ỳ", "y"), "ý", "y"), "ỵ", "y"), "ỷ", "y"), "ỹ", "y")
+    r = Replace(r, "đ", "d")
+    StripVNDiacritics = r
+End Function
+
 Private Function MakeSlug(s As String) As String
+    Dim base As String: base = StripVNDiacritics(s)
     Dim res As String: res = ""
     Dim ph As Boolean: ph = False
     Dim i As Long
-    For i = 1 To Len(s)
-        Dim cw As Long: cw = AscW(LCase(mid(s, i, 1)))
+    For i = 1 To Len(base)
+        Dim cw As Long: cw = AscW(mid(base, i, 1))
         If (cw >= 97 And cw <= 122) Or (cw >= 48 And cw <= 57) Then
             res = res & Chr(cw): ph = False
         ElseIf cw = 32 Or cw = 45 Or cw = 95 Then
