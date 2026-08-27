@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.92
+' SHB CM Campaign Tracker v4.93
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -548,8 +548,31 @@ Option Explicit
 '     noi dung HTML (HTML sinh ra tu WrapLinks() da dung tu dau).
 ' ================================================================
 
+' CHANGES vs v4.92
+'   - Nguoi dung test email co NHIEU anh gan link (chu ky/tai lieu
+'     SharePoint chen qua kieu "Insert Picture" cua Outlook, sinh ra cau
+'     truc VML <v:shape>/<v:imagedata>) va bao KHONG co link tracking cho
+'     bat ky anh nao. Kiem tra qua DebugDumpHTML: dung nhu du doan -
+'     WrapLinks() van con lop "isImageLink" tu v4.87/v4.89, chu dong BO
+'     QUA moi href nam gan v:imagedata, nen cac link nay khong bao gio
+'     duoc gan tracking (dung thiet ke, khong phai bug - nhung khong dap
+'     ung duoc yeu cau thuc te).
+'   - Gio da co the go bo han lop nay: 2 nguyen nhan THAT SU cua loi
+'     "mail rong" ma lop nay tung duoc dung de "phong ngua" da duoc xac
+'     dinh dung va sua o v4.91 (preview text khong escape) va v4.92
+'     (Outlook tu chuyen Rich Text cho nguoi nhan noi bo) - hoan toan
+'     KHONG lien quan gi den viec WrapLinks() dong vao href gan VML. Lop
+'     kiem tra "chBefore phai la khoang trang" (v4.86) van giu nguyen va
+'     du de tranh dong nham vao o:href/xlink:href NOI BO cua VML (day moi
+'     la nguyen nhan that su tung gay hong cau truc, khong phai viec dong
+'     vao the <a> THAT boc ngoai).
+'   - Ket qua: anh dung VML (chu ky, tai lieu dinh kem qua SharePoint) gio
+'     duoc tracking click binh thuong nhu link chu, dap ung dung yeu cau
+'     "5-10 link/anh deu can tracking".
+' ================================================================
+
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.92"
+Private Const VER       As String = "4.93"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1530,26 +1553,19 @@ Private Function WrapLinks(html As String, slug As String, _
         If he = 0 Then Exit Do
         Dim orig As String: orig = mid(res, hs, he - hs)
 
-        ' Link nay co dang boc quanh cau truc VML phuc tap khong (chu ky
-        ' Outlook thuong ve anh bang <v:shape>/<v:imagedata> + conditional
-        ' comment lien ket voi nhau, rat de vo neu ghi de href That dai
-        ' vao giua)? CHI bo qua khi thay ro dau hieu VML that su
-        ' (v:imagedata) - anh thuong (<img> don gian, vd banner chen qua
-        ' Insert > Pictures roi gan Hyperlink, KHONG co VML) van duoc xu
-        ' ly binh thuong nhu link chu, vi day chi la thay gia tri thuoc
-        ' tinh href don gian, khong dung gi den cau truc VML de vo.
-        Dim peekAhead As String: peekAhead = LCase(mid(res, he, 800))
-        Dim posVmlTag As Long: posVmlTag = InStr(peekAhead, "v:imagedata")
-        Dim posCloseA As Long: posCloseA = InStr(peekAhead, "</a>")
-        Dim isImageLink As Boolean: isImageLink = False
-        If posVmlTag > 0 And (posCloseA = 0 Or posVmlTag < posCloseA) Then isImageLink = True
-
         ' Nghi ngo quet nham (nuot qua tag khac hoac dai bat thuong) ->
         ' bo qua, khong dong gi vao doan nay, tiep tuc quet tu sau dau
         ' " vua tim thay.
-        If isImageLink Then
-            pos = he + 1
-        ElseIf InStr(orig, "<") > 0 Or Len(orig) > 2000 Then
+        ' (Truoc day o day co them 1 lop bo qua rieng cho link boc anh/VML
+        ' - da BO HAN o v4.93: goc re that su cua loi "mail rong" tung gap
+        ' la o preview text khong duoc HTML-escape (v4.91) va Outlook tu
+        ' chuyen sang Rich Text cho nguoi nhan noi bo (v4.92), KHONG PHAI
+        ' do buoc nay dong vao href gan VML. Kiem tra "chBefore phai la
+        ' khoang trang" o tren da du de tranh dong nham vao o:href/
+        ' xlink:href noi bo cua VML - anh boc VML gio duoc tracking binh
+        ' thuong nhu link chu, dung yeu cau thuc te (email co the co 5-10
+        ' link/anh can tracking).)
+        If InStr(orig, "<") > 0 Or Len(orig) > 2000 Then
             pos = he + 1
         ElseIf Left(LCase(orig), 4) <> "http" Or InStr(LCase(orig), "api/track") > 0 Then
             pos = he + 1
