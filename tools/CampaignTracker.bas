@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.80
+' SHB CM Campaign Tracker v4.81
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -321,10 +321,23 @@ Option Explicit
 '     doc thang tu Clipboard (CF_UNICODETEXT, giu nguyen Unicode) thay vi
 '     qua InputBox. Quy trinh moi: nguoi dung Copy (Ctrl+C) doan chu
 '     muon dung TRUOC, roi chon "Co" trong hop thoai xac nhan.
+'
+' CHANGES vs v4.80
+'   - Nguoi dung chi ra logic v4.80 bi nguoc: MsgBox/InputBox la
+'     application-modal, KHOA TOAN BO Outlook (ke ca cua so soan mail)
+'     trong luc hien ra - "Copy TRUOC roi bam Yes" la bat kha thi neu
+'     nguon can Copy nam trong chinh Outlook (mail dang soan), vi luc do
+'     Outlook da bi khoa boi chinh hop thoai vua hien ra. Sua: doc
+'     Clipboard (GetClipboardText) NGAY DAU SendCampaign(), TRUOC ca
+'     hop thoai dau tien - luc nay Outlook con hoan toan tu do, nguoi
+'     dung Copy tu mail duoc binh thuong. Neu Clipboard co san chu (va
+'     khac voi goi y tu dong), moi hoi co dung lam preview khong; neu
+'     Clipboard trong hoac trung goi y thi bo qua cau hoi, dung luon
+'     goi y tu dong - khong con buoc "copy giua chung" phi logic nua.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.80"
+Private Const VER       As String = "4.81"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -494,6 +507,15 @@ Public Sub SendCampaign()
     End If
     Dim draft As MailItem: Set draft = raw
 
+    ' Doc Clipboard NGAY TU DAU, TRUOC ca chuoi hop thoai ben duoi - vi
+    ' MsgBox/InputBox se khoa (application-modal) TOAN BO Outlook trong
+    ' luc hien ra, nguoi dung se KHONG THE click vao cua so soan mail de
+    ' chon/copy chu duoc nua neu hop thoai da mo san. Quy trinh dung:
+    ' chon & Copy (Ctrl+C) doan chu muon dung lam preview TRUOC KHI bam
+    ' chay macro nay - luc do Outlook con hoan toan tu do thao tac.
+    Dim clipboardAtStart As String
+    clipboardAtStart = Trim(GetClipboardText())
+
     ' Campaign metadata via InputBox
     Dim campName As String, squad As String, mType As String, prevTxt As String
 
@@ -513,25 +535,24 @@ Public Sub SendCampaign()
     mType = Trim(mType)
 
     ' Preview text: mac dinh tu dong lay dong dau tien CO CHU THUC SU cua
-    ' email body (bo qua dong chi la 1 link tran). Nguoi dung co the chon
-    ' TU NHAP qua Clipboard thay vi InputBox - VBA InputBox bi loi ANSI
-    ' (Windows-1258) lam mat 1 so ky tu tieng Viet mo rong (vd "ỏ" -> "?"),
-    ' trong khi Clipboard (CF_UNICODETEXT) giu nguyen Unicode, khong loi.
+    ' email body (bo qua dong chi la 1 link tran). Neu Clipboard da co san
+    ' chu (doc luc DAU SendCampaign, TRUOC khi hop thoai nao khoa Outlook -
+    ' xem clipboardAtStart o tren) thi hoi dung chu do lam preview khong -
+    ' Clipboard (CF_UNICODETEXT) giu nguyen Unicode day du, khong bi loi
+    ' mat dau nhu InputBox (VBA InputBox chuyen qua ANSI Windows-1258,
+    ' lam mat mot so ky tu tieng Viet mo rong nhu "ỏ").
     Dim suggestedPrev As String
     suggestedPrev = FindFirstNonLinkLine(draft.body)
 
-    Dim useClipboard As Boolean
-    useClipboard = (MsgBox("Preview text (doan chu xam hien duoi Subject trong Inbox nguoi nhan)." & vbCrLf & vbCrLf & _
-                    "Mac dinh: '" & suggestedPrev & "'" & vbCrLf & vbCrLf & _
-                    "Ban co muon TU NHAP preview text khac khong?" & vbCrLf & _
-                    "(Neu Co: hay COPY (Ctrl+C) doan chu ban muon dung TRUOC, roi quay lai bam Yes)", _
-                    vbYesNo + vbQuestion, "SHB Tracker - Preview text") = vbYes)
-
-    If useClipboard Then
-        prevTxt = Trim(GetClipboardText())
-        If Len(prevTxt) = 0 Then
-            MsgBox "Khong doc duoc chu tu Clipboard (co the ban quen Copy truoc) - dung goi y mac dinh.", _
-                   vbExclamation, "SHB Tracker"
+    If Len(clipboardAtStart) > 0 And clipboardAtStart <> suggestedPrev Then
+        Dim useClipboard As Boolean
+        useClipboard = (MsgBox("Phat hien Clipboard dang co san chu:" & vbCrLf & _
+                        "'" & Left(clipboardAtStart, 80) & "'" & vbCrLf & vbCrLf & _
+                        "Dung doan nay lam Preview text (thay vi mac dinh: '" & suggestedPrev & "') khong?", _
+                        vbYesNo + vbQuestion, "SHB Tracker - Preview text") = vbYes)
+        If useClipboard Then
+            prevTxt = clipboardAtStart
+        Else
             prevTxt = suggestedPrev
         End If
     Else
