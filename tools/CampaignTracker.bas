@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.89
+' SHB CM Campaign Tracker v4.90
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -470,8 +470,32 @@ Option Explicit
 '     don gian trong the <a> KHONG dung gi den cau truc VML de gay vo.
 ' ================================================================
 
+' CHANGES vs v4.89
+'   - Sau khi doi sang WrapLinks() thuan chuoi (bo Word API), test thuc te
+'     VAN CON gap lai dung hien tuong TRONG TRON - nghia la 2 gia thuyet
+'     lien tiep (VML cua Word / gioi han field cua Word) DEU CHUA DUNG
+'     GOC RE that su, chi dang doan mo hinh dua tren suy luan giay tu chu
+'     KHONG co bang chung HTML thuc te tai chinh thoi diem loi xay ra.
+'   - Thay vi tiep tuc sua theo suy doan, them DebugDumpHTML(): tu dong
+'     ghi lai HTML THAT ra file ngay trong luc gui (khong can macro rieng
+'     tools/ExportDraftHTML.bas nhu truoc, khong can nguoi dung tu chay
+'     them buoc nao) - ghi 3 moc: (1) HTML goc truoc khi WrapLinks dong
+'     vao, (2) HTML SAU KHI WrapLinks xu ly xong (truoc khi tach rieng
+'     cho tung nguoi nhan), (3) HTML CUOI CUNG thuc su duoc gan vao
+'     m.HTMLBody cho nguoi nhan DAU TIEN (sau ca FixInlineImageCids) -
+'     tuc la ĐÚNG những gì Outlook thực sự gửi đi. Chỉ ghi khi bật Click
+'     Tracking va chi cho nguoi nhan dau tien, tranh sinh file khong lo.
+'   - Dung FileSystemObject.CreateTextFile(Unicode:=True) thay vi "Open
+'     ... For Output"/"Print #" cu - tranh luon loi ANSI lam sai dau
+'     tieng Viet trong file log (da phat hien o ExportDraftHTML.bas).
+'   - Muc tieu: lan test toi, chi can mo 3 file trong C:\SHBTrackerLogs\
+'     (wraplinks-debug-00-goc-truoc-wrap.txt, -01-sau-wraplinks.txt,
+'     -02-cuoi-cung-nguoi-nhan-dau.txt) va gui lai ca 3 - se biet CHINH
+'     XAC buoc nao lam noi dung bien mat, thay vi tiep tuc doan.
+' ================================================================
+
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.89"
+Private Const VER       As String = "4.90"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -868,6 +892,7 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
     End If
 
     Dim baseHTML As String: baseHTML = draft.HTMLBody
+    If doClick Then DebugDumpHTML "00-goc-truoc-wrap", baseHTML
 
     ' Inject preview text as hidden preheader
     If Len(prevTxt) > 0 And prevTxt <> "(trong)" Then
@@ -885,7 +910,10 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         End If
     End If
 
-    If doClick Then baseHTML = WrapLinks(baseHTML, slug, squad, mType)
+    If doClick Then
+        baseHTML = WrapLinks(baseHTML, slug, squad, mType)
+        DebugDumpHTML "01-sau-wraplinks", baseHTML
+    End If
 
     Dim sentOK As Long:   sentOK = 0
     Dim sentFail As Long: sentFail = 0
@@ -950,6 +978,8 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         ' Sua lai "cid:..." trong HTML neu Outlook da sinh Content-ID MOI
         ' cho anh nhung trong ban Copy() nay (xem ghi chu tai origCids o tren).
         If origCidCount > 0 Then FixInlineImageCids m, thisHTML, origCids
+
+        If doClick And i = 0 Then DebugDumpHTML "02-cuoi-cung-nguoi-nhan-dau", thisHTML
 
         m.HTMLBody = thisHTML
 
@@ -1039,6 +1069,25 @@ NextPerson:
     MsgBox doneMsg, vbInformation, "SHB Tracker v" & VER
 End Sub
 
+
+' Ghi lai HTML thuc te tai tung buoc xu ly click-tracking ra file log, de
+' doi chieu that (khong con phai doan mo hinh WrapLinks() lam gi sai) khi
+' co loi. CHI ghi khi doClick=True va CHI cho nguoi nhan dau tien (tranh
+' file khong lo voi campaign hang nghin nguoi nhan).
+' Dung FileSystemObject.CreateTextFile(..., Unicode:=True) thay vi
+' "Open ... For Output"/"Print #" - cach cu ghi theo ANSI (Windows-1258)
+' se lam sai dau tieng Viet trong log (da gap voi tools/ExportDraftHTML.
+' bas truoc day), gay hieu lam khi doc lai.
+Private Sub DebugDumpHTML(tag As String, html As String)
+    On Error Resume Next
+    Dim fso As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim dirPath As String: dirPath = "C:\SHBTrackerLogs"
+    If Not fso.FolderExists(dirPath) Then fso.CreateFolder dirPath
+    Dim outPath As String: outPath = dirPath & "\wraplinks-debug-" & tag & ".txt"
+    Dim ts As Object: Set ts = fso.CreateTextFile(outPath, True, True) ' overwrite, Unicode
+    ts.Write html
+    ts.Close
+End Sub
 
 ' Doc Content-ID (PR_ATTACH_CONTENT_ID) cua 1 file dinh kem - chi anh
 ' nhung (inline image) moi co gia tri nay, file dinh kem thuong khong co
