@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.79
+' SHB CM Campaign Tracker v4.80
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -309,10 +309,22 @@ Option Explicit
 '     - de Outlook bat dau truyen Outbox NGAY trong luc vong lap van con
 '     chay, giup 2 giai doan chay gan nhu song song thay vi noi duoi
 '     nhau, giam dang ke tong thoi gian Recall.
+'
+' CHANGES vs v4.79
+'   - Nguoi dung xac nhan preview text go qua InputBox (them o v4.77) bi
+'     mat 1 so ky tu tieng Viet mo rong (vd "ỏ" -> "?", trong khi "à","ũ"
+'     van dung) - xac dinh day la gioi han co that cua VBA InputBox: no
+'     chuyen chuoi qua ANSI (Windows-1258) truoc khi tra ve, ma codepage
+'     nay khong co san mot so to hop dau tieng Viet nen bi thay bang "?".
+'     Bo InputBox cho preview text, thay bang GetClipboardText() (dung
+'     CreateObject("MSForms.DataObject"), khong can them Reference) -
+'     doc thang tu Clipboard (CF_UNICODETEXT, giu nguyen Unicode) thay vi
+'     qua InputBox. Quy trinh moi: nguoi dung Copy (Ctrl+C) doan chu
+'     muon dung TRUOC, roi chon "Co" trong hop thoai xac nhan.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.79"
+Private Const VER       As String = "4.80"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -429,6 +441,21 @@ End Sub
 ' Tim dong VAN BAN THUC SU dau tien trong noi dung mail, bo qua cac
 ' dong trong hoac chi la 1 link tran (http/https) - dung de tu dong
 ' chon preview text, tranh nhet link "tho" vao preheader an.
+' Doc chuoi text tu Clipboard, giu nguyen Unicode day du (khong bi loi
+' ANSI nhu InputBox) - dung "MSForms.DataObject" qua CreateObject (khong
+' can them Reference gi trong VBA Project, Windows da co san FM20.DLL
+' cung Office). Tra ve chuoi rong neu Clipboard khong co text hoac loi.
+Private Function GetClipboardText() As String
+    Dim txt As String: txt = ""
+    On Error Resume Next
+    Dim MyData As Object
+    Set MyData = CreateObject("MSForms.DataObject")
+    MyData.GetFromClipboard
+    txt = MyData.GetText(1)
+    On Error GoTo 0
+    GetClipboardText = txt
+End Function
+
 Private Function FindFirstNonLinkLine(ByVal bodyText As String) As String
     Dim norm As String
     norm = Replace(bodyText, vbCrLf, vbLf)
@@ -485,19 +512,32 @@ Public Sub SendCampaign()
     If Len(Trim(mType)) = 0 Then mType = "info"
     mType = Trim(mType)
 
-    ' Preview text: goi y san bang dong dau tien CO CHU THUC SU cua email
-    ' body (BO QUA dong chi la 1 link tran http/https - tranh link "tho"
-    ' lot vao preview nhu truoc day), nhung cho phep nguoi dung TU GO/SUA
-    ' lai truc tiep bang tieng Viet co dau qua InputBox - InputBox dung
-    ' chuoi Unicode binh thuong, KHONG dinh loi mat dau nhu SaveSetting/
-    ' GetSetting (Windows Registry, chi ho tro ANSI) tung gap o noi khac
-    ' trong file nay.
+    ' Preview text: mac dinh tu dong lay dong dau tien CO CHU THUC SU cua
+    ' email body (bo qua dong chi la 1 link tran). Nguoi dung co the chon
+    ' TU NHAP qua Clipboard thay vi InputBox - VBA InputBox bi loi ANSI
+    ' (Windows-1258) lam mat 1 so ky tu tieng Viet mo rong (vd "ỏ" -> "?"),
+    ' trong khi Clipboard (CF_UNICODETEXT) giu nguyen Unicode, khong loi.
     Dim suggestedPrev As String
     suggestedPrev = FindFirstNonLinkLine(draft.body)
-    prevTxt = InputBox("Preview text (doan chu xam hien duoi Subject trong Inbox nguoi nhan)." & vbCrLf & _
-                       "De trong se tu dong lay cau dau tien cua noi dung mail:", _
-                       "SHB Tracker - Preview text", suggestedPrev)
-    prevTxt = Trim(prevTxt)
+
+    Dim useClipboard As Boolean
+    useClipboard = (MsgBox("Preview text (doan chu xam hien duoi Subject trong Inbox nguoi nhan)." & vbCrLf & vbCrLf & _
+                    "Mac dinh: '" & suggestedPrev & "'" & vbCrLf & vbCrLf & _
+                    "Ban co muon TU NHAP preview text khac khong?" & vbCrLf & _
+                    "(Neu Co: hay COPY (Ctrl+C) doan chu ban muon dung TRUOC, roi quay lai bam Yes)", _
+                    vbYesNo + vbQuestion, "SHB Tracker - Preview text") = vbYes)
+
+    If useClipboard Then
+        prevTxt = Trim(GetClipboardText())
+        If Len(prevTxt) = 0 Then
+            MsgBox "Khong doc duoc chu tu Clipboard (co the ban quen Copy truoc) - dung goi y mac dinh.", _
+                   vbExclamation, "SHB Tracker"
+            prevTxt = suggestedPrev
+        End If
+    Else
+        prevTxt = suggestedPrev
+    End If
+
     If Len(prevTxt) > 120 Then prevTxt = Left(prevTxt, 120)
     If Len(prevTxt) = 0 Then prevTxt = "(trong)"
 
