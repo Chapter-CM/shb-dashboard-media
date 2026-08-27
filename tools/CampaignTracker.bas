@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.83
+' SHB CM Campaign Tracker v4.84
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -355,10 +355,23 @@ Option Explicit
 '     gay loi "thanh cong gia"/that bai ngam rat nhieu lan truoc day
 '     (xem lich su CHANGES v4.63-4.67) khi bi rut ngan - giam them o day
 '     rui ro cao hon loi ich, khong dong vao.
+'
+' CHANGES vs v4.83
+'   - Nguoi dung bao recall tren account KHAC (khong phai account mac
+'     dinh, cung 1 thiet bi/profile) van bi lot thong bao "Message Recall
+'     Success/Failure" ve Inbox thay vi tu dong bi xoa. Nguyen nhan:
+'     m_RecallWatcher (RecallNotifWatcher.cls) truoc day chi tao 1 watcher
+'     DUY NHAT, theo doi Inbox/Deleted Items cua account MAC DINH - trong
+'     khi thong bao Recall luon bay ve Inbox cua DUNG account vua dung de
+'     recall (co the la account khac). Doi m_RecallWatcher (1 object) ->
+'     m_RecallWatchers (Collection) - tao 1 watcher RIENG cho MOI account
+'     trong profile (dedup theo StoreID, giong co che da dung cho Shrink/
+'     Recall/Archive), co du phong quay lai 1 watcher cho account mac
+'     dinh neu vi ly do nao do khong lay duoc danh sach account.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.83"
+Private Const VER       As String = "4.84"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -366,7 +379,10 @@ Private m_Bag(0 To 399) As Object
 Private m_BagN           As Long
 
 ' Giu song bien watcher trong suot phien Outlook (xem RecallNotifWatcher.cls)
-Private m_RecallWatcher As RecallNotifWatcher
+' Mot watcher RIENG cho MOI account (khong chi 1 watcher cho account mac
+' dinh nhu truoc) - vi thong bao "Message Recall Success/Failure" bay ve
+' Inbox cua DUNG account da recall, khong phai luon la account mac dinh.
+Private m_RecallWatchers As Collection
 
 ' ================================================================
 ' WINDOWS TIMER - chay ngam HOAN TOAN de tu dong rut gon Sent Items sau
@@ -1519,17 +1535,57 @@ Public Sub RecallCampaign()
     ' De khong bi ngap Inbox voi hang nghin thong bao "Message Recall
     ' Success/Failure" (campaign lon), tu dong bat watcher (RecallNotifWatcher.cls)
     ' - moi thong bao ve toi Inbox se bi xoa NGAY, chay song song voi batch nay.
-    ' LUON LUON tao watcher MOI moi lan chay (khong dung "If Is Nothing" nua) -
-    ' tranh truong hop bien m_RecallWatcher dang giu tham chieu CU (vd tu ban
-    ' RecallNotifWatcher.cls truoc khi import lai bang moi) ma khong duoc lam
-    ' moi, khien watcher dang chay ngam la code CU khong nhu mong doi.
+    ' LUON LUON tao lai TOAN BO watcher moi lan chay (khong dung "If Is
+    ' Nothing" nua) - tranh truong hop bien dang giu tham chieu CU khong
+    ' duoc lam moi, khien watcher chay ngam la code CU khong nhu mong doi.
+    '
+    ' Tao 1 watcher RIENG cho MOI account trong profile (khong chi rieng
+    ' account mac dinh) - vi thong bao Recall Success/Failure bay ve
+    ' Inbox cua DUNG account vua duoc dung de recall, co the KHONG PHAI
+    ' account mac dinh (nguoi dung bao gap dung truong hop nay: recall
+    ' tren account khac van bi lot thong bao ve vi watcher cu chi theo
+    ' doi Inbox cua 1 account mac dinh duy nhat).
     On Error Resume Next
-    Set m_RecallWatcher = Nothing
-    Set m_RecallWatcher = New RecallNotifWatcher
-    Set m_RecallWatcher.InboxItems = Application.Session.GetDefaultFolder(olFolderInbox).Items
-    ' Theo doi luon Deleted Items - xoa lan 2 ngay tai do de xoa VINH VIEN
-    ' (khong chi chuyen vao Deleted Items roi nam lai chiem dung luong).
-    Set m_RecallWatcher.DeletedItemsItems = Application.Session.GetDefaultFolder(olFolderDeletedItems).Items
+    Set m_RecallWatchers = Nothing
+    Set m_RecallWatchers = New Collection
+
+    Dim wAcc As Object, wStore As Object, wStoreID As String
+    Dim wSeenStoreIDs As String: wSeenStoreIDs = "|"
+    For Each wAcc In Application.Session.Accounts
+        Set wStore = Nothing
+        Set wStore = wAcc.DeliveryStore
+        If Not wStore Is Nothing Then
+            wStoreID = ""
+            wStoreID = wStore.StoreID
+            If Len(wStoreID) > 0 And InStr(wSeenStoreIDs, "|" & wStoreID & "|") = 0 Then
+                wSeenStoreIDs = wSeenStoreIDs & wStoreID & "|"
+
+                Dim wInbox As Object, wDeleted As Object
+                Set wInbox = wStore.GetDefaultFolder(olFolderInbox)
+                Set wDeleted = wStore.GetDefaultFolder(olFolderDeletedItems)
+                If Not wInbox Is Nothing And Not wDeleted Is Nothing Then
+                    Dim wWatcher As RecallNotifWatcher
+                    Set wWatcher = New RecallNotifWatcher
+                    Set wWatcher.InboxItems = wInbox.Items
+                    ' Theo doi luon Deleted Items - xoa lan 2 ngay tai do de
+                    ' xoa VINH VIEN (khong chi chuyen vao roi nam lai chiem
+                    ' dung luong).
+                    Set wWatcher.DeletedItemsItems = wDeleted.Items
+                    m_RecallWatchers.Add wWatcher
+                End If
+            End If
+        End If
+    Next wAcc
+
+    ' Du phong: neu vi ly do nao do khong tao duoc watcher cho account nao
+    ' (vd loi acc.DeliveryStore nhu da gap voi Shrink/Recall truoc day),
+    ' it nhat van bat 1 watcher cho account mac dinh nhu cu.
+    If m_RecallWatchers.Count = 0 Then
+        Dim wDefWatcher As New RecallNotifWatcher
+        Set wDefWatcher.InboxItems = Application.Session.GetDefaultFolder(olFolderInbox).Items
+        Set wDefWatcher.DeletedItemsItems = Application.Session.GetDefaultFolder(olFolderDeletedItems).Items
+        m_RecallWatchers.Add wDefWatcher
+    End If
     On Error GoTo 0
 
     Dim matched As Long: matched = 0
