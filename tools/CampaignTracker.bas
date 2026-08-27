@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.91
+' SHB CM Campaign Tracker v4.92
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -526,8 +526,30 @@ Option Explicit
 '     khong lien quan loi nay nhung van la cai thien hop ly, giu lai).
 ' ================================================================
 
+' CHANGES vs v4.91
+'   - Sau khi v4.91 sua xong loi mail rong, nguoi dung bao van con 1 van
+'     de rieng: anh SharePoint gan link BAM KHONG MO DUOC (khong con ca
+'     tuy chon "Open Hyperlink" khi chuot phai), trong khi link CHU o
+'     chan chu ky van hoat dong binh thuong (xac nhan qua Edit Hyperlink
+'     - dia chi tracking van dung). Kiem tra chinh xac (khong doan): gui
+'     thu cung 1 campaign qua macro toi 1 dia chi BEN NGOAI to chuc
+'     (Gmail) - anh bam mo duoc binh thuong; gui toi dia chi NOI BO
+'     (@shb.com.vn) - anh mat hoan toan hyperlink. Day la dac trung dien
+'     hinh cua viec Exchange/Outlook TU DONG chuyen doi mail sang Rich
+'     Text (TNEF/winmail.dat) khi gui cho nguoi nhan noi bo cung to chuc -
+'     qua trinh chuyen doi nay giu duoc hyperlink gan tren VAN BAN nhung
+'     LAM MAT hyperlink gan tren ANH (encode anh thanh OLE object rieng,
+'     khong con giu duoc the <a> boc ngoai).
+'   - Sua: ep .BodyFormat = olFormatHTML tren tung ban Copy() truoc khi
+'     gui - buoc nay bao Outlook GUI DUNG HTML THUAN, khong cho tu dong
+'     chuyen sang Rich Text nua, du nguoi nhan la noi bo. Day la cach sua
+'     chuan, don gian, khong dung den suy doan cau truc HTML/VML nhu 4
+'     lan truoc - vi ban chat van de nam o ĐỊNH DẠNG GỬI, khong phai o
+'     noi dung HTML (HTML sinh ra tu WrapLinks() da dung tu dau).
+' ================================================================
+
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.91"
+Private Const VER       As String = "4.92"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1023,6 +1045,19 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         On Error GoTo FailItem
 
         Set m = draft.Copy
+
+        ' Ep dinh dang gui la HTML THUAN, khong de Outlook/Exchange tu
+        ' dong chuyen sang Rich Text (TNEF/winmail.dat) cho nguoi nhan
+        ' NOI BO cung to chuc - da xac nhan qua test thuc te: gui cho
+        ' nguoi ngoai (Gmail) thi anh gan link bam duoc binh thuong, gui
+        ' cho nguoi NOI BO (@shb.com.vn) thi anh mat hoan toan hyperlink
+        ' (khong con ca tuy chon "Open Hyperlink" khi chuot phai), trong
+        ' khi link CHU (khong phai anh) van hoat dong binh thuong o ca
+        ' 2 truong hop - dung dac trung cua viec RTF hoa lam mat rieng
+        ' hyperlink gan tren anh nhung giu duoc hyperlink gan tren text.
+        On Error Resume Next
+        m.BodyFormat = olFormatHTML
+        On Error GoTo FailItem
 
         Dim j As Long
         For j = m.Recipients.Count To 1 Step -1
