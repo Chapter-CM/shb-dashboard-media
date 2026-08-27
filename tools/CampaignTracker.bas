@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.82
+' SHB CM Campaign Tracker v4.83
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -342,10 +342,23 @@ Option Explicit
 '     TIENG ANH/ASCII de tranh gioi han co that cua VBA InputBox (mat
 '     mot so ky tu tieng Viet mo rong nhu "ỏ" -> "?"). Bo ham
 '     GetClipboardText() (khong con noi nao goi).
+'
+' CHANGES vs v4.82
+'   - Nguoi dung muon giam toi da thoi gian Recall vi so nguoi da doc
+'     duoc trong luc cho. RecallOneItem() truoc day cho CO DINH 1.5s
+'     (mo Inspector) + 1s (focus) MOI mail bat ke may nhanh hay cham -
+'     doi CHO SOM ngay khi dieu kien that su san sang (Inspector khong
+'     con Nothing / CommandBars truy cap duoc), van giu nguyen TRAN AN
+'     TOAN 1.5s/1s cho truong hop may cham (khong giam do tin cay). Chi
+'     sua 2 doan cho nay - KHONG dong vao vong lap ExecuteMso/SendKeys
+'     (0.4s moi lan thu, 1s giua cac lan retry) vi day la phan da tung
+'     gay loi "thanh cong gia"/that bai ngam rat nhieu lan truoc day
+'     (xem lich su CHANGES v4.63-4.67) khi bi rut ngan - giam them o day
+'     rui ro cao hon loi ich, khong dong vao.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.82"
+Private Const VER       As String = "4.83"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1653,11 +1666,24 @@ Private Function RecallOneItem(itm As Object, _
 
     itm.Display
 
-    Dim tOpen As Date: tOpen = Now + TimeSerial(0, 0, 0) + (1.5 / 86400)
-    Do While Now < tOpen: DoEvents: Loop
-
+    ' Doi TOI DA 1.5s nhu cac ban truoc (van giu nguyen tran an toan cho
+    ' may cham), nhung THOAT SOM ngay khi Inspector da san sang thay vi
+    ' luon cho du 1.5s co dinh - da so may binh thuong san sang chi sau
+    ' vai chuc ms, giam dang ke thoi gian trung binh moi mail ma KHONG
+    ' giam tran an toan cho truong hop may cham (khong lam giam do tin
+    ' cay da duoc debug rat ky truoc day - chi bo phan CHO THUA khong
+    ' can thiet, khong dong vao phan ExecuteMso/SendKeys nhay cam hon).
+    Dim tOpenMax As Date: tOpenMax = Now + TimeSerial(0, 0, 0) + (1.5 / 86400)
     Dim readInsp As Object
-    Set readInsp = Application.ActiveInspector
+    Do
+        Set readInsp = Nothing
+        On Error Resume Next
+        Set readInsp = Application.ActiveInspector
+        On Error GoTo Fail
+        If Not readInsp Is Nothing Then Exit Do
+        DoEvents
+    Loop While Now < tOpenMax
+
     If readInsp Is Nothing Then
         errMsg = "Khong mo duoc cua so mail can recall."
         GoTo FailNoErrObj
@@ -1666,8 +1692,26 @@ Private Function RecallOneItem(itm As Object, _
     On Error Resume Next
     readInsp.Activate
     On Error GoTo Fail
-    Dim tFocus As Date: tFocus = Now + TimeSerial(0, 0, 1)
-    Do While Now < tFocus: DoEvents: Loop
+
+    ' Cung nguyen tac: san nhu cu la 1s, nhung thoat som ngay khi
+    ' CommandBars cua Inspector truy cap duoc (dau hieu cua so da thuc
+    ' su san sang nhan lenh ExecuteMso ben duoi) - giu san toi thieu
+    ' 0.15s de tranh truong hop kiem tra qua som luc animation cua so
+    ' chua kip on dinh.
+    Dim tFocusMin As Date: tFocusMin = Now + TimeSerial(0, 0, 0) + (0.15 / 86400)
+    Do While Now < tFocusMin: DoEvents: Loop
+
+    Dim tFocusMax As Date: tFocusMax = Now + TimeSerial(0, 0, 1)
+    Do
+        Dim cbOK As Boolean: cbOK = False
+        On Error Resume Next
+        Err.Clear
+        Dim cbTest As Object: Set cbTest = readInsp.CommandBars
+        cbOK = (Err.Number = 0 And Not cbTest Is Nothing)
+        On Error GoTo Fail
+        If cbOK Then Exit Do
+        DoEvents
+    Loop While Now < tFocusMax
 
     Dim gotResult As Boolean: gotResult = False
     Dim attempt As Long
