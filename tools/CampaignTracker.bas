@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.90
+' SHB CM Campaign Tracker v4.91
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -494,8 +494,40 @@ Option Explicit
 '     XAC buoc nao lam noi dung bien mat, thay vi tiep tuc doan.
 ' ================================================================
 
+' CHANGES vs v4.90
+'   - DA TIM RA GOC RE THAT SU (nho DebugDumpHTML cua v4.90 + du lieu that
+'     nguoi dung gui lai) - KHONG PHAI o WrapLinks() hay Word API nhu 4
+'     lan sua truoc (v4.85-v4.88), ma o ham chon PREVIEW TEXT mac dinh.
+'   - FindFirstNonLinkLine() (dung de goi y preview text tu draft.body)
+'     chi kiem tra dong co bat dau bang "http://"/"https://" de loai bo
+'     - nhung draft.body (che do PLAIN TEXT, khac HTMLBody) cua Outlook
+'     hien link tran duoi dang boc trong dau ngoac "<https://...>". Vi
+'     kiem tra khong tinh truong hop nay, dong link tran (co dau "<" o
+'     dau) bi coi la "dong chu that su" va duoc chon lam preview text mac
+'     dinh trong InputBox.
+'   - Neu nguoi dung khong sua lai (bam OK giu nguyen goi y, dung nhu
+'     truong hop "Test" cua nguoi dung), chuoi "<https://...>" nay duoc
+'     noi THANG vao preheader an (hidden div ngay sau <body>) MA KHONG
+'     HTML-ESCAPE. Dau "<" mo dau bi trinh duyet/Word engine hieu la BAT
+'     DAU 1 THE HTML MOI - va vi khong co dau ">" dong hop le ngay sau do
+'     (dia chi that bi UrlEnc/cat ngan hoac chinh no da dai), trinh phan
+'     tich HTML "nuot" toan bo phan con lai cua body vao lam thuoc tinh
+'     cua the loi nay cho den khi gap dau ">" tiep theo o rat xa phia sau
+'     - xoa sach hieu ung hien thi cua toan bo noi dung that (anh, chu ky,
+'     v.v.), dung la nguyen nhan gay "mail rong hoan toan" ma nguoi dung
+'     gap - HOAN TOAN KHONG LIEN QUAN gi den link boc anh/VML nhu da doan.
+'   - Sua goc: (1) FindFirstNonLinkLine() bo dau "<"/">" boc ngoai truoc
+'     khi kiem tra co phai link khong - dong link tran gio duoc loai dung,
+'     khong con bi chon nham lam preview text. (2) Phong ve tan goc: them
+'     HtmlEscape() va goi no cho prevTxt truoc khi noi vao preheader - du
+'     sau nay co truong hop la nao khac sinh ra prevTxt chua ky tu "<"/
+'     ">"/"&", cung khong the pha vo cau truc HTML nua.
+'   - WrapLinks() giu nguyen nhu v4.89 (dieu kien VML da thu hep dung,
+'     khong lien quan loi nay nhung van la cai thien hop ly, giu lai).
+' ================================================================
+
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.90"
+Private Const VER       As String = "4.91"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -624,13 +656,37 @@ Private Function FindFirstNonLinkLine(ByVal bodyText As String) As String
     For k = 0 To UBound(lines)
         Dim ln As String: ln = Trim(lines(k))
         If Len(ln) > 0 Then
-            If LCase(Left(ln, 7)) <> "http://" And LCase(Left(ln, 8)) <> "https://" Then
+            ' Outlook hien link tran trong che do plain-text (vd draft.body,
+            ' KHAC voi draft.HTMLBody) boc quanh bang dau "<" ">" - vd
+            ' "<https://...>". Kiem tra cu chi bat "http://"/"https://" nen
+            ' bo lot dong nay (vi thuc su bat dau bang "<"), khien link tran
+            ' bi chon nham lam preview text mac dinh - roi bi nhet THANG,
+            ' KHONG HTML-ESCAPE, vao preheader an, khien dau "<" mo dau pha
+            ' vo toan bo cau truc HTML phia sau (da xac nhan bang du lieu
+            ' that qua DebugDumpHTML - day moi la NGUYEN NHAN THAT SU cua
+            ' loi mail rong, khong phai do WrapLinks()). Sua: bo dau "<"/">"
+            ' boc ngoai (neu co) truoc khi kiem tra link.
+            Dim lnCheck As String: lnCheck = ln
+            If Left(lnCheck, 1) = "<" Then lnCheck = mid(lnCheck, 2)
+            If Right(lnCheck, 1) = ">" Then lnCheck = Left(lnCheck, Len(lnCheck) - 1)
+            If LCase(Left(lnCheck, 7)) <> "http://" And LCase(Left(lnCheck, 8)) <> "https://" Then
                 FindFirstNonLinkLine = ln
                 Exit Function
             End If
         End If
     Next k
     FindFirstNonLinkLine = ""
+End Function
+
+' HTML-escape mot chuoi van ban thuong truoc khi chen vao giua HTML - luon
+' phai goi ham nay cho bat ky chuoi nao KHONG PHAI HTML co san (vd prevTxt
+' nguoi dung go/AI goi y) truoc khi noi thang vao HTML, de tranh ky tu "<"
+' "&" ngoai y muon pha vo cau truc parser (xem giai thich o FindFirstNonLinkLine).
+Private Function HtmlEscape(ByVal s As String) As String
+    s = Replace(s, "&", "&amp;")
+    s = Replace(s, "<", "&lt;")
+    s = Replace(s, ">", "&gt;")
+    HtmlEscape = s
 End Function
 
 Public Sub SendCampaign()
@@ -898,7 +954,7 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
     If Len(prevTxt) > 0 And prevTxt <> "(trong)" Then
         Dim preHdr As String
         preHdr = "<div style=""display:none;max-height:0;overflow:hidden;mso-hide:all;" & _
-                 "font-size:1px;color:#ffffff;line-height:1px;"">" & prevTxt & "</div>"
+                 "font-size:1px;color:#ffffff;line-height:1px;"">" & HtmlEscape(prevTxt) & "</div>"
         Dim btPos As Long: btPos = InStr(LCase(baseHTML), "<body")
         If btPos > 0 Then
             Dim btEnd As Long: btEnd = InStr(btPos, baseHTML, ">")
