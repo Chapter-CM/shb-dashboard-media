@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.84
+' SHB CM Campaign Tracker v4.85
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -368,10 +368,29 @@ Option Explicit
 '     trong profile (dedup theo StoreID, giong co che da dung cho Shrink/
 '     Recall/Archive), co du phong quay lai 1 watcher cho account mac
 '     dinh neu vi ly do nao do khong lay duoc danh sach account.
+'
+' CHANGES vs v4.84
+'   - Nguoi dung bao mail nhan duoc TRONG TRON (mat het anh, chu ky, moi
+'     thu) khi bat Click tracking voi mail co anh gan hyperlink + chu ky
+'     phuc tap. Nguyen nhan: WrapLinks() khong phai 1 trinh phan tich
+'     HTML that su, chi do chuoi thu cong tim "href="..."" - voi HTML
+'     phuc tap (Outlook dung engine Word de dung, VML, style long nhau)
+'     co the bat NHAM vi tri dau " dong, khien bien "orig" nuot ca mot
+'     doan lon HTML that (anh/chu ky) roi bi XOA MAT khi ghep chuoi lai.
+'     Day la loi CO SAN tu truoc (khong phai do cac ban va gan day gay
+'     ra), chi moi bi phat hien do lan nay la lan dau test dung to hop
+'     anh co link + chu ky phuc tap + bat Click tracking. Them 2 lop
+'     phong ve trong WrapLinks(): (1) bo qua doan nghi ngo neu "orig" bat
+'     duoc chua ky tu "<" hoac dai bat thuong (>2000 ky tu) - dau hieu
+'     quet nham sang tag khac; (2) luoi an toan cuoi cung - WrapLinks chi
+'     co the LAM DAI chuoi (thay href goc bang link tracking dai hon),
+'     neu ket qua cuoi cung lai NGAN HON ban goc thi chac chan co loi
+'     quet, HUY TOAN BO thay doi va tra ve nguyen ban HTML goc (thap chi
+'     khong wrap duoc link con hon gui mail trong cho hang loat nguoi).
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.84"
+Private Const VER       As String = "4.85"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1242,6 +1261,24 @@ End Sub
 ' ================================================================
 ' WRAP LINKS
 ' ================================================================
+' QUAN TRONG: day KHONG PHAI 1 trinh phan tich HTML that su, chi la do
+' chuoi thu cong tim "href=" ... " ke tiep - voi HTML phuc tap (vd Outlook
+' dung engine Word de dung HTML, chu ky co anh gan link, VML, style co
+' dau nhay long nhau...) co the bat NHAM dau " dong sai vi tri, khien
+' "orig" nuot ca mot doan lon HTML that (bao gom ca anh/chu ky) roi XOA
+' mat doan do khi ghep lai res = Left(...) & tURL & mid(...) - lam mail
+' nhan duoc TRONG TRON, mat het anh/chu ky (da gap thuc te). Them 2 lop
+' phong ve:
+'   1. Neu doan "orig" bat duoc chua ky tu "<" (dau hieu quet lan sang
+'      tag khac, khong con la 1 gia tri href hop le) hoac dai bat thuong
+'      (>2000 ky tu) -> BO QUA doan nay (khong wrap), tiep tuc quet tiep,
+'      khong lam gi voi doan nghi ngo do de tranh xoa nham.
+'   2. Sau khi quet xong TOAN BO, WrapLinks() chi co the LAM DAI THEM
+'      chuoi (thay href goc bang link tracking dai hon), khong bao gio
+'      lam NGAN hon duoc mot cach hop le. Neu ket qua cuoi cung ngan hon
+'      chuoi goc -> chac chan co loi quet dau, HUY BO toan bo thay doi,
+'      tra ve NGUYEN VAN html goc (thap chi khong wrap link con hon la
+'      gui mail trong tron cho hang loat nguoi nhan).
 Private Function WrapLinks(html As String, slug As String, _
                              squad As String, mType As String) As String
     Dim res As String: res = html
@@ -1255,7 +1292,12 @@ Private Function WrapLinks(html As String, slug As String, _
         If he = 0 Then Exit Do
         Dim orig As String: orig = mid(res, hs, he - hs)
 
-        If Left(LCase(orig), 4) <> "http" Or InStr(LCase(orig), "api/track") > 0 Then
+        ' Nghi ngo quet nham (nuot qua tag khac hoac dai bat thuong) ->
+        ' bo qua, khong dong gi vao doan nay, tiep tuc quet tu sau dau
+        ' " vua tim thay.
+        If InStr(orig, "<") > 0 Or Len(orig) > 2000 Then
+            pos = he + 1
+        ElseIf Left(LCase(orig), 4) <> "http" Or InStr(LCase(orig), "api/track") > 0 Then
             pos = he + 1
         Else
             If Len(orig) > 480 Then orig = Left(orig, 480)
@@ -1271,6 +1313,14 @@ Private Function WrapLinks(html As String, slug As String, _
             pos = hs + Len(tURL) + 1
         End If
     Loop
+
+    ' Luoi an toan cuoi cung: WrapLinks chi co the LAM DAI chuoi, khong
+    ' bao gio lam ngan hop le duoc. Neu ket qua ngan hon ban goc, chac
+    ' chan co doan da bi xoa nham - huy toan bo, tra ve nguyen ban goc.
+    If Len(res) < Len(html) Then
+        WrapLinks = html
+        Exit Function
+    End If
 
     WrapLinks = res
 End Function
