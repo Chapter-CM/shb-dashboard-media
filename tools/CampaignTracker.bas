@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.88
+' SHB CM Campaign Tracker v4.89
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -442,10 +442,36 @@ Option Explicit
 '     thao mail mac dinh) -> tu dong lui ve WrapLinks() cu (van giu
 '     nguyen loi luoi an toan v4.85/v4.86/v4.87) de khong bao gio mat
 '     hoan toan kha nang tracking click.
+'
+' CHANGES vs v4.88
+'   - RewriteHyperlinksViaWord() cua v4.88 GAY LOI NANG HON: test thuc te
+'     (kem ca mail "Test" don gian, khong hinh anh) cho ra body TRONG
+'     TRON, chi con lai dung chuoi URL tracking hien ra nhu VAN BAN THO.
+'     Nguyen nhan rat co the: Word.Hyperlink.Address duoc luu trong FIELD
+'     CODE noi bo cua Word (dang { HYPERLINK "..." }) - field code nay co
+'     GIOI HAN DO DAI. Link tracking cua ta rat dai (URL SharePoint goc
+'     da dai, cong them ma hoa UrlEnc() + toan bo query string campaign/
+'     squad/type/eid/rcpt) nen VUOT gioi han, lam Word tu lam hong/xoa
+'     field va hien nguyen van dia chi ra thanh chu - te hon ca loi cu
+'     (it nhat truoc day van con noi dung, chi rieng 1 link bi bo qua).
+'     -> BO HAN RewriteHyperlinksViaWord(), quay lai dung WrapLinks() (do
+'     chuoi HTML) lam duy nhat 1 co che, vi no khong bi gioi han do dai
+'     nhu Word field.
+'   - Sua dung goc re cua van de: xem lai HTML that (tools/ExportDraftHTML.
+'     bas) cho thay link SharePoint dang gay loi nam trong cau truc DON
+'     GIAN <a href="..."><span><img ...></span></a> - KHONG co VML. Loi
+'     TRONG TRON that su (o v4.85/v4.86) chi xay ra voi anh CHU KY dung
+'     VML (<v:imagedata>, o:href). WrapLinks() truoc day (v4.87) lai bo
+'     qua CA HAI truong hop (VML lan <img> thuong) mot cach qua tay -
+'     khien banner/anh thuong (nhu SharePoint o day) khong duoc tracking
+'     du an toan de xu ly. Sua: CHI bo qua khi thay dau hieu VML that su
+'     (v:imagedata) - anh <img> thuong (banner, logo gan link binh
+'     thuong) gio duoc tracking nhu link chu, vi thay the gia tri href
+'     don gian trong the <a> KHONG dung gi den cau truc VML de gay vo.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.88"
+Private Const VER       As String = "4.89"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -841,16 +867,6 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         Next ci
     End If
 
-    ' Neu bat Click Tracking, uu tien sua link truc tiep qua Word engine
-    ' (RewriteHyperlinksViaWord) TRUOC KHI lay baseHTML - Word tu quan ly
-    ' dung cau truc noi bo (ke ca link boc anh/VML) nen an toan hon han
-    ' do chuoi thu cong. Neu WordEditor khong dung duoc (vd may khong
-    ' dung Word lam trinh soan thao mail), tu dong lui ve WrapLinks() cu.
-    Dim usedWordRewrite As Boolean: usedWordRewrite = False
-    If doClick Then
-        usedWordRewrite = RewriteHyperlinksViaWord(draft, slug, squad, mType)
-    End If
-
     Dim baseHTML As String: baseHTML = draft.HTMLBody
 
     ' Inject preview text as hidden preheader
@@ -869,7 +885,7 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         End If
     End If
 
-    If doClick And Not usedWordRewrite Then baseHTML = WrapLinks(baseHTML, slug, squad, mType)
+    If doClick Then baseHTML = WrapLinks(baseHTML, slug, squad, mType)
 
     Dim sentOK As Long:   sentOK = 0
     Dim sentFail As Long: sentFail = 0
@@ -1374,21 +1390,18 @@ Private Function WrapLinks(html As String, slug As String, _
         If he = 0 Then Exit Do
         Dim orig As String: orig = mid(res, hs, he - hs)
 
-        ' Link nay co dang BOC QUANH 1 tam anh khong (vd anh chen qua
-        ' Insert > Pictures roi gan Hyperlink)? Word thuong dung cau truc
-        ' VML + conditional comment phuc tap cho truong hop nay
-        ' (<v:imagedata>, <img> ben trong cung 1 the <a>...</a>) - ghi de
-        ' href That dai cua link tracking vao day co the pha vo cau truc
-        ' do, khien Word engine render TRONG TRON (da gap thuc te, kiem
-        ' tra rieng "o:href" o tren khong du). AN TOAN HON la BO QUA
-        ' hoan toan link nao boc quanh anh - khong tracking click duoc
-        ' rieng link do, nhung giu nguyen noi dung khong bi vo.
+        ' Link nay co dang boc quanh cau truc VML phuc tap khong (chu ky
+        ' Outlook thuong ve anh bang <v:shape>/<v:imagedata> + conditional
+        ' comment lien ket voi nhau, rat de vo neu ghi de href That dai
+        ' vao giua)? CHI bo qua khi thay ro dau hieu VML that su
+        ' (v:imagedata) - anh thuong (<img> don gian, vd banner chen qua
+        ' Insert > Pictures roi gan Hyperlink, KHONG co VML) van duoc xu
+        ' ly binh thuong nhu link chu, vi day chi la thay gia tri thuoc
+        ' tinh href don gian, khong dung gi den cau truc VML de vo.
         Dim peekAhead As String: peekAhead = LCase(mid(res, he, 800))
-        Dim posImgTag As Long: posImgTag = InStr(peekAhead, "<img")
         Dim posVmlTag As Long: posVmlTag = InStr(peekAhead, "v:imagedata")
         Dim posCloseA As Long: posCloseA = InStr(peekAhead, "</a>")
         Dim isImageLink As Boolean: isImageLink = False
-        If posImgTag > 0 And (posCloseA = 0 Or posImgTag < posCloseA) Then isImageLink = True
         If posVmlTag > 0 And (posCloseA = 0 Or posVmlTag < posCloseA) Then isImageLink = True
 
         ' Nghi ngo quet nham (nuot qua tag khac hoac dai bat thuong) ->
@@ -1425,83 +1438,6 @@ ContinueLoop:
     End If
 
     WrapLinks = res
-End Function
-
-' ================================================================
-' REWRITE HYPERLINKS VIA WORD (v4.88+)
-' ================================================================
-' WrapLinks() (o tren) do chuoi HTML thu cong - da qua 3 lan sua
-' (v4.85/v4.86/v4.87) van khong triet de voi truong hop link boc quanh
-' anh (VML/conditional comment cua Word qua phuc tap de do chuoi an
-' toan), buoc phai BO QUA tracking cho rieng link do - nguoi dung tu
-' choi danh doi nay vi ve sau mail se co toi 5-10 link/anh can tracking.
-'
-' Outlook dung chinh Word lam engine soan thao HTML (MailItem.GetInspector.
-' WordEditor la doi tuong Word.Document that). Word tu quan ly dung cau
-' truc noi bo cua no (bao gom VML/anh gan link) qua property .Hyperlinks -
-' sua .Address qua day KHONG BAO GIO lam vo HTML nhu do chuoi thu cong,
-' vi Word tu serialize lai dung. Ham nay thay the WrapLinks() khi
-' WordEditor dung duoc; neu khong (vd may khong dung Word lam trinh soan
-' thao mail) thi DoFullMode() se tu dong lui ve WrapLinks() nhu cu.
-'
-' Luu placeholder PH_EID/PH_RCPT vao thang .Address (giong co che cu) de
-' logic thay the theo tung nguoi nhan trong vong lap chinh khong doi.
-Private Function RewriteHyperlinksViaWord(draft As MailItem, slug As String, _
-                                            squad As String, mType As String) As Boolean
-    On Error GoTo Fail
-
-    Dim insp As Object: Set insp = draft.GetInspector
-    If insp Is Nothing Then GoTo Fail
-
-    Dim wdDoc As Object: Set wdDoc = insp.WordEditor
-    If wdDoc Is Nothing Then GoTo Fail
-
-    Dim hls As Object: Set hls = wdDoc.Hyperlinks
-    If hls Is Nothing Then GoTo Fail
-    If hls.Count = 0 Then
-        RewriteHyperlinksViaWord = True   ' khong co link nao - khong loi, khong can lam gi
-        Exit Function
-    End If
-
-    ' Gom truoc vao Collection roi moi sua - tranh sua truc tiep trong
-    ' luc duyet chinh collection COM song (co the gay bo sot/loi index).
-    Dim targets As New Collection
-    Dim h As Object
-    For Each h In hls
-        Dim addr As String: addr = ""
-        On Error Resume Next
-        addr = h.Address
-        On Error GoTo Fail
-        If Len(addr) > 0 Then
-            If Left(LCase(addr), 4) = "http" And InStr(LCase(addr), "api/track") = 0 Then
-                targets.Add h
-            End If
-        End If
-    Next h
-
-    Dim k As Long
-    For k = 1 To targets.Count
-        Dim hh As Object: Set hh = targets(k)
-        Dim orig As String: orig = hh.Address
-        If Len(orig) > 480 Then orig = Left(orig, 480)
-
-        Dim tURL As String
-        tURL = TRACK_URL & "?pos=click" & _
-               "&eid=" & PH_EID & _
-               "&rcpt=" & PH_RCPT & _
-               "&campaign=" & UrlEnc(slug) & _
-               "&squad=" & UrlEnc(squad) & _
-               "&type=" & UrlEnc(mType) & _
-               "&url=" & UrlEnc(orig)
-
-        hh.Address = tURL
-    Next k
-
-    RewriteHyperlinksViaWord = True
-    Exit Function
-
-Fail:
-    RewriteHyperlinksViaWord = False
 End Function
 
 ' ================================================================
