@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.86
+' SHB CM Campaign Tracker v4.87
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -404,10 +404,27 @@ Option Explicit
 '     nhu "o:href", "xlink:href") thi BO QUA hoan toan, khong dong vao,
 '     chi xu ly dung thuoc tinh "href=" DOC LAP (thuoc tinh lien ket
 '     chuan cua the <a>).
+'
+' CHANGES vs v4.86
+'   - Loi mail nhan duoc TRONG TRON VAN CON du da bo qua "o:href" o
+'     v4.86. Xem lai anh chup thuc te: Word tao ra CA HAI noi chua CUNG
+'     1 URL (link SharePoint rat dai) khi anh duoc gan Hyperlink - href=
+'     THAT tren the <a> boc quanh anh (cai v4.86 van xu ly binh thuong)
+'     VA o:href tren <v:imagedata> ben trong (da bi bo qua tu v4.86).
+'     Nghi ngo: rieng viec thay THE <a> BOC ANH bang link tracking rat
+'     dai (nam chung cau truc voi VML/conditional comment phuc tap) da
+'     du de lam Word engine render loi/trong, KE CA khi o:href khong con
+'     bi dong vao nua. Sua AN TOAN HON: kiem tra neu href sap wrap nam
+'     ngay TRUOC 1 the <img> hoac <v:imagedata> (trong pham vi toi da 800
+'     ky tu, truoc khi gap </a> dong lai) - tuc la link nay dang BOC
+'     QUANH 1 TAM ANH - thi BO QUA HOAN TOAN, khong tracking click cho
+'     rieng link nay (van tracking binh thuong cho cac link chu khac).
+'     Danh doi: mat kha nang do click cho link tren anh, doi lay dam bao
+'     khong lam vo noi dung mail gui hang loat.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.86"
+Private Const VER       As String = "4.87"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1326,10 +1343,29 @@ Private Function WrapLinks(html As String, slug As String, _
         If he = 0 Then Exit Do
         Dim orig As String: orig = mid(res, hs, he - hs)
 
+        ' Link nay co dang BOC QUANH 1 tam anh khong (vd anh chen qua
+        ' Insert > Pictures roi gan Hyperlink)? Word thuong dung cau truc
+        ' VML + conditional comment phuc tap cho truong hop nay
+        ' (<v:imagedata>, <img> ben trong cung 1 the <a>...</a>) - ghi de
+        ' href That dai cua link tracking vao day co the pha vo cau truc
+        ' do, khien Word engine render TRONG TRON (da gap thuc te, kiem
+        ' tra rieng "o:href" o tren khong du). AN TOAN HON la BO QUA
+        ' hoan toan link nao boc quanh anh - khong tracking click duoc
+        ' rieng link do, nhung giu nguyen noi dung khong bi vo.
+        Dim peekAhead As String: peekAhead = LCase(mid(res, he, 800))
+        Dim posImgTag As Long: posImgTag = InStr(peekAhead, "<img")
+        Dim posVmlTag As Long: posVmlTag = InStr(peekAhead, "v:imagedata")
+        Dim posCloseA As Long: posCloseA = InStr(peekAhead, "</a>")
+        Dim isImageLink As Boolean: isImageLink = False
+        If posImgTag > 0 And (posCloseA = 0 Or posImgTag < posCloseA) Then isImageLink = True
+        If posVmlTag > 0 And (posCloseA = 0 Or posVmlTag < posCloseA) Then isImageLink = True
+
         ' Nghi ngo quet nham (nuot qua tag khac hoac dai bat thuong) ->
         ' bo qua, khong dong gi vao doan nay, tiep tuc quet tu sau dau
         ' " vua tim thay.
-        If InStr(orig, "<") > 0 Or Len(orig) > 2000 Then
+        If isImageLink Then
+            pos = he + 1
+        ElseIf InStr(orig, "<") > 0 Or Len(orig) > 2000 Then
             pos = he + 1
         ElseIf Left(LCase(orig), 4) <> "http" Or InStr(LCase(orig), "api/track") > 0 Then
             pos = he + 1
