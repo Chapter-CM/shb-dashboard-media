@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.87
+' SHB CM Campaign Tracker v4.88
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -421,10 +421,31 @@ Option Explicit
 '     rieng link nay (van tracking binh thuong cho cac link chu khac).
 '     Danh doi: mat kha nang do click cho link tren anh, doi lay dam bao
 '     khong lam vo noi dung mail gui hang loat.
+'
+' CHANGES vs v4.87
+'   - Nguoi dung tu choi danh doi "bo qua tracking cho link boc anh" cua
+'     v4.87 vi ve sau mail se can toi 5-10 link (ke ca link tren anh) deu
+'     phai tracking duoc. Da xin duoc HTML that cua 1 draft loi (qua tool
+'     chan doan tools/ExportDraftHTML.bas) - xac nhan cau truc: <a
+'     href="link SharePoint rat dai"><span><img src="cid:..."></span></a>.
+'     Do chuoi thu cong (WrapLinks) ban chat de vo voi cau truc nay du da
+'     3 lan va luoi an toan.
+'   - Doi chien luoc: them RewriteHyperlinksViaWord() - dung THANG API
+'     Hyperlinks cua chinh Word (Outlook dung Word lam engine soan thao
+'     HTML, MailItem.GetInspector.WordEditor la 1 Word.Document that).
+'     Sua .Address cua tung Hyperlink qua Word tu dam bao Word serialize
+'     lai dung HTML/VML noi bo cua no - khong con nguy co vo cau truc nhu
+'     do chuoi thu cong nua, ke ca link boc anh.
+'   - Goi RewriteHyperlinksViaWord() TRUOC khi lay baseHTML = draft.HTMLBody
+'     (de baseHTML phan anh dung ban Word da sua). Neu WordEditor khong
+'     dung duoc vi ly do nao do (vd may khong dung Word lam trinh soan
+'     thao mail mac dinh) -> tu dong lui ve WrapLinks() cu (van giu
+'     nguyen loi luoi an toan v4.85/v4.86/v4.87) de khong bao gio mat
+'     hoan toan kha nang tracking click.
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.87"
+Private Const VER       As String = "4.88"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -820,6 +841,16 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         Next ci
     End If
 
+    ' Neu bat Click Tracking, uu tien sua link truc tiep qua Word engine
+    ' (RewriteHyperlinksViaWord) TRUOC KHI lay baseHTML - Word tu quan ly
+    ' dung cau truc noi bo (ke ca link boc anh/VML) nen an toan hon han
+    ' do chuoi thu cong. Neu WordEditor khong dung duoc (vd may khong
+    ' dung Word lam trinh soan thao mail), tu dong lui ve WrapLinks() cu.
+    Dim usedWordRewrite As Boolean: usedWordRewrite = False
+    If doClick Then
+        usedWordRewrite = RewriteHyperlinksViaWord(draft, slug, squad, mType)
+    End If
+
     Dim baseHTML As String: baseHTML = draft.HTMLBody
 
     ' Inject preview text as hidden preheader
@@ -838,7 +869,7 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         End If
     End If
 
-    If doClick Then baseHTML = WrapLinks(baseHTML, slug, squad, mType)
+    If doClick And Not usedWordRewrite Then baseHTML = WrapLinks(baseHTML, slug, squad, mType)
 
     Dim sentOK As Long:   sentOK = 0
     Dim sentFail As Long: sentFail = 0
@@ -1396,6 +1427,82 @@ ContinueLoop:
     WrapLinks = res
 End Function
 
+' ================================================================
+' REWRITE HYPERLINKS VIA WORD (v4.88+)
+' ================================================================
+' WrapLinks() (o tren) do chuoi HTML thu cong - da qua 3 lan sua
+' (v4.85/v4.86/v4.87) van khong triet de voi truong hop link boc quanh
+' anh (VML/conditional comment cua Word qua phuc tap de do chuoi an
+' toan), buoc phai BO QUA tracking cho rieng link do - nguoi dung tu
+' choi danh doi nay vi ve sau mail se co toi 5-10 link/anh can tracking.
+'
+' Outlook dung chinh Word lam engine soan thao HTML (MailItem.GetInspector.
+' WordEditor la doi tuong Word.Document that). Word tu quan ly dung cau
+' truc noi bo cua no (bao gom VML/anh gan link) qua property .Hyperlinks -
+' sua .Address qua day KHONG BAO GIO lam vo HTML nhu do chuoi thu cong,
+' vi Word tu serialize lai dung. Ham nay thay the WrapLinks() khi
+' WordEditor dung duoc; neu khong (vd may khong dung Word lam trinh soan
+' thao mail) thi DoFullMode() se tu dong lui ve WrapLinks() nhu cu.
+'
+' Luu placeholder PH_EID/PH_RCPT vao thang .Address (giong co che cu) de
+' logic thay the theo tung nguoi nhan trong vong lap chinh khong doi.
+Private Function RewriteHyperlinksViaWord(draft As MailItem, slug As String, _
+                                            squad As String, mType As String) As Boolean
+    On Error GoTo Fail
+
+    Dim insp As Object: Set insp = draft.GetInspector
+    If insp Is Nothing Then GoTo Fail
+
+    Dim wdDoc As Object: Set wdDoc = insp.WordEditor
+    If wdDoc Is Nothing Then GoTo Fail
+
+    Dim hls As Object: Set hls = wdDoc.Hyperlinks
+    If hls Is Nothing Then GoTo Fail
+    If hls.Count = 0 Then
+        RewriteHyperlinksViaWord = True   ' khong co link nao - khong loi, khong can lam gi
+        Exit Function
+    End If
+
+    ' Gom truoc vao Collection roi moi sua - tranh sua truc tiep trong
+    ' luc duyet chinh collection COM song (co the gay bo sot/loi index).
+    Dim targets As New Collection
+    Dim h As Object
+    For Each h In hls
+        Dim addr As String: addr = ""
+        On Error Resume Next
+        addr = h.Address
+        On Error GoTo Fail
+        If Len(addr) > 0 Then
+            If Left(LCase(addr), 4) = "http" And InStr(LCase(addr), "api/track") = 0 Then
+                targets.Add h
+            End If
+        End If
+    Next h
+
+    Dim k As Long
+    For k = 1 To targets.Count
+        Dim hh As Object: Set hh = targets(k)
+        Dim orig As String: orig = hh.Address
+        If Len(orig) > 480 Then orig = Left(orig, 480)
+
+        Dim tURL As String
+        tURL = TRACK_URL & "?pos=click" & _
+               "&eid=" & PH_EID & _
+               "&rcpt=" & PH_RCPT & _
+               "&campaign=" & UrlEnc(slug) & _
+               "&squad=" & UrlEnc(squad) & _
+               "&type=" & UrlEnc(mType) & _
+               "&url=" & UrlEnc(orig)
+
+        hh.Address = tURL
+    Next k
+
+    RewriteHyperlinksViaWord = True
+    Exit Function
+
+Fail:
+    RewriteHyperlinksViaWord = False
+End Function
 
 ' ================================================================
 ' FIRE HTTP - async fire-and-forget (WinInet, SHB proxy compatible)
