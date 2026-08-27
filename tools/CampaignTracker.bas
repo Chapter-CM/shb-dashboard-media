@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.85
+' SHB CM Campaign Tracker v4.86
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -387,10 +387,27 @@ Option Explicit
 '     neu ket qua cuoi cung lai NGAN HON ban goc thi chac chan co loi
 '     quet, HUY TOAN BO thay doi va tra ve nguyen ban HTML goc (thap chi
 '     khong wrap duoc link con hon gui mail trong cho hang loat nguoi).
+'
+' CHANGES vs v4.85
+'   - Loi mail nhan duoc TRONG TRON VAN CON du da co luoi an toan do dai
+'     o v4.85 - vi lan nay nghi ngo KHONG PHAI do quet nham xoa mat noi
+'     dung (truong hop do se lam NGAN chuoi, da bi luoi do dai chan lai),
+'     ma do WrapLinks() bat NHAM thuoc tinh "href=" la HAU TO cua thuoc
+'     tinh khac nhu "o:href=" hoac "xlink:href=" - day la thuoc tinh NOI
+'     BO cua VML (Word dung de ve anh/shape trong chu ky phuc tap), KHONG
+'     PHAI link nguoi dung. Ghi de gia tri thuoc tinh nay bang link
+'     tracking khong lam NGAN chuoi (nen qua duoc luoi do dai) nhung co
+'     the PHA VO cau truc VML, khien Word engine cua Outlook render toan
+'     bo noi dung ra TRONG TRON o phia nguoi nhan dung nhu quan sat thuc
+'     te. Sua: kiem tra ky tu NGAY TRUOC vi tri "href=" tim duoc - neu
+'     khong phai khoang trang (tuc la mot phan cua ten thuoc tinh dai hon
+'     nhu "o:href", "xlink:href") thi BO QUA hoan toan, khong dong vao,
+'     chi xu ly dung thuoc tinh "href=" DOC LAP (thuoc tinh lien ket
+'     chuan cua the <a>).
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.85"
+Private Const VER       As String = "4.86"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1285,9 +1302,26 @@ Private Function WrapLinks(html As String, slug As String, _
     Dim pos As Long:   pos = 1
 
     Do
-        Dim hs As Long: hs = InStr(pos, LCase(res), "href=" & Chr(34))
-        If hs = 0 Then Exit Do
-        hs = hs + 6
+        Dim rawHs As Long: rawHs = InStr(pos, LCase(res), "href=" & Chr(34))
+        If rawHs = 0 Then Exit Do
+
+        ' Chi bat dung thuoc tinh "href=" DOC LAP (dung sau khoang trang/
+        ' dau tag) - BO QUA neu la hau to cua thuoc tinh khac nhu "o:href="
+        ' hoac "xlink:href=" (thuoc tinh noi bo cua VML/Word dung de ve
+        ' anh/shape trong chu ky phuc tap - KHONG PHAI link nguoi dung).
+        ' Ghi de nham thuoc tinh nay bang link tracking khong lam ngan
+        ' chuoi (nen luoi an toan do dai o duoi khong bat duoc) nhung co
+        ' the pha vo cau truc VML, khien Word engine cua Outlook render
+        ' ra TRONG TRON o phia nguoi nhan.
+        If rawHs > 1 Then
+            Dim chBefore As String: chBefore = mid(res, rawHs - 1, 1)
+            If chBefore <> " " And chBefore <> vbTab And chBefore <> vbCr And chBefore <> vbLf Then
+                pos = rawHs + 5
+                GoTo ContinueLoop
+            End If
+        End If
+
+        Dim hs As Long: hs = rawHs + 6
         Dim he As Long: he = InStr(hs, res, Chr(34))
         If he = 0 Then Exit Do
         Dim orig As String: orig = mid(res, hs, he - hs)
@@ -1312,6 +1346,7 @@ Private Function WrapLinks(html As String, slug As String, _
             res = Left(res, hs - 1) & tURL & mid(res, he)
             pos = hs + Len(tURL) + 1
         End If
+ContinueLoop:
     Loop
 
     ' Luoi an toan cuoi cung: WrapLinks chi co the LAM DAI chuoi, khong
