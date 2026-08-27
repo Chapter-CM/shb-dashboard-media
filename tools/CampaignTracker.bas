@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.72
+' SHB CM Campaign Tracker v4.93
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -221,10 +221,358 @@ Option Explicit
 '     m_ShrinkTimerOn - chinh co nay cung bi xoa khi reset nen khong bao
 '     gio tat duoc timer "mo coi").
 '
+' CHANGES vs v4.72
+'   - RecallCampaign() bao "khong tim thay mail" du campaign vua gui xong
+'     that su van con trong Sent Items - nguyen nhan: ca RecallCampaign()
+'     lan ShrinkCampaignSentItems() van chi dung GetDefaultFolder(olFolder-
+'     SentMail), tuc CHI quet Sent Items cua 1 account MAC DINH duy nhat
+'     trong profile. Neu campaign gui tu 1 account KHAC (khong phai mac
+'     dinh) - vd profile co nhieu account cung luc - ham se quet nham
+'     Sent Items rong/sai cua account mac dinh va khong bao gio tim ra.
+'     Da sua ca 2 ham quet Sent Items cua TAT CA account trong profile
+'     (giong co che da ap dung cho ArchiveModule.bas truoc do), dedup
+'     theo StoreID de khong quet trung 1 mailbox 2 lan.
+'
+' CHANGES vs v4.73
+'   - Nguoi dung bao anh nhung (chen qua Insert > Pictures, co gan
+'     hyperlink) trong campaign gui hang loat KHONG hien thi o nguoi
+'     nhan, du gui thanh cong - nghi ngo lien quan toi buoc draft.Copy()
+'     roi gan lai m.HTMLBody bang chuoi HTML cu trong DoFullMode(). Xac
+'     nhan day la loi kinh dien cua Outlook VBA: draft.Copy() co the sinh
+'     Content-ID MOI cho tung anh nhung trong ban copy, khong con khop
+'     voi chuoi "cid:..." cu con nam trong HTMLBody (chuoi nay khong doi
+'     kem theo). Them GetAttachmentCid()/FixInlineImageCids(): ghi lai
+'     Content-ID GOC cua tung anh nhung truoc vong lap, sau moi lan
+'     draft.Copy() se doi chieu Content-ID MOI cua ban copy va thay the
+'     lai trong HTML truoc khi gan HTMLBody - anh nhung se hien dung tro
+'     lai. (Rieng anh dang link ngoai/URL that su thi khong lien quan loi
+'     nay, chi anh huong anh NHUNG thuc su qua Insert > Pictures.)
+'
+' CHANGES vs v4.74
+'   - Nguoi dung bao rut gon (Shrink) khong con hoat dong sau khi doi
+'     sang quet da-account (v4.73) - trong khi ban v4.68 truoc do rut
+'     gon rat tot. Nghi ngo acc.DeliveryStore khong tra ve duoc voi kieu
+'     account/profile nao do tren may nguoi dung (loi bi nuot boi On
+'     Error Resume Next, khong hien ra), khien vong lap da-account bo
+'     sot toan bo, khac voi truoc day GetDefaultFolder() luon chac chan
+'     tra ve it nhat 1 folder. Them lop DU PHONG cho ca ShrinkCampaign-
+'     SentItems() va RecallCampaign(): neu vong lap da-account khong quet
+'     duoc account nao (accountsScanned = 0), tu dong quay lai dung cach
+'     cu GetDefaultFolder(olFolderSentMail) nhu v4.68 - dam bao khong bao
+'     gio te hon ban cu, du van uu tien quet da-account truoc. Tach logic
+'     quet 1 folder ra rieng (ScanFolderForShrink/ScanFolderForRecall) de
+'     dung chung cho ca 2 duong (da-account va du phong), tranh sao chep
+'     code 2 lan de giam nguy co lech logic.
+'
+' CHANGES vs v4.75
+'   - Nguoi dung bao link tracking "tho" bi lo ra ngay trong phan preview
+'     cua Outlook (doan chu xam duoi Subject trong danh sach Inbox).
+'     Nguyen nhan: prevTxt (preview text) truoc day tu dong lay NGUYEN
+'     dong dau tien cua draft.body, khong loc gi ca - neu dong dau tien
+'     do vo tinh la 1 link tran, chinh link do bi nhet thang vao preheader
+'     an (hidden div ngay sau <body>) roi "lo" ra thanh preview. Them
+'     FindFirstNonLinkLine(): duyet tung dong cua body, BO QUA dong trong
+'     hoac dong chi la 1 link http/https tran, lay dong dau tien co chu
+'     THUC SU lam preview text - khong con nguy co link "tho" lot vao
+'     preview nua.
+'
+' CHANGES vs v4.76
+'   - Nguoi dung muon TU GO preview text bang tay (tieng Viet co dau)
+'     thay vi luon phai lay tu dong tu noi dung mail. Them InputBox rieng
+'     cho preview text (buoc 3.5/4), goi y san gia tri tu FindFirstNon-
+'     LinkLine() nhung cho sua/go lai tuy y - InputBox dung String Unicode
+'     binh thuong nen go tieng Viet co dau khong bi loi mat dau (khac
+'     voi SaveSetting/GetSetting da gap loi nay o cho khac trong file).
+'
+' CHANGES vs v4.77
+'   - Nguoi dung bao ten chien dich go tieng Viet co dau hien DUNG trong
+'     Subject email (khong qua MakeSlug) nhung Dashboard (doc truong
+'     "campaign" - chinh la slug - tu API tracking) lai hien SAI/thieu
+'     chu. Nguyen nhan: MakeSlug() truoc day LOAI BO HOAN TOAN ky tu co
+'     dau (vd "Thong bao" -> "thng-bo", mat han chu "o" va "a" cua "ô","á")
+'     thay vi chuyen ve khong dau. Them StripVNDiacritics() (giong
+'     NormalizeVN() da dung cho ArchiveModule.bas) goi TRUOC buoc loc
+'     ASCII trong MakeSlug() - tu nay slug se giu day du chu (vd
+'     "thong-bao-...") thay vi bi cut mat. Luu y: cac campaign da gui
+'     TRUOC ban nay van giu slug cu (da luu trong UserProperty/Registry),
+'     chi cac campaign gui SAU khi cap nhat moi co slug day du.
+'
+' CHANGES vs v4.78
+'   - Nguoi dung bao RecallCampaign() voi campaign lon cham gap doi so
+'     voi luc gui - phan tich dung: giai doan 1 (vong lap tu dong mo tung
+'     mail + bam Recall qua SendKeys/ExecuteMso) va giai doan 2 (Outlook
+'     thuc su truyen di cac mail "yeu cau thu hoi" dang xep trong Outbox
+'     qua Exchange - ban chat cung la gui mail, ton thoi gian tuong tu
+'     luc gui ban dau) truoc day chay TUAN TU: doi het giai doan 1 xong
+'     Outlook moi bat dau giai doan 2. Them SendAndReceive dinh ky (moi
+'     20 mail, trong ScanFolderForRecall) + 1 lan cuoi cung sau vong lap
+'     - de Outlook bat dau truyen Outbox NGAY trong luc vong lap van con
+'     chay, giup 2 giai doan chay gan nhu song song thay vi noi duoi
+'     nhau, giam dang ke tong thoi gian Recall.
+'
+' CHANGES vs v4.79
+'   - Nguoi dung xac nhan preview text go qua InputBox (them o v4.77) bi
+'     mat 1 so ky tu tieng Viet mo rong (vd "ỏ" -> "?", trong khi "à","ũ"
+'     van dung) - xac dinh day la gioi han co that cua VBA InputBox: no
+'     chuyen chuoi qua ANSI (Windows-1258) truoc khi tra ve, ma codepage
+'     nay khong co san mot so to hop dau tieng Viet nen bi thay bang "?".
+'     Bo InputBox cho preview text, thay bang GetClipboardText() (dung
+'     CreateObject("MSForms.DataObject"), khong can them Reference) -
+'     doc thang tu Clipboard (CF_UNICODETEXT, giu nguyen Unicode) thay vi
+'     qua InputBox. Quy trinh moi: nguoi dung Copy (Ctrl+C) doan chu
+'     muon dung TRUOC, roi chon "Co" trong hop thoai xac nhan.
+'
+' CHANGES vs v4.80
+'   - Nguoi dung chi ra logic v4.80 bi nguoc: MsgBox/InputBox la
+'     application-modal, KHOA TOAN BO Outlook (ke ca cua so soan mail)
+'     trong luc hien ra - "Copy TRUOC roi bam Yes" la bat kha thi neu
+'     nguon can Copy nam trong chinh Outlook (mail dang soan), vi luc do
+'     Outlook da bi khoa boi chinh hop thoai vua hien ra. Sua: doc
+'     Clipboard (GetClipboardText) NGAY DAU SendCampaign(), TRUOC ca
+'     hop thoai dau tien - luc nay Outlook con hoan toan tu do, nguoi
+'     dung Copy tu mail duoc binh thuong. Neu Clipboard co san chu (va
+'     khac voi goi y tu dong), moi hoi co dung lam preview khong; neu
+'     Clipboard trong hoac trung goi y thi bo qua cau hoi, dung luon
+'     goi y tu dong - khong con buoc "copy giua chung" phi logic nua.
+'
+' CHANGES vs v4.81
+'   - Nguoi dung yeu cau bo han co che Clipboard (v4.80/v4.81), quay lai
+'     InputBox don gian nhu v4.77: de trong se tu dong dung goi y (lay
+'     tu noi dung mail, giong cach Outlook tu lam), muon tu go thi go
+'     TIENG ANH/ASCII de tranh gioi han co that cua VBA InputBox (mat
+'     mot so ky tu tieng Viet mo rong nhu "ỏ" -> "?"). Bo ham
+'     GetClipboardText() (khong con noi nao goi).
+'
+' CHANGES vs v4.82
+'   - Nguoi dung muon giam toi da thoi gian Recall vi so nguoi da doc
+'     duoc trong luc cho. RecallOneItem() truoc day cho CO DINH 1.5s
+'     (mo Inspector) + 1s (focus) MOI mail bat ke may nhanh hay cham -
+'     doi CHO SOM ngay khi dieu kien that su san sang (Inspector khong
+'     con Nothing / CommandBars truy cap duoc), van giu nguyen TRAN AN
+'     TOAN 1.5s/1s cho truong hop may cham (khong giam do tin cay). Chi
+'     sua 2 doan cho nay - KHONG dong vao vong lap ExecuteMso/SendKeys
+'     (0.4s moi lan thu, 1s giua cac lan retry) vi day la phan da tung
+'     gay loi "thanh cong gia"/that bai ngam rat nhieu lan truoc day
+'     (xem lich su CHANGES v4.63-4.67) khi bi rut ngan - giam them o day
+'     rui ro cao hon loi ich, khong dong vao.
+'
+' CHANGES vs v4.83
+'   - Nguoi dung bao recall tren account KHAC (khong phai account mac
+'     dinh, cung 1 thiet bi/profile) van bi lot thong bao "Message Recall
+'     Success/Failure" ve Inbox thay vi tu dong bi xoa. Nguyen nhan:
+'     m_RecallWatcher (RecallNotifWatcher.cls) truoc day chi tao 1 watcher
+'     DUY NHAT, theo doi Inbox/Deleted Items cua account MAC DINH - trong
+'     khi thong bao Recall luon bay ve Inbox cua DUNG account vua dung de
+'     recall (co the la account khac). Doi m_RecallWatcher (1 object) ->
+'     m_RecallWatchers (Collection) - tao 1 watcher RIENG cho MOI account
+'     trong profile (dedup theo StoreID, giong co che da dung cho Shrink/
+'     Recall/Archive), co du phong quay lai 1 watcher cho account mac
+'     dinh neu vi ly do nao do khong lay duoc danh sach account.
+'
+' CHANGES vs v4.84
+'   - Nguoi dung bao mail nhan duoc TRONG TRON (mat het anh, chu ky, moi
+'     thu) khi bat Click tracking voi mail co anh gan hyperlink + chu ky
+'     phuc tap. Nguyen nhan: WrapLinks() khong phai 1 trinh phan tich
+'     HTML that su, chi do chuoi thu cong tim "href="..."" - voi HTML
+'     phuc tap (Outlook dung engine Word de dung, VML, style long nhau)
+'     co the bat NHAM vi tri dau " dong, khien bien "orig" nuot ca mot
+'     doan lon HTML that (anh/chu ky) roi bi XOA MAT khi ghep chuoi lai.
+'     Day la loi CO SAN tu truoc (khong phai do cac ban va gan day gay
+'     ra), chi moi bi phat hien do lan nay la lan dau test dung to hop
+'     anh co link + chu ky phuc tap + bat Click tracking. Them 2 lop
+'     phong ve trong WrapLinks(): (1) bo qua doan nghi ngo neu "orig" bat
+'     duoc chua ky tu "<" hoac dai bat thuong (>2000 ky tu) - dau hieu
+'     quet nham sang tag khac; (2) luoi an toan cuoi cung - WrapLinks chi
+'     co the LAM DAI chuoi (thay href goc bang link tracking dai hon),
+'     neu ket qua cuoi cung lai NGAN HON ban goc thi chac chan co loi
+'     quet, HUY TOAN BO thay doi va tra ve nguyen ban HTML goc (thap chi
+'     khong wrap duoc link con hon gui mail trong cho hang loat nguoi).
+'
+' CHANGES vs v4.85
+'   - Loi mail nhan duoc TRONG TRON VAN CON du da co luoi an toan do dai
+'     o v4.85 - vi lan nay nghi ngo KHONG PHAI do quet nham xoa mat noi
+'     dung (truong hop do se lam NGAN chuoi, da bi luoi do dai chan lai),
+'     ma do WrapLinks() bat NHAM thuoc tinh "href=" la HAU TO cua thuoc
+'     tinh khac nhu "o:href=" hoac "xlink:href=" - day la thuoc tinh NOI
+'     BO cua VML (Word dung de ve anh/shape trong chu ky phuc tap), KHONG
+'     PHAI link nguoi dung. Ghi de gia tri thuoc tinh nay bang link
+'     tracking khong lam NGAN chuoi (nen qua duoc luoi do dai) nhung co
+'     the PHA VO cau truc VML, khien Word engine cua Outlook render toan
+'     bo noi dung ra TRONG TRON o phia nguoi nhan dung nhu quan sat thuc
+'     te. Sua: kiem tra ky tu NGAY TRUOC vi tri "href=" tim duoc - neu
+'     khong phai khoang trang (tuc la mot phan cua ten thuoc tinh dai hon
+'     nhu "o:href", "xlink:href") thi BO QUA hoan toan, khong dong vao,
+'     chi xu ly dung thuoc tinh "href=" DOC LAP (thuoc tinh lien ket
+'     chuan cua the <a>).
+'
+' CHANGES vs v4.86
+'   - Loi mail nhan duoc TRONG TRON VAN CON du da bo qua "o:href" o
+'     v4.86. Xem lai anh chup thuc te: Word tao ra CA HAI noi chua CUNG
+'     1 URL (link SharePoint rat dai) khi anh duoc gan Hyperlink - href=
+'     THAT tren the <a> boc quanh anh (cai v4.86 van xu ly binh thuong)
+'     VA o:href tren <v:imagedata> ben trong (da bi bo qua tu v4.86).
+'     Nghi ngo: rieng viec thay THE <a> BOC ANH bang link tracking rat
+'     dai (nam chung cau truc voi VML/conditional comment phuc tap) da
+'     du de lam Word engine render loi/trong, KE CA khi o:href khong con
+'     bi dong vao nua. Sua AN TOAN HON: kiem tra neu href sap wrap nam
+'     ngay TRUOC 1 the <img> hoac <v:imagedata> (trong pham vi toi da 800
+'     ky tu, truoc khi gap </a> dong lai) - tuc la link nay dang BOC
+'     QUANH 1 TAM ANH - thi BO QUA HOAN TOAN, khong tracking click cho
+'     rieng link nay (van tracking binh thuong cho cac link chu khac).
+'     Danh doi: mat kha nang do click cho link tren anh, doi lay dam bao
+'     khong lam vo noi dung mail gui hang loat.
+'
+' CHANGES vs v4.87
+'   - Nguoi dung tu choi danh doi "bo qua tracking cho link boc anh" cua
+'     v4.87 vi ve sau mail se can toi 5-10 link (ke ca link tren anh) deu
+'     phai tracking duoc. Da xin duoc HTML that cua 1 draft loi (qua tool
+'     chan doan tools/ExportDraftHTML.bas) - xac nhan cau truc: <a
+'     href="link SharePoint rat dai"><span><img src="cid:..."></span></a>.
+'     Do chuoi thu cong (WrapLinks) ban chat de vo voi cau truc nay du da
+'     3 lan va luoi an toan.
+'   - Doi chien luoc: them RewriteHyperlinksViaWord() - dung THANG API
+'     Hyperlinks cua chinh Word (Outlook dung Word lam engine soan thao
+'     HTML, MailItem.GetInspector.WordEditor la 1 Word.Document that).
+'     Sua .Address cua tung Hyperlink qua Word tu dam bao Word serialize
+'     lai dung HTML/VML noi bo cua no - khong con nguy co vo cau truc nhu
+'     do chuoi thu cong nua, ke ca link boc anh.
+'   - Goi RewriteHyperlinksViaWord() TRUOC khi lay baseHTML = draft.HTMLBody
+'     (de baseHTML phan anh dung ban Word da sua). Neu WordEditor khong
+'     dung duoc vi ly do nao do (vd may khong dung Word lam trinh soan
+'     thao mail mac dinh) -> tu dong lui ve WrapLinks() cu (van giu
+'     nguyen loi luoi an toan v4.85/v4.86/v4.87) de khong bao gio mat
+'     hoan toan kha nang tracking click.
+'
+' CHANGES vs v4.88
+'   - RewriteHyperlinksViaWord() cua v4.88 GAY LOI NANG HON: test thuc te
+'     (kem ca mail "Test" don gian, khong hinh anh) cho ra body TRONG
+'     TRON, chi con lai dung chuoi URL tracking hien ra nhu VAN BAN THO.
+'     Nguyen nhan rat co the: Word.Hyperlink.Address duoc luu trong FIELD
+'     CODE noi bo cua Word (dang { HYPERLINK "..." }) - field code nay co
+'     GIOI HAN DO DAI. Link tracking cua ta rat dai (URL SharePoint goc
+'     da dai, cong them ma hoa UrlEnc() + toan bo query string campaign/
+'     squad/type/eid/rcpt) nen VUOT gioi han, lam Word tu lam hong/xoa
+'     field va hien nguyen van dia chi ra thanh chu - te hon ca loi cu
+'     (it nhat truoc day van con noi dung, chi rieng 1 link bi bo qua).
+'     -> BO HAN RewriteHyperlinksViaWord(), quay lai dung WrapLinks() (do
+'     chuoi HTML) lam duy nhat 1 co che, vi no khong bi gioi han do dai
+'     nhu Word field.
+'   - Sua dung goc re cua van de: xem lai HTML that (tools/ExportDraftHTML.
+'     bas) cho thay link SharePoint dang gay loi nam trong cau truc DON
+'     GIAN <a href="..."><span><img ...></span></a> - KHONG co VML. Loi
+'     TRONG TRON that su (o v4.85/v4.86) chi xay ra voi anh CHU KY dung
+'     VML (<v:imagedata>, o:href). WrapLinks() truoc day (v4.87) lai bo
+'     qua CA HAI truong hop (VML lan <img> thuong) mot cach qua tay -
+'     khien banner/anh thuong (nhu SharePoint o day) khong duoc tracking
+'     du an toan de xu ly. Sua: CHI bo qua khi thay dau hieu VML that su
+'     (v:imagedata) - anh <img> thuong (banner, logo gan link binh
+'     thuong) gio duoc tracking nhu link chu, vi thay the gia tri href
+'     don gian trong the <a> KHONG dung gi den cau truc VML de gay vo.
+' ================================================================
+
+' CHANGES vs v4.89
+'   - Sau khi doi sang WrapLinks() thuan chuoi (bo Word API), test thuc te
+'     VAN CON gap lai dung hien tuong TRONG TRON - nghia la 2 gia thuyet
+'     lien tiep (VML cua Word / gioi han field cua Word) DEU CHUA DUNG
+'     GOC RE that su, chi dang doan mo hinh dua tren suy luan giay tu chu
+'     KHONG co bang chung HTML thuc te tai chinh thoi diem loi xay ra.
+'   - Thay vi tiep tuc sua theo suy doan, them DebugDumpHTML(): tu dong
+'     ghi lai HTML THAT ra file ngay trong luc gui (khong can macro rieng
+'     tools/ExportDraftHTML.bas nhu truoc, khong can nguoi dung tu chay
+'     them buoc nao) - ghi 3 moc: (1) HTML goc truoc khi WrapLinks dong
+'     vao, (2) HTML SAU KHI WrapLinks xu ly xong (truoc khi tach rieng
+'     cho tung nguoi nhan), (3) HTML CUOI CUNG thuc su duoc gan vao
+'     m.HTMLBody cho nguoi nhan DAU TIEN (sau ca FixInlineImageCids) -
+'     tuc la ĐÚNG những gì Outlook thực sự gửi đi. Chỉ ghi khi bật Click
+'     Tracking va chi cho nguoi nhan dau tien, tranh sinh file khong lo.
+'   - Dung FileSystemObject.CreateTextFile(Unicode:=True) thay vi "Open
+'     ... For Output"/"Print #" cu - tranh luon loi ANSI lam sai dau
+'     tieng Viet trong file log (da phat hien o ExportDraftHTML.bas).
+'   - Muc tieu: lan test toi, chi can mo 3 file trong C:\SHBTrackerLogs\
+'     (wraplinks-debug-00-goc-truoc-wrap.txt, -01-sau-wraplinks.txt,
+'     -02-cuoi-cung-nguoi-nhan-dau.txt) va gui lai ca 3 - se biet CHINH
+'     XAC buoc nao lam noi dung bien mat, thay vi tiep tuc doan.
+' ================================================================
+
+' CHANGES vs v4.90
+'   - DA TIM RA GOC RE THAT SU (nho DebugDumpHTML cua v4.90 + du lieu that
+'     nguoi dung gui lai) - KHONG PHAI o WrapLinks() hay Word API nhu 4
+'     lan sua truoc (v4.85-v4.88), ma o ham chon PREVIEW TEXT mac dinh.
+'   - FindFirstNonLinkLine() (dung de goi y preview text tu draft.body)
+'     chi kiem tra dong co bat dau bang "http://"/"https://" de loai bo
+'     - nhung draft.body (che do PLAIN TEXT, khac HTMLBody) cua Outlook
+'     hien link tran duoi dang boc trong dau ngoac "<https://...>". Vi
+'     kiem tra khong tinh truong hop nay, dong link tran (co dau "<" o
+'     dau) bi coi la "dong chu that su" va duoc chon lam preview text mac
+'     dinh trong InputBox.
+'   - Neu nguoi dung khong sua lai (bam OK giu nguyen goi y, dung nhu
+'     truong hop "Test" cua nguoi dung), chuoi "<https://...>" nay duoc
+'     noi THANG vao preheader an (hidden div ngay sau <body>) MA KHONG
+'     HTML-ESCAPE. Dau "<" mo dau bi trinh duyet/Word engine hieu la BAT
+'     DAU 1 THE HTML MOI - va vi khong co dau ">" dong hop le ngay sau do
+'     (dia chi that bi UrlEnc/cat ngan hoac chinh no da dai), trinh phan
+'     tich HTML "nuot" toan bo phan con lai cua body vao lam thuoc tinh
+'     cua the loi nay cho den khi gap dau ">" tiep theo o rat xa phia sau
+'     - xoa sach hieu ung hien thi cua toan bo noi dung that (anh, chu ky,
+'     v.v.), dung la nguyen nhan gay "mail rong hoan toan" ma nguoi dung
+'     gap - HOAN TOAN KHONG LIEN QUAN gi den link boc anh/VML nhu da doan.
+'   - Sua goc: (1) FindFirstNonLinkLine() bo dau "<"/">" boc ngoai truoc
+'     khi kiem tra co phai link khong - dong link tran gio duoc loai dung,
+'     khong con bi chon nham lam preview text. (2) Phong ve tan goc: them
+'     HtmlEscape() va goi no cho prevTxt truoc khi noi vao preheader - du
+'     sau nay co truong hop la nao khac sinh ra prevTxt chua ky tu "<"/
+'     ">"/"&", cung khong the pha vo cau truc HTML nua.
+'   - WrapLinks() giu nguyen nhu v4.89 (dieu kien VML da thu hep dung,
+'     khong lien quan loi nay nhung van la cai thien hop ly, giu lai).
+' ================================================================
+
+' CHANGES vs v4.91
+'   - Sau khi v4.91 sua xong loi mail rong, nguoi dung bao van con 1 van
+'     de rieng: anh SharePoint gan link BAM KHONG MO DUOC (khong con ca
+'     tuy chon "Open Hyperlink" khi chuot phai), trong khi link CHU o
+'     chan chu ky van hoat dong binh thuong (xac nhan qua Edit Hyperlink
+'     - dia chi tracking van dung). Kiem tra chinh xac (khong doan): gui
+'     thu cung 1 campaign qua macro toi 1 dia chi BEN NGOAI to chuc
+'     (Gmail) - anh bam mo duoc binh thuong; gui toi dia chi NOI BO
+'     (@shb.com.vn) - anh mat hoan toan hyperlink. Day la dac trung dien
+'     hinh cua viec Exchange/Outlook TU DONG chuyen doi mail sang Rich
+'     Text (TNEF/winmail.dat) khi gui cho nguoi nhan noi bo cung to chuc -
+'     qua trinh chuyen doi nay giu duoc hyperlink gan tren VAN BAN nhung
+'     LAM MAT hyperlink gan tren ANH (encode anh thanh OLE object rieng,
+'     khong con giu duoc the <a> boc ngoai).
+'   - Sua: ep .BodyFormat = olFormatHTML tren tung ban Copy() truoc khi
+'     gui - buoc nay bao Outlook GUI DUNG HTML THUAN, khong cho tu dong
+'     chuyen sang Rich Text nua, du nguoi nhan la noi bo. Day la cach sua
+'     chuan, don gian, khong dung den suy doan cau truc HTML/VML nhu 4
+'     lan truoc - vi ban chat van de nam o ĐỊNH DẠNG GỬI, khong phai o
+'     noi dung HTML (HTML sinh ra tu WrapLinks() da dung tu dau).
+' ================================================================
+
+' CHANGES vs v4.92
+'   - Nguoi dung test email co NHIEU anh gan link (chu ky/tai lieu
+'     SharePoint chen qua kieu "Insert Picture" cua Outlook, sinh ra cau
+'     truc VML <v:shape>/<v:imagedata>) va bao KHONG co link tracking cho
+'     bat ky anh nao. Kiem tra qua DebugDumpHTML: dung nhu du doan -
+'     WrapLinks() van con lop "isImageLink" tu v4.87/v4.89, chu dong BO
+'     QUA moi href nam gan v:imagedata, nen cac link nay khong bao gio
+'     duoc gan tracking (dung thiet ke, khong phai bug - nhung khong dap
+'     ung duoc yeu cau thuc te).
+'   - Gio da co the go bo han lop nay: 2 nguyen nhan THAT SU cua loi
+'     "mail rong" ma lop nay tung duoc dung de "phong ngua" da duoc xac
+'     dinh dung va sua o v4.91 (preview text khong escape) va v4.92
+'     (Outlook tu chuyen Rich Text cho nguoi nhan noi bo) - hoan toan
+'     KHONG lien quan gi den viec WrapLinks() dong vao href gan VML. Lop
+'     kiem tra "chBefore phai la khoang trang" (v4.86) van giu nguyen va
+'     du de tranh dong nham vao o:href/xlink:href NOI BO cua VML (day moi
+'     la nguyen nhan that su tung gay hong cau truc, khong phai viec dong
+'     vao the <a> THAT boc ngoai).
+'   - Ket qua: anh dung VML (chu ky, tai lieu dinh kem qua SharePoint) gio
+'     duoc tracking click binh thuong nhu link chu, dap ung dung yeu cau
+'     "5-10 link/anh deu can tracking".
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.72"
+Private Const VER       As String = "4.93"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -232,7 +580,10 @@ Private m_Bag(0 To 399) As Object
 Private m_BagN           As Long
 
 ' Giu song bien watcher trong suot phien Outlook (xem RecallNotifWatcher.cls)
-Private m_RecallWatcher As RecallNotifWatcher
+' Mot watcher RIENG cho MOI account (khong chi 1 watcher cho account mac
+' dinh nhu truoc) - vi thong bao "Message Recall Success/Failure" bay ve
+' Inbox cua DUNG account da recall, khong phai luon la account mac dinh.
+Private m_RecallWatchers As Collection
 
 ' ================================================================
 ' WINDOWS TIMER - chay ngam HOAN TOAN de tu dong rut gon Sent Items sau
@@ -338,6 +689,51 @@ End Sub
 ' ================================================================
 ' PUBLIC: SendCampaign
 ' ================================================================
+' Tim dong VAN BAN THUC SU dau tien trong noi dung mail, bo qua cac
+' dong trong hoac chi la 1 link tran (http/https) - dung de tu dong
+' chon preview text, tranh nhet link "tho" vao preheader an.
+Private Function FindFirstNonLinkLine(ByVal bodyText As String) As String
+    Dim norm As String
+    norm = Replace(bodyText, vbCrLf, vbLf)
+    norm = Replace(norm, vbCr, vbLf)
+    Dim lines() As String: lines = Split(norm, vbLf)
+    Dim k As Long
+    For k = 0 To UBound(lines)
+        Dim ln As String: ln = Trim(lines(k))
+        If Len(ln) > 0 Then
+            ' Outlook hien link tran trong che do plain-text (vd draft.body,
+            ' KHAC voi draft.HTMLBody) boc quanh bang dau "<" ">" - vd
+            ' "<https://...>". Kiem tra cu chi bat "http://"/"https://" nen
+            ' bo lot dong nay (vi thuc su bat dau bang "<"), khien link tran
+            ' bi chon nham lam preview text mac dinh - roi bi nhet THANG,
+            ' KHONG HTML-ESCAPE, vao preheader an, khien dau "<" mo dau pha
+            ' vo toan bo cau truc HTML phia sau (da xac nhan bang du lieu
+            ' that qua DebugDumpHTML - day moi la NGUYEN NHAN THAT SU cua
+            ' loi mail rong, khong phai do WrapLinks()). Sua: bo dau "<"/">"
+            ' boc ngoai (neu co) truoc khi kiem tra link.
+            Dim lnCheck As String: lnCheck = ln
+            If Left(lnCheck, 1) = "<" Then lnCheck = mid(lnCheck, 2)
+            If Right(lnCheck, 1) = ">" Then lnCheck = Left(lnCheck, Len(lnCheck) - 1)
+            If LCase(Left(lnCheck, 7)) <> "http://" And LCase(Left(lnCheck, 8)) <> "https://" Then
+                FindFirstNonLinkLine = ln
+                Exit Function
+            End If
+        End If
+    Next k
+    FindFirstNonLinkLine = ""
+End Function
+
+' HTML-escape mot chuoi van ban thuong truoc khi chen vao giua HTML - luon
+' phai goi ham nay cho bat ky chuoi nao KHONG PHAI HTML co san (vd prevTxt
+' nguoi dung go/AI goi y) truoc khi noi thang vao HTML, de tranh ky tu "<"
+' "&" ngoai y muon pha vo cau truc parser (xem giai thich o FindFirstNonLinkLine).
+Private Function HtmlEscape(ByVal s As String) As String
+    s = Replace(s, "&", "&amp;")
+    s = Replace(s, "<", "&lt;")
+    s = Replace(s, ">", "&gt;")
+    HtmlEscape = s
+End Function
+
 Public Sub SendCampaign()
 
     Dim insp As Object
@@ -376,15 +772,24 @@ Public Sub SendCampaign()
     If Len(Trim(mType)) = 0 Then mType = "info"
     mType = Trim(mType)
 
-    ' Preview text: doc tu dong dau email body
-    prevTxt = Trim(draft.body)
-    Dim nlPos As Long
-    nlPos = InStr(prevTxt, vbCrLf)
-    If nlPos = 0 Then nlPos = InStr(prevTxt, vbLf)
-    If nlPos = 0 Then nlPos = InStr(prevTxt, vbCr)
-    If nlPos > 0 Then prevTxt = Trim(Left(prevTxt, nlPos - 1))
+    ' Preview text: goi y san bang dong dau tien CO CHU THUC SU cua email
+    ' body (bo qua dong chi la 1 link tran http/https, xem FindFirstNon-
+    ' LinkLine - tranh link "tho" lot vao preview). De trong o InputBox
+    ' se dung nguyen goi y nay (giong cach Outlook tu lam mac dinh). Neu
+    ' muon tu go de, chi nen go TIENG ANH/ASCII o day - VBA InputBox bi
+    ' loi mat mot so ky tu tieng Viet mo rong (vd "ỏ" -> "?", do chuyen
+    ' qua ANSI Windows-1258 truoc khi tra ve), khong lien quan gi den
+    ' code cua macro nay ma la gioi han co that cua InputBox.
+    Dim suggestedPrev As String
+    suggestedPrev = FindFirstNonLinkLine(draft.body)
+    prevTxt = InputBox("Preview text (doan chu xam hien duoi Subject trong Inbox nguoi nhan)." & vbCrLf & _
+                       "De trong se tu dong dung goi y ben duoi (lay tu noi dung mail)." & vbCrLf & _
+                       "Neu tu go, nen go TIENG ANH de tranh loi InputBox mat dau tieng Viet:", _
+                       "SHB Tracker - Preview text", suggestedPrev)
+    prevTxt = Trim(prevTxt)
+    If Len(prevTxt) = 0 Then prevTxt = suggestedPrev
     If Len(prevTxt) > 120 Then prevTxt = Left(prevTxt, 120)
-    If Len(Trim(prevTxt)) = 0 Then prevTxt = "(trong)"
+    If Len(prevTxt) = 0 Then prevTxt = "(trong)"
 
     Dim slug As String: slug = MakeSlug(campName)
 
@@ -570,13 +975,31 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         Exit Sub
     End If
 
+    ' Ghi lai Content-ID GOC cua tung file dinh kem (anh nhung - inline
+    ' image) trong draft, THEO THU TU - de sau nay so sanh voi Content-ID
+    ' cua ban Copy() tuong ung (xem FixInlineImageCids). Outlook co the
+    ' TU SINH Content-ID MOI cho anh nhung khi Copy() 1 MailItem, khien
+    ' chuoi "cid:..." cu con trong HTMLBody khong con khop - day la
+    ' nguyen nhan anh nhung (chen qua Insert > Pictures) bi "vo" (khong
+    ' hien) o nguoi nhan, du gui thanh cong.
+    Dim origCids() As String
+    Dim origCidCount As Long: origCidCount = draft.Attachments.Count
+    If origCidCount > 0 Then
+        ReDim origCids(1 To origCidCount)
+        Dim ci As Long
+        For ci = 1 To origCidCount
+            origCids(ci) = GetAttachmentCid(draft.Attachments(ci))
+        Next ci
+    End If
+
     Dim baseHTML As String: baseHTML = draft.HTMLBody
+    If doClick Then DebugDumpHTML "00-goc-truoc-wrap", baseHTML
 
     ' Inject preview text as hidden preheader
     If Len(prevTxt) > 0 And prevTxt <> "(trong)" Then
         Dim preHdr As String
         preHdr = "<div style=""display:none;max-height:0;overflow:hidden;mso-hide:all;" & _
-                 "font-size:1px;color:#ffffff;line-height:1px;"">" & prevTxt & "</div>"
+                 "font-size:1px;color:#ffffff;line-height:1px;"">" & HtmlEscape(prevTxt) & "</div>"
         Dim btPos As Long: btPos = InStr(LCase(baseHTML), "<body")
         If btPos > 0 Then
             Dim btEnd As Long: btEnd = InStr(btPos, baseHTML, ">")
@@ -588,7 +1011,10 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         End If
     End If
 
-    If doClick Then baseHTML = WrapLinks(baseHTML, slug, squad, mType)
+    If doClick Then
+        baseHTML = WrapLinks(baseHTML, slug, squad, mType)
+        DebugDumpHTML "01-sau-wraplinks", baseHTML
+    End If
 
     Dim sentOK As Long:   sentOK = 0
     Dim sentFail As Long: sentFail = 0
@@ -643,12 +1069,32 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
 
         Set m = draft.Copy
 
+        ' Ep dinh dang gui la HTML THUAN, khong de Outlook/Exchange tu
+        ' dong chuyen sang Rich Text (TNEF/winmail.dat) cho nguoi nhan
+        ' NOI BO cung to chuc - da xac nhan qua test thuc te: gui cho
+        ' nguoi ngoai (Gmail) thi anh gan link bam duoc binh thuong, gui
+        ' cho nguoi NOI BO (@shb.com.vn) thi anh mat hoan toan hyperlink
+        ' (khong con ca tuy chon "Open Hyperlink" khi chuot phai), trong
+        ' khi link CHU (khong phai anh) van hoat dong binh thuong o ca
+        ' 2 truong hop - dung dac trung cua viec RTF hoa lam mat rieng
+        ' hyperlink gan tren anh nhung giu duoc hyperlink gan tren text.
+        On Error Resume Next
+        m.BodyFormat = olFormatHTML
+        On Error GoTo FailItem
+
         Dim j As Long
         For j = m.Recipients.Count To 1 Step -1
             m.Recipients.Item(j).Delete
         Next j
 
         m.Recipients.Add rcpt
+
+        ' Sua lai "cid:..." trong HTML neu Outlook da sinh Content-ID MOI
+        ' cho anh nhung trong ban Copy() nay (xem ghi chu tai origCids o tren).
+        If origCidCount > 0 Then FixInlineImageCids m, thisHTML, origCids
+
+        If doClick And i = 0 Then DebugDumpHTML "02-cuoi-cung-nguoi-nhan-dau", thisHTML
+
         m.HTMLBody = thisHTML
 
         ' Tag campaign info truc tiep vao mail de RecallCampaign() loc lai duoc sau nay
@@ -738,6 +1184,61 @@ NextPerson:
 End Sub
 
 
+' Ghi lai HTML thuc te tai tung buoc xu ly click-tracking ra file log, de
+' doi chieu that (khong con phai doan mo hinh WrapLinks() lam gi sai) khi
+' co loi. CHI ghi khi doClick=True va CHI cho nguoi nhan dau tien (tranh
+' file khong lo voi campaign hang nghin nguoi nhan).
+' Dung FileSystemObject.CreateTextFile(..., Unicode:=True) thay vi
+' "Open ... For Output"/"Print #" - cach cu ghi theo ANSI (Windows-1258)
+' se lam sai dau tieng Viet trong log (da gap voi tools/ExportDraftHTML.
+' bas truoc day), gay hieu lam khi doc lai.
+Private Sub DebugDumpHTML(tag As String, html As String)
+    On Error Resume Next
+    Dim fso As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim dirPath As String: dirPath = "C:\SHBTrackerLogs"
+    If Not fso.FolderExists(dirPath) Then fso.CreateFolder dirPath
+    Dim outPath As String: outPath = dirPath & "\wraplinks-debug-" & tag & ".txt"
+    Dim ts As Object: Set ts = fso.CreateTextFile(outPath, True, True) ' overwrite, Unicode
+    ts.Write html
+    ts.Close
+End Sub
+
+' Doc Content-ID (PR_ATTACH_CONTENT_ID) cua 1 file dinh kem - chi anh
+' nhung (inline image) moi co gia tri nay, file dinh kem thuong khong co
+' nen ham tra ve chuoi rong la binh thuong.
+Private Function GetAttachmentCid(att As Attachment) As String
+    Dim cid As String: cid = ""
+    On Error Resume Next
+    cid = att.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001E")
+    On Error GoTo 0
+    GetAttachmentCid = cid
+End Function
+
+' Sau khi draft.Copy(), Outlook co the sinh Content-ID MOI cho tung anh
+' nhung trong ban copy (khac voi Content-ID goc con dang tham chieu boi
+' chuoi "cid:..." trong html). Doi chieu theo THU TU file dinh kem (Copy()
+' giu nguyen thu tu) va thay the cid cu bang cid moi tuong ung ngay trong
+' bien html (ByRef) truoc khi gan m.HTMLBody - tranh anh bi "vo" o nguoi
+' nhan du gui thanh cong.
+Private Sub FixInlineImageCids(m As MailItem, ByRef html As String, origCids() As String)
+    On Error Resume Next
+    Dim n As Long: n = m.Attachments.Count
+    Dim k As Long
+    For k = 1 To n
+        If k <= UBound(origCids) Then
+            If Len(origCids(k)) > 0 Then
+                Dim newCid As String
+                newCid = GetAttachmentCid(m.Attachments(k))
+                If Len(newCid) > 0 And newCid <> origCids(k) Then
+                    html = Replace(html, "cid:" & origCids(k), "cid:" & newCid)
+                End If
+            End If
+        End If
+    Next k
+    On Error GoTo 0
+End Sub
+
+
 ' ================================================================
 ' SHRINK CAMPAIGN SENT ITEMS
 ' Quet Sent Items, loc theo CMSlug cua campaign vua gui, rut gon body
@@ -749,40 +1250,21 @@ End Sub
 ' dung nguoi nhan da nhan. Chay SAU khi ca batch da gui xong (khong phai
 ' ngay tung mail) de tranh loi sua MailItem ngay sau .send().
 ' ================================================================
-Public Function ShrinkCampaignSentItems(slug As String, _
-                                          Optional ByRef diag As String = "") As Long
-    Dim n As Long: n = 0
-
-    Dim sentFolder As folder
-    Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
-    If sentFolder Is Nothing Then
-        ShrinkCampaignSentItems = 0
-        Exit Function
-    End If
-
-    Dim placeholder As String
-    placeholder = "[Noi dung da duoc rut gon de tiet kiem dung luong hop thu - " & _
-                  "email goc da gui thanh cong toi nguoi nhan. Campaign: " & slug & "]"
-    Dim placeholderHTML As String
-    placeholderHTML = "<html><body style=""font-family:Segoe UI,Arial,sans-serif;" & _
-                       "color:#666;font-size:13px;"">" & placeholder & "</body></html>"
-
-    ' Cung cach tim NHANH nhu RecallCampaign() - Subject + khoang thoi gian
-    ' gui (thuoc tinh GOC, doc duoc TUC THI) lam dieu kien BO SUNG, khong chi
-    ' dua vao CMSlug (co the mat vai phut moi doc duoc). Neu khong co, ham
-    ' nay se KHONG BAO GIO bat kip duoc mail moi gui, du goi lai bao nhieu
-    ' lan / doi bao lau di nua.
-    Dim knownSubject As String, tCampStart As Date, tCampEnd As Date
-    Dim hasCampInfo As Boolean
-    hasCampInfo = LoadCampaignInfo(slug, knownSubject, tCampStart, tCampEnd)
-    Dim tBuf As Date: tBuf = TimeSerial(0, 1, 0)
-
-    Dim matched As Long: matched = 0
-    Dim scanned As Long: scanned = 0
-    Dim sampleDiag As String: sampleDiag = ""
+' Quet Sent Items cua TAT CA account trong profile (khong chi account mac
+' dinh) - GetDefaultFolder(olFolderSentMail) truoc day chi tra ve Sent
+' Items cua 1 account MAC DINH duy nhat, nen neu campaign gui tu account
+' khac se khong bao gio tim thay. Dedup theo StoreID nhu ArchiveModule.bas.
+' Quet 1 folder Sent Items, rut gon cac mail khop slug/Subject+SentOn -
+' tach rieng thanh Sub de dung chung cho ca vong lap da-account va
+' phan du phong (fallback) trong ShrinkCampaignSentItems() ben duoi.
+Private Sub ScanFolderForShrink(fld As folder, slug As String, hasCampInfo As Boolean, _
+                                  knownSubject As String, tCampStart As Date, tCampEnd As Date, _
+                                  tBuf As Date, placeholderHTML As String, _
+                                  ByRef diag As String, ByRef matched As Long, ByRef n As Long, _
+                                  ByRef scanned As Long, ByRef sampleDiag As String)
     Dim i As Long
-    For i = sentFolder.Items.Count To 1 Step -1
-        Dim itm As Object: Set itm = sentFolder.Items(i)
+    For i = fld.Items.Count To 1 Step -1
+        Dim itm As Object: Set itm = fld.Items(i)
         If TypeName(itm) = "MailItem" Then
             Dim itmSlug As String: itmSlug = "(khong doc duoc)"
             Dim upErr As Long: upErr = 0
@@ -832,6 +1314,76 @@ Public Function ShrinkCampaignSentItems(slug As String, _
             End If
         End If
     Next i
+End Sub
+
+Public Function ShrinkCampaignSentItems(slug As String, _
+                                          Optional ByRef diag As String = "") As Long
+    Dim n As Long: n = 0
+
+    Dim placeholder As String
+    placeholder = "[Noi dung da duoc rut gon de tiet kiem dung luong hop thu - " & _
+                  "email goc da gui thanh cong toi nguoi nhan. Campaign: " & slug & "]"
+    Dim placeholderHTML As String
+    placeholderHTML = "<html><body style=""font-family:Segoe UI,Arial,sans-serif;" & _
+                       "color:#666;font-size:13px;"">" & placeholder & "</body></html>"
+
+    ' Cung cach tim NHANH nhu RecallCampaign() - Subject + khoang thoi gian
+    ' gui (thuoc tinh GOC, doc duoc TUC THI) lam dieu kien BO SUNG, khong chi
+    ' dua vao CMSlug (co the mat vai phut moi doc duoc). Neu khong co, ham
+    ' nay se KHONG BAO GIO bat kip duoc mail moi gui, du goi lai bao nhieu
+    ' lan / doi bao lau di nua.
+    Dim knownSubject As String, tCampStart As Date, tCampEnd As Date
+    Dim hasCampInfo As Boolean
+    hasCampInfo = LoadCampaignInfo(slug, knownSubject, tCampStart, tCampEnd)
+    Dim tBuf As Date: tBuf = TimeSerial(0, 1, 0)
+
+    Dim matched As Long: matched = 0
+    Dim scanned As Long: scanned = 0
+    Dim sampleDiag As String: sampleDiag = ""
+    Dim accountsScanned As Long: accountsScanned = 0
+
+    Dim seenStoreIDs As String: seenStoreIDs = "|"
+    Dim acc As Object, store As Object, sentFolder As folder, storeID As String
+    For Each acc In Application.Session.Accounts
+        On Error Resume Next
+        Set store = Nothing
+        Set store = acc.DeliveryStore
+        On Error GoTo 0
+        If store Is Nothing Then GoTo NextAccount
+        storeID = ""
+        On Error Resume Next
+        storeID = store.StoreID
+        On Error GoTo 0
+        If Len(storeID) = 0 Or InStr(seenStoreIDs, "|" & storeID & "|") > 0 Then GoTo NextAccount
+        seenStoreIDs = seenStoreIDs & storeID & "|"
+
+        Set sentFolder = Nothing
+        On Error Resume Next
+        Set sentFolder = store.GetDefaultFolder(olFolderSentMail)
+        On Error GoTo 0
+        If sentFolder Is Nothing Then GoTo NextAccount
+
+        accountsScanned = accountsScanned + 1
+        ScanFolderForShrink sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
+                             tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag
+NextAccount:
+    Next acc
+
+    ' Du phong: neu vi ly do nao do khong quet duoc account nao qua vong
+    ' lap tren (vd acc.DeliveryStore khong tra ve duoc voi kieu account/
+    ' profile nao do), quay lai dung cach cu (v4.68) de KHONG BAO GIO te
+    ' hon truoc - GetDefaultFolder luon tra ve it nhat Sent Items cua
+    ' account mac dinh.
+    If accountsScanned = 0 Then
+        Set sentFolder = Nothing
+        On Error Resume Next
+        Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
+        On Error GoTo 0
+        If Not sentFolder Is Nothing Then
+            ScanFolderForShrink sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
+                                 tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag
+        End If
+    End If
 
     If matched = 0 Then
         diag = "(khong tim thay mail nao co CMSlug = '" & slug & "'" & _
@@ -953,20 +1505,69 @@ End Sub
 ' ================================================================
 ' WRAP LINKS
 ' ================================================================
+' QUAN TRONG: day KHONG PHAI 1 trinh phan tich HTML that su, chi la do
+' chuoi thu cong tim "href=" ... " ke tiep - voi HTML phuc tap (vd Outlook
+' dung engine Word de dung HTML, chu ky co anh gan link, VML, style co
+' dau nhay long nhau...) co the bat NHAM dau " dong sai vi tri, khien
+' "orig" nuot ca mot doan lon HTML that (bao gom ca anh/chu ky) roi XOA
+' mat doan do khi ghep lai res = Left(...) & tURL & mid(...) - lam mail
+' nhan duoc TRONG TRON, mat het anh/chu ky (da gap thuc te). Them 2 lop
+' phong ve:
+'   1. Neu doan "orig" bat duoc chua ky tu "<" (dau hieu quet lan sang
+'      tag khac, khong con la 1 gia tri href hop le) hoac dai bat thuong
+'      (>2000 ky tu) -> BO QUA doan nay (khong wrap), tiep tuc quet tiep,
+'      khong lam gi voi doan nghi ngo do de tranh xoa nham.
+'   2. Sau khi quet xong TOAN BO, WrapLinks() chi co the LAM DAI THEM
+'      chuoi (thay href goc bang link tracking dai hon), khong bao gio
+'      lam NGAN hon duoc mot cach hop le. Neu ket qua cuoi cung ngan hon
+'      chuoi goc -> chac chan co loi quet dau, HUY BO toan bo thay doi,
+'      tra ve NGUYEN VAN html goc (thap chi khong wrap link con hon la
+'      gui mail trong tron cho hang loat nguoi nhan).
 Private Function WrapLinks(html As String, slug As String, _
                              squad As String, mType As String) As String
     Dim res As String: res = html
     Dim pos As Long:   pos = 1
 
     Do
-        Dim hs As Long: hs = InStr(pos, LCase(res), "href=" & Chr(34))
-        If hs = 0 Then Exit Do
-        hs = hs + 6
+        Dim rawHs As Long: rawHs = InStr(pos, LCase(res), "href=" & Chr(34))
+        If rawHs = 0 Then Exit Do
+
+        ' Chi bat dung thuoc tinh "href=" DOC LAP (dung sau khoang trang/
+        ' dau tag) - BO QUA neu la hau to cua thuoc tinh khac nhu "o:href="
+        ' hoac "xlink:href=" (thuoc tinh noi bo cua VML/Word dung de ve
+        ' anh/shape trong chu ky phuc tap - KHONG PHAI link nguoi dung).
+        ' Ghi de nham thuoc tinh nay bang link tracking khong lam ngan
+        ' chuoi (nen luoi an toan do dai o duoi khong bat duoc) nhung co
+        ' the pha vo cau truc VML, khien Word engine cua Outlook render
+        ' ra TRONG TRON o phia nguoi nhan.
+        If rawHs > 1 Then
+            Dim chBefore As String: chBefore = mid(res, rawHs - 1, 1)
+            If chBefore <> " " And chBefore <> vbTab And chBefore <> vbCr And chBefore <> vbLf Then
+                pos = rawHs + 5
+                GoTo ContinueLoop
+            End If
+        End If
+
+        Dim hs As Long: hs = rawHs + 6
         Dim he As Long: he = InStr(hs, res, Chr(34))
         If he = 0 Then Exit Do
         Dim orig As String: orig = mid(res, hs, he - hs)
 
-        If Left(LCase(orig), 4) <> "http" Or InStr(LCase(orig), "api/track") > 0 Then
+        ' Nghi ngo quet nham (nuot qua tag khac hoac dai bat thuong) ->
+        ' bo qua, khong dong gi vao doan nay, tiep tuc quet tu sau dau
+        ' " vua tim thay.
+        ' (Truoc day o day co them 1 lop bo qua rieng cho link boc anh/VML
+        ' - da BO HAN o v4.93: goc re that su cua loi "mail rong" tung gap
+        ' la o preview text khong duoc HTML-escape (v4.91) va Outlook tu
+        ' chuyen sang Rich Text cho nguoi nhan noi bo (v4.92), KHONG PHAI
+        ' do buoc nay dong vao href gan VML. Kiem tra "chBefore phai la
+        ' khoang trang" o tren da du de tranh dong nham vao o:href/
+        ' xlink:href noi bo cua VML - anh boc VML gio duoc tracking binh
+        ' thuong nhu link chu, dung yeu cau thuc te (email co the co 5-10
+        ' link/anh can tracking).)
+        If InStr(orig, "<") > 0 Or Len(orig) > 2000 Then
+            pos = he + 1
+        ElseIf Left(LCase(orig), 4) <> "http" Or InStr(LCase(orig), "api/track") > 0 Then
             pos = he + 1
         Else
             If Len(orig) > 480 Then orig = Left(orig, 480)
@@ -981,11 +1582,19 @@ Private Function WrapLinks(html As String, slug As String, _
             res = Left(res, hs - 1) & tURL & mid(res, he)
             pos = hs + Len(tURL) + 1
         End If
+ContinueLoop:
     Loop
+
+    ' Luoi an toan cuoi cung: WrapLinks chi co the LAM DAI chuoi, khong
+    ' bao gio lam ngan hop le duoc. Neu ket qua ngan hon ban goc, chac
+    ' chan co doan da bi xoa nham - huy toan bo, tra ve nguyen ban goc.
+    If Len(res) < Len(html) Then
+        WrapLinks = html
+        Exit Function
+    End If
 
     WrapLinks = res
 End Function
-
 
 ' ================================================================
 ' FIRE HTTP - async fire-and-forget (WinInet, SHB proxy compatible)
@@ -1084,12 +1693,44 @@ End Function
 ' ================================================================
 ' MAKE SLUG - ASCII only
 ' ================================================================
+' Bo dau tieng Viet + chuyen thuong - dung TRUOC khi loc ASCII trong
+' MakeSlug(), de vd "Thong bao" -> "thong-bao" thay vi bi mat het chu
+' thanh "thng-bo" (truoc day MakeSlug loai bo HOAN TOAN ky tu co dau
+' thay vi chuyen ve khong dau, khien slug hien tren Dashboard bi cut mat
+' chu dau du Subject email van hien dung binh thuong - Subject khong di
+' qua ham nay).
+Private Function StripVNDiacritics(ByVal s As String) As String
+    Dim r As String
+    r = LCase(s)
+    r = Replace(Replace(Replace(Replace(Replace(r, "à", "a"), "á", "a"), "ạ", "a"), "ả", "a"), "ã", "a")
+    r = Replace(Replace(Replace(Replace(Replace(r, "â", "a"), "ầ", "a"), "ấ", "a"), "ậ", "a"), "ẩ", "a")
+    r = Replace(r, "ẫ", "a")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ă", "a"), "ằ", "a"), "ắ", "a"), "ặ", "a"), "ẳ", "a")
+    r = Replace(r, "ẵ", "a")
+    r = Replace(Replace(Replace(Replace(Replace(r, "è", "e"), "é", "e"), "ẹ", "e"), "ẻ", "e"), "ẽ", "e")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ê", "e"), "ề", "e"), "ế", "e"), "ệ", "e"), "ể", "e")
+    r = Replace(r, "ễ", "e")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ì", "i"), "í", "i"), "ị", "i"), "ỉ", "i"), "ĩ", "i")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ò", "o"), "ó", "o"), "ọ", "o"), "ỏ", "o"), "õ", "o")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ô", "o"), "ồ", "o"), "ố", "o"), "ộ", "o"), "ổ", "o")
+    r = Replace(r, "ỗ", "o")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ơ", "o"), "ờ", "o"), "ớ", "o"), "ợ", "o"), "ở", "o")
+    r = Replace(r, "ỡ", "o")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ù", "u"), "ú", "u"), "ụ", "u"), "ủ", "u"), "ũ", "u")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ư", "u"), "ừ", "u"), "ứ", "u"), "ự", "u"), "ử", "u")
+    r = Replace(r, "ữ", "u")
+    r = Replace(Replace(Replace(Replace(Replace(r, "ỳ", "y"), "ý", "y"), "ỵ", "y"), "ỷ", "y"), "ỹ", "y")
+    r = Replace(r, "đ", "d")
+    StripVNDiacritics = r
+End Function
+
 Private Function MakeSlug(s As String) As String
+    Dim base As String: base = StripVNDiacritics(s)
     Dim res As String: res = ""
     Dim ph As Boolean: ph = False
     Dim i As Long
-    For i = 1 To Len(s)
-        Dim cw As Long: cw = AscW(LCase(mid(s, i, 1)))
+    For i = 1 To Len(base)
+        Dim cw As Long: cw = AscW(mid(base, i, 1))
         If (cw >= 97 And cw <= 122) Or (cw >= 48 And cw <= 57) Then
             res = res & Chr(cw): ph = False
         ElseIf cw = 32 Or cw = 45 Or cw = 95 Then
@@ -1112,74 +1753,19 @@ End Function
 '   - Chi recall duoc mail gui noi bo cung to chuc Exchange.
 '   - Nguoi nhan phai dang dung Outlook Desktop (khong phai Web/Mobile).
 '   - Mail phai CHUA duoc mo doc.
-Public Sub RecallCampaign()
-
-    Dim slugRaw As String
-    slugRaw = InputBox("Nhap ten/slug campaign can Recall (xem trong MsgBox xac nhan luc gui - " & _
-                       "co the nhap y nguyen ten chien dich hoac slug, vd: dao-tao-q3-2026):", _
-                       "SHB Tracker - Recall")
-    If Len(Trim(slugRaw)) = 0 Then Exit Sub
-    Dim slug As String: slug = MakeSlug(Trim(slugRaw))
-
-    If MsgBox("Recall (xoa ban chua doc) toan bo mail cua campaign '" & slug & "'?" & vbCrLf & vbCrLf & _
-              "Luu y: chi xoa duoc ban CHUA DOC o nguoi nhan noi bo dung Outlook Desktop.", _
-              vbYesNo + vbQuestion, "SHB Tracker - Recall") = vbNo Then Exit Sub
-
-    ' De khong bi ngap Inbox voi hang nghin thong bao "Message Recall
-    ' Success/Failure" (campaign lon), tu dong bat watcher (RecallNotifWatcher.cls)
-    ' - moi thong bao ve toi Inbox se bi xoa NGAY, chay song song voi batch nay.
-    ' LUON LUON tao watcher MOI moi lan chay (khong dung "If Is Nothing" nua) -
-    ' tranh truong hop bien m_RecallWatcher dang giu tham chieu CU (vd tu ban
-    ' RecallNotifWatcher.cls truoc khi import lai bang moi) ma khong duoc lam
-    ' moi, khien watcher dang chay ngam la code CU khong nhu mong doi.
-    On Error Resume Next
-    Set m_RecallWatcher = Nothing
-    Set m_RecallWatcher = New RecallNotifWatcher
-    Set m_RecallWatcher.InboxItems = Application.Session.GetDefaultFolder(olFolderInbox).Items
-    ' Theo doi luon Deleted Items - xoa lan 2 ngay tai do de xoa VINH VIEN
-    ' (khong chi chuyen vao Deleted Items roi nam lai chiem dung luong).
-    Set m_RecallWatcher.DeletedItemsItems = Application.Session.GetDefaultFolder(olFolderDeletedItems).Items
-    On Error GoTo 0
-
-    Dim sentFolder As folder
-    Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
-    If sentFolder Is Nothing Then
-        MsgBox "Khong tim thay folder Sent Items.", vbExclamation, "SHB Tracker - Recall"
-        Exit Sub
-    End If
-
-    Dim matched As Long: matched = 0
-    Dim recalled As Long: recalled = 0
-    Dim failed As Long: failed = 0
-    Dim shrunkR As Long: shrunkR = 0
-    Dim failDiag As String: failDiag = ""
-
-    Dim placeholder As String
-    placeholder = "[Noi dung da duoc rut gon de tiet kiem dung luong hop thu - " & _
-                  "email goc da gui thanh cong toi nguoi nhan. Campaign: " & slug & "]"
-    Dim placeholderHTML As String
-    placeholderHTML = "<html><body style=""font-family:Segoe UI,Arial,sans-serif;" & _
-                       "color:#666;font-size:13px;"">" & placeholder & "</body></html>"
-
-    ' Tim theo Subject + khoang thoi gian gui (SaveCampaignInfo luc SendCampaign)
-    ' truoc - day la thuoc tinh GOC cua mail, doc duoc NGAY, khong can doi
-    ' UserProperty CMSlug on dinh (co the mat vai phut). Neu tim duoc thong
-    ' tin da luu, RecallCampaign() chay duoc NGAY LAP TUC sau khi gui xong -
-    ' quan trong cho truong hop can recall GAP hang loat.
-    Dim knownSubject As String, tCampStart As Date, tCampEnd As Date
-    Dim hasCampInfo As Boolean
-    hasCampInfo = LoadCampaignInfo(slug, knownSubject, tCampStart, tCampEnd)
-    ' Bien do dung sai vai giay cho SentOn (dong ho local vs server co the
-    ' lech chut it) - khong lam han hep dieu kien qua muc.
-    Dim tBuf As Date: tBuf = TimeSerial(0, 1, 0)
-
-    Dim sampleDiag As String: sampleDiag = ""
-    Dim sampled As Long: sampled = 0
-
-    Dim itm As Object
+' Quet 1 folder Sent Items va thu recall cac mail khop - tach rieng thanh
+' Sub de dung chung cho ca vong lap da-account va phan du phong (fallback)
+' trong RecallCampaign() ben duoi.
+Private Sub ScanFolderForRecall(fld As folder, slug As String, hasCampInfo As Boolean, _
+                                  knownSubject As String, tCampStart As Date, tCampEnd As Date, _
+                                  tBuf As Date, placeholderHTML As String, _
+                                  ByRef matched As Long, ByRef recalled As Long, ByRef failed As Long, _
+                                  ByRef failDiag As String, ByRef shrunkR As Long, _
+                                  ByRef sampled As Long, ByRef sampleDiag As String)
     Dim i As Long
-    For i = sentFolder.Items.Count To 1 Step -1
-        Set itm = sentFolder.Items(i)
+    Dim itm As Object
+    For i = fld.Items.Count To 1 Step -1
+        Set itm = fld.Items(i)
         If TypeName(itm) = "MailItem" Then
             Dim itmSlug As String: itmSlug = ""
             On Error Resume Next
@@ -1232,9 +1818,169 @@ Public Sub RecallCampaign()
                 On Error GoTo 0
 
                 DoEvents
+
+                ' Day Outbox NGAY TRONG LUC vong lap con dang chay - moi lenh
+                ' Recall thuc chat la 1 mail "yeu cau thu hoi" xep vao Outbox,
+                ' phai duoc Exchange gui di that su moi co hieu luc. Truoc day
+                ' toan bo request nay bi don lai, chi gui hang loat SAU KHI ca
+                ' vong lap tu dong bam Recall (SendKeys/ExecuteMso) chay xong -
+                ' 2 giai doan chay TUAN TU nen tong thoi gian ~gap doi so voi
+                ' luc gui ban dau. Goi SendAndReceive dinh ky (moi 20 mail) de
+                ' Outlook bat dau truyen Outbox NGAY, chay song song voi phan
+                ' con lai cua vong lap thay vi doi don het moi gui.
+                If recalled Mod 20 = 0 Then
+                    On Error Resume Next
+                    Application.GetNamespace("MAPI").SendAndReceive False
+                    On Error GoTo 0
+                    DoEvents
+                End If
             End If
         End If
     Next i
+End Sub
+
+Public Sub RecallCampaign()
+
+    Dim slugRaw As String
+    slugRaw = InputBox("Nhap ten/slug campaign can Recall (xem trong MsgBox xac nhan luc gui - " & _
+                       "co the nhap y nguyen ten chien dich hoac slug, vd: dao-tao-q3-2026):", _
+                       "SHB Tracker - Recall")
+    If Len(Trim(slugRaw)) = 0 Then Exit Sub
+    Dim slug As String: slug = MakeSlug(Trim(slugRaw))
+
+    If MsgBox("Recall (xoa ban chua doc) toan bo mail cua campaign '" & slug & "'?" & vbCrLf & vbCrLf & _
+              "Luu y: chi xoa duoc ban CHUA DOC o nguoi nhan noi bo dung Outlook Desktop.", _
+              vbYesNo + vbQuestion, "SHB Tracker - Recall") = vbNo Then Exit Sub
+
+    ' De khong bi ngap Inbox voi hang nghin thong bao "Message Recall
+    ' Success/Failure" (campaign lon), tu dong bat watcher (RecallNotifWatcher.cls)
+    ' - moi thong bao ve toi Inbox se bi xoa NGAY, chay song song voi batch nay.
+    ' LUON LUON tao lai TOAN BO watcher moi lan chay (khong dung "If Is
+    ' Nothing" nua) - tranh truong hop bien dang giu tham chieu CU khong
+    ' duoc lam moi, khien watcher chay ngam la code CU khong nhu mong doi.
+    '
+    ' Tao 1 watcher RIENG cho MOI account trong profile (khong chi rieng
+    ' account mac dinh) - vi thong bao Recall Success/Failure bay ve
+    ' Inbox cua DUNG account vua duoc dung de recall, co the KHONG PHAI
+    ' account mac dinh (nguoi dung bao gap dung truong hop nay: recall
+    ' tren account khac van bi lot thong bao ve vi watcher cu chi theo
+    ' doi Inbox cua 1 account mac dinh duy nhat).
+    On Error Resume Next
+    Set m_RecallWatchers = Nothing
+    Set m_RecallWatchers = New Collection
+
+    Dim wAcc As Object, wStore As Object, wStoreID As String
+    Dim wSeenStoreIDs As String: wSeenStoreIDs = "|"
+    For Each wAcc In Application.Session.Accounts
+        Set wStore = Nothing
+        Set wStore = wAcc.DeliveryStore
+        If Not wStore Is Nothing Then
+            wStoreID = ""
+            wStoreID = wStore.StoreID
+            If Len(wStoreID) > 0 And InStr(wSeenStoreIDs, "|" & wStoreID & "|") = 0 Then
+                wSeenStoreIDs = wSeenStoreIDs & wStoreID & "|"
+
+                Dim wInbox As Object, wDeleted As Object
+                Set wInbox = wStore.GetDefaultFolder(olFolderInbox)
+                Set wDeleted = wStore.GetDefaultFolder(olFolderDeletedItems)
+                If Not wInbox Is Nothing And Not wDeleted Is Nothing Then
+                    Dim wWatcher As RecallNotifWatcher
+                    Set wWatcher = New RecallNotifWatcher
+                    Set wWatcher.InboxItems = wInbox.Items
+                    ' Theo doi luon Deleted Items - xoa lan 2 ngay tai do de
+                    ' xoa VINH VIEN (khong chi chuyen vao roi nam lai chiem
+                    ' dung luong).
+                    Set wWatcher.DeletedItemsItems = wDeleted.Items
+                    m_RecallWatchers.Add wWatcher
+                End If
+            End If
+        End If
+    Next wAcc
+
+    ' Du phong: neu vi ly do nao do khong tao duoc watcher cho account nao
+    ' (vd loi acc.DeliveryStore nhu da gap voi Shrink/Recall truoc day),
+    ' it nhat van bat 1 watcher cho account mac dinh nhu cu.
+    If m_RecallWatchers.Count = 0 Then
+        Dim wDefWatcher As New RecallNotifWatcher
+        Set wDefWatcher.InboxItems = Application.Session.GetDefaultFolder(olFolderInbox).Items
+        Set wDefWatcher.DeletedItemsItems = Application.Session.GetDefaultFolder(olFolderDeletedItems).Items
+        m_RecallWatchers.Add wDefWatcher
+    End If
+    On Error GoTo 0
+
+    Dim matched As Long: matched = 0
+    Dim recalled As Long: recalled = 0
+    Dim failed As Long: failed = 0
+    Dim shrunkR As Long: shrunkR = 0
+    Dim failDiag As String: failDiag = ""
+
+    Dim placeholder As String
+    placeholder = "[Noi dung da duoc rut gon de tiet kiem dung luong hop thu - " & _
+                  "email goc da gui thanh cong toi nguoi nhan. Campaign: " & slug & "]"
+    Dim placeholderHTML As String
+    placeholderHTML = "<html><body style=""font-family:Segoe UI,Arial,sans-serif;" & _
+                       "color:#666;font-size:13px;"">" & placeholder & "</body></html>"
+
+    ' Tim theo Subject + khoang thoi gian gui (SaveCampaignInfo luc SendCampaign)
+    ' truoc - day la thuoc tinh GOC cua mail, doc duoc NGAY, khong can doi
+    ' UserProperty CMSlug on dinh (co the mat vai phut). Neu tim duoc thong
+    ' tin da luu, RecallCampaign() chay duoc NGAY LAP TUC sau khi gui xong -
+    ' quan trong cho truong hop can recall GAP hang loat.
+    Dim knownSubject As String, tCampStart As Date, tCampEnd As Date
+    Dim hasCampInfo As Boolean
+    hasCampInfo = LoadCampaignInfo(slug, knownSubject, tCampStart, tCampEnd)
+    ' Bien do dung sai vai giay cho SentOn (dong ho local vs server co the
+    ' lech chut it) - khong lam han hep dieu kien qua muc.
+    Dim tBuf As Date: tBuf = TimeSerial(0, 1, 0)
+
+    Dim sampleDiag As String: sampleDiag = ""
+    Dim sampled As Long: sampled = 0
+
+    ' Quet Sent Items cua TAT CA account trong profile - xem ghi chu tuong
+    ' tu tai ShrinkCampaignSentItems() o tren.
+    Dim accountsScanned As Long: accountsScanned = 0
+    Dim seenStoreIDs As String: seenStoreIDs = "|"
+    Dim acc As Object, store As Object, sentFolder As folder, storeID As String
+    For Each acc In Application.Session.Accounts
+        On Error Resume Next
+        Set store = Nothing
+        Set store = acc.DeliveryStore
+        On Error GoTo 0
+        If store Is Nothing Then GoTo NextAccount
+
+        storeID = ""
+        On Error Resume Next
+        storeID = store.StoreID
+        On Error GoTo 0
+        If Len(storeID) = 0 Or InStr(seenStoreIDs, "|" & storeID & "|") > 0 Then GoTo NextAccount
+        seenStoreIDs = seenStoreIDs & storeID & "|"
+
+        Set sentFolder = Nothing
+        On Error Resume Next
+        Set sentFolder = store.GetDefaultFolder(olFolderSentMail)
+        On Error GoTo 0
+        If sentFolder Is Nothing Then GoTo NextAccount
+
+        accountsScanned = accountsScanned + 1
+        ScanFolderForRecall sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
+                             tBuf, placeholderHTML, matched, recalled, failed, failDiag, _
+                             shrunkR, sampled, sampleDiag
+NextAccount:
+    Next acc
+
+    ' Du phong: giong ShrinkCampaignSentItems(), neu khong quet duoc
+    ' account nao qua vong lap tren thi quay lai dung cach cu (v4.68).
+    If accountsScanned = 0 Then
+        Set sentFolder = Nothing
+        On Error Resume Next
+        Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
+        On Error GoTo 0
+        If Not sentFolder Is Nothing Then
+            ScanFolderForRecall sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
+                                 tBuf, placeholderHTML, matched, recalled, failed, failDiag, _
+                                 shrunkR, sampled, sampleDiag
+        End If
+    End If
 
     If matched = 0 Then
         Dim noMatchMsg As String
@@ -1254,6 +2000,12 @@ Public Sub RecallCampaign()
         MsgBox noMatchMsg, vbExclamation, "SHB Tracker - Recall"
         Exit Sub
     End If
+
+    ' Day not Outbox lan cuoi cho phan request Recall con lai (neu duoi
+    ' 20 mail chua kip trigger o tren, hoac 20 mail cuoi cung cua batch).
+    On Error Resume Next
+    Application.GetNamespace("MAPI").SendAndReceive False
+    On Error GoTo 0
 
     Dim doneMsg As String
     doneMsg = "Hoan thanh Recall cho campaign '" & slug & "'!" & vbCrLf & _
@@ -1290,11 +2042,24 @@ Private Function RecallOneItem(itm As Object, _
 
     itm.Display
 
-    Dim tOpen As Date: tOpen = Now + TimeSerial(0, 0, 0) + (1.5 / 86400)
-    Do While Now < tOpen: DoEvents: Loop
-
+    ' Doi TOI DA 1.5s nhu cac ban truoc (van giu nguyen tran an toan cho
+    ' may cham), nhung THOAT SOM ngay khi Inspector da san sang thay vi
+    ' luon cho du 1.5s co dinh - da so may binh thuong san sang chi sau
+    ' vai chuc ms, giam dang ke thoi gian trung binh moi mail ma KHONG
+    ' giam tran an toan cho truong hop may cham (khong lam giam do tin
+    ' cay da duoc debug rat ky truoc day - chi bo phan CHO THUA khong
+    ' can thiet, khong dong vao phan ExecuteMso/SendKeys nhay cam hon).
+    Dim tOpenMax As Date: tOpenMax = Now + TimeSerial(0, 0, 0) + (1.5 / 86400)
     Dim readInsp As Object
-    Set readInsp = Application.ActiveInspector
+    Do
+        Set readInsp = Nothing
+        On Error Resume Next
+        Set readInsp = Application.ActiveInspector
+        On Error GoTo Fail
+        If Not readInsp Is Nothing Then Exit Do
+        DoEvents
+    Loop While Now < tOpenMax
+
     If readInsp Is Nothing Then
         errMsg = "Khong mo duoc cua so mail can recall."
         GoTo FailNoErrObj
@@ -1303,8 +2068,26 @@ Private Function RecallOneItem(itm As Object, _
     On Error Resume Next
     readInsp.Activate
     On Error GoTo Fail
-    Dim tFocus As Date: tFocus = Now + TimeSerial(0, 0, 1)
-    Do While Now < tFocus: DoEvents: Loop
+
+    ' Cung nguyen tac: san nhu cu la 1s, nhung thoat som ngay khi
+    ' CommandBars cua Inspector truy cap duoc (dau hieu cua so da thuc
+    ' su san sang nhan lenh ExecuteMso ben duoi) - giu san toi thieu
+    ' 0.15s de tranh truong hop kiem tra qua som luc animation cua so
+    ' chua kip on dinh.
+    Dim tFocusMin As Date: tFocusMin = Now + TimeSerial(0, 0, 0) + (0.15 / 86400)
+    Do While Now < tFocusMin: DoEvents: Loop
+
+    Dim tFocusMax As Date: tFocusMax = Now + TimeSerial(0, 0, 1)
+    Do
+        Dim cbOK As Boolean: cbOK = False
+        On Error Resume Next
+        Err.Clear
+        Dim cbTest As Object: Set cbTest = readInsp.CommandBars
+        cbOK = (Err.Number = 0 And Not cbTest Is Nothing)
+        On Error GoTo Fail
+        If cbOK Then Exit Do
+        DoEvents
+    Loop While Now < tFocusMax
 
     Dim gotResult As Boolean: gotResult = False
     Dim attempt As Long
