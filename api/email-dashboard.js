@@ -54,25 +54,16 @@ function fetchLogs() {
     });
   }
 
-  // Ngan sach trang lay (pages) phai TY LE voi EVENTS_LIMIT (bien da co san de
-  // cau hinh, hien thi ca canh bao "Gan/dat gioi han" o UI) - truoc day pages
-  // bi hardcode 5/2 (= toi da 5000 "sent" + 2000 "khac"), khong lien quan gi
-  // EVENTS_LIMIT. Voi campaign gui hang nghin nguoi + da dung nhieu thang,
-  // tong so "sent" that de vuot 5000 -> phan MOI HON (vd campaign vua gui) bi
-  // cat hoan toan, KHONG PHAI campaign cu - vi order=ts.asc (cu truoc) + gioi
-  // han cung lay dung 5000 dong CU NHAT. Sua: (1) tinh pages tu EVENTS_LIMIT,
-  // chia 80/20 cho sent/con lai (sent chiem da so vi moi nguoi nhan = 1 dong,
-  // cac loai khac (mo/click) it hon nhieu); (2) doi order=ts.desc (moi truoc)
-  // cho ca 2 - dung y do da the hien san trong canh bao UI ("du lieu CU co the
-  // bi cat", khong phai du lieu moi).
-  var sentPages  = Math.max(1, Math.ceil(EVENTS_LIMIT * 0.8 / PAGE));
-  var otherPages = Math.max(1, Math.ceil(EVENTS_LIMIT * 0.2 / PAGE));
-
   return Promise.all([
     // not.in.(sent,dwell): bỏ qua event dwell còn sót trong DB (tính năng đo
     // thời gian đọc đã gỡ — chờ migrate hạ tầng nội bộ, xem KE_HOACH_MIGRATION.md)
-    fetchParallel(base + '&pos=eq.sent&order=ts.desc',              sentPages),
-    fetchParallel(base + '&pos=not.in.(sent,dwell)&order=ts.desc', otherPages)
+    // order=ts.desc (MỚI trước) cho cả 2: giới hạn 5 trang = 5000 dòng "sent"
+    // là có chủ đích (pool MySQL chỉ 5 kết nối, xem lib/db-client.js) — nhưng
+    // trước đây "sent" dùng ts.asc nên khi tổng số event vượt 5000, phần bị cắt
+    // là dữ liệu MỚI (campaign vừa gửi biến mất khỏi dashboard) thay vì dữ liệu
+    // cũ, ngược với cảnh báo "dữ liệu cũ có thể bị cắt" hiển thị ở UI.
+    fetchParallel(base + '&pos=eq.sent&order=ts.desc',              5),
+    fetchParallel(base + '&pos=not.in.(sent,dwell)&order=ts.desc', 2)
   ])
   .then(function(r) { return r[0].concat(r[1]); })
   .catch(function()  { return []; });
