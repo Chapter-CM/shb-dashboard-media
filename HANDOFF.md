@@ -1,4 +1,106 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 24/08/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/09/2026)
+
+## 🔧 14/09 — Fix đầy hộp thư khi gửi campaign lớn + loạt lỗi số liệu dashboard Email — nhánh `claude/ecstatic-hopper-mj1v2x`
+
+**Bối cảnh:** User gửi ~6000 mail/campaign, hòm thư 1.8GB đầy chỉ sau ~300 mail; dashboard báo
+"Đã gửi" 3.783 trong khi thực tế gửi hơn 6000.
+
+### A. VBA `tools/CampaignTracker.bas` — v4.93 → v4.95
+
+| Bản | Nguyên nhân gốc | Sửa |
+|---|---|---|
+| **v4.94** | `ScanFolderForShrink()` chỉ ghi đè `HTMLBody` thành placeholder, **không đụng `itm.Attachments`** — mail nặng do file đính kèm/ảnh Insert Picture nên "rút gọn" chỉ xoá vài KB chữ, phần nặng (~2MB/mail) vẫn nguyên | Thêm vòng lặp xoá toàn bộ `Attachments` trước `itm.Save`; giảm `SHRINK_EVERY` 100 → 50 |
+| **v4.95** | `m_Bag(0 To 399)` — mảng giữ sống request async `pos=sent` — chỉ 400 chỗ, dùng `Mod 400` quay vòng. Campaign > 400 người: request mới **ghi đè request cũ chưa kịp nhận phản hồi** → VBA giải phóng COM object → **huỷ ngang request đang bay**, server không bao giờ nhận được | Đổi `m_Bag` thành mảng động, `ReDim m_Bag(0 To nLst)` đúng bằng số người nhận từng campaign |
+
+**Đã kiểm chứng thực tế (không chỉ đọc code):** seed 500 mail giả ~1GB vào Sent Items bằng module
+test tạm → chạy `ShrinkCampaignSentItems` → Server Data giảm về gần 0, banner "MAILBOX FULL" tự hết
+sau ~30s đồng bộ. Riêng bản vá `m_Bag` xác minh bằng `tools/TestTrackingBurst.bas` (bắn 500 ping HTTP
+`pos=sent`, **không gửi mail thật cho ai**) → dashboard ghi nhận đủ **500/500**.
+
+### B. Dashboard `api/email-dashboard.js` — 5 lỗi độc lập
+
+1. **Query lấy sai đầu dữ liệu:** `pos=eq.sent` dùng `order=ts.asc` + trần cứng 5 trang → khi tổng
+   event vượt 5000, phần bị cắt là dữ liệu **MỚI** (campaign vừa gửi biến mất) thay vì dữ liệu cũ,
+   ngược hẳn với cảnh báo "dữ liệu cũ có thể bị cắt" hiển thị ở UI. → đổi `ts.desc`.
+2. **Trần 5000 dòng** không liên quan gì `EVENTS_LIMIT` (40000) đã khai báo sẵn → tính trần theo
+   `EVENTS_LIMIT` (80/20 cho sent / loại khác), lấy **theo lô 3 query tuần tự, dừng sớm** khi hết
+   dữ liệu.
+3. **`countUp()` đọc sai số định dạng vi-VN:** `nf()` dùng `toLocaleString('vi-VN')` → phân cách
+   nghìn là **dấu chấm** (`"5.000"`), nhưng `countUp` chỉ bỏ **dấu phẩy** → `parseFloat("5.000")` =
+   5,0. Hậu quả: mọi KPI ≥ 1000 hiện sai (5000→5, 1891→2, 3728→4), dưới 1000 vẫn đúng nên lọt lâu
+   không ai phát hiện.
+4. **Bảng phân khúc** chỉ có thanh bar + tỉ lệ mở → đổi sang bảng đủ 7 chỉ số (Lượt gửi, Người nhận,
+   Đã mở, Tỉ lệ mở, Đã click, CTOR, Mở TB/người), dùng lại `regTable` nên có luôn tìm kiếm/sắp xếp/
+   phân trang 10 đơn vị/trang.
+5. **Cột "Đã gửi"** thực chất đếm người nhận duy nhất → đổi nhãn thành **"Người nhận"** cho khỏi lẫn
+   với thẻ KPI "Lượt gửi" (tổng số email gửi).
+
+**Ẩn dữ liệu test:** thêm `isHiddenCampaign()` lọc ngay sau khi đọc dữ liệu — campaign có tên bắt đầu
+bằng "test" (sau khi bỏ dấu cách/gạch nối) hoặc nằm trong danh sách `HIDDEN_EXACT` sẽ không lọt vào
+bất kỳ chỉ số nào. Chỉnh qua env `EMAIL_HIDDEN_CAMPAIGNS` / `EMAIL_HIDE_TEST_PREFIX`.
+→ **Quy ước từ nay: campaign thật ĐỪNG đặt tên bắt đầu bằng chữ "Test".**
+
+### C. ⚠️ Sự cố production 403 — lặp lại đúng bài học đã ghi ở mục 24/08
+
+Bản nâng trần đầu tiên tính `pages` theo `EVENTS_LIMIT` rồi **bắn thẳng 40 request song song**, trong
+khi pool MySQL chỉ có **5 kết nối** (`lib/db-client.js`, `connectionLimit: 5`) → job `sync_data` fail
+→ `public/` không được tạo → **nginx trả 403 Forbidden trên production**. Đã revert + làm lại theo lô
+nhỏ tuần tự.
+
+**2 sai sót cần tránh lặp lại:**
+- Sửa trên bản GitHub rồi để user Replace nguyên file lên GitLab **mà không kiểm tra bản GitLab hiện
+  tại** — đúng cái bẫy mục 24/08 đã ghi. Với file chỉ sửa vài dòng, nên **sửa trực tiếp trên GitLab
+  Web IDE**, đừng Replace cả file.
+- Mở rộng phạm vi ngoài lỗi gốc: lỗi thật chỉ là `ts.asc`, việc nâng số trang là tự thêm vào và chính
+  nó gây sự cố.
+
+**Lưu ý kiểm thử:** `node --check` **không đọc được code nằm trong template string** (toàn bộ JS
+client-side của dashboard nằm trong `const JS = ...`). Phải tách khối đó ra `new Function()` để kiểm
+tra riêng — nếu không, lỗi cú pháp phía trình duyệt sẽ lọt qua.
+
+### D. Đã phát hiện, CHƯA sửa (user chủ động chấp nhận)
+
+- **Giới hạn 4MB/mail của Exchange nội bộ** (xác nhận qua banner lỗi thật: *"This 12,6 MB email
+  message cannot be sent because it exceeds the 4 MB outgoing message size limit"*). Đây là lỗi
+  **âm thầm**: `m.send()` không báo lỗi, `sentOK` vẫn tăng, MsgBox vẫn báo "Thành công", nhưng mail
+  **kẹt trong Outbox, không tới người nhận**. User tự cân đối dung lượng, chưa thêm cảnh báo vào code.
+- **`FireHttp` bắn-rồi-quên, không thử lại** (`On Error Resume Next` nuốt mọi lỗi). Một cú nghẽn mạng
+  = mất vĩnh viễn bản ghi đó. Sửa được: `m_Bag` giờ giữ đủ mọi request suốt campaign nên có thể kiểm
+  tra cuối phiên và bắn lại cái thất bại (cần lưu thêm URL song song).
+- **Link > 480 ký tự bị cắt** (`CampaignTracker.bas` ~dòng 1631) → cắt URL làm **link hỏng**. Đúng hơn
+  là không gắn tracking cho link quá dài. **Cẩn trọng:** nằm trong `WrapLinks`, hàm có lịch sử debug
+  rất đau (v4.85→v4.93, 3 vòng sửa sai hướng).
+
+### E. Dọn dữ liệu test trong DB — BẾ TẮC, chưa làm được
+
+Đã thêm `db/db_cleanup_test.js` + job `db_cleanup_test` (chạy tay trên GitLab, mặc định chỉ xem
+trước, phải nhập `CONFIRM_DELETE=XOA` mới thực thi). **Nhưng chạy thật bị `ETIMEDOUT`** — runner
+GitLab không kết nối thẳng được RDS (Security Group chặn), đúng như ghi chú sẵn trong
+`lib/db-client.js`. Đường duy nhất tới DB là `/dbquery` của service ingest, mà route đó **chỉ đọc**.
+
+Cũng phát hiện: **`db/db_check.js` có trên GitHub nhưng KHÔNG có trên GitLab** (job `db_check` fail
+với `MODULE_NOT_FOUND`) — thêm một bằng chứng GitHub/GitLab đang lệch.
+
+**Kết luận đã chốt với user:** không đáng thêm route xoá vào `server/ingest-server.js` chỉ để xoá
+~600 dòng test trên tổng ~12.000 (service đó đang nhận beacon tracking real-time — hỏng là chết toàn
+bộ tracking). Dữ liệu test đã bị ẩn khỏi dashboard rồi. **Cách nên làm: nhờ người có quyền DB chạy
+tay**, liệt kê tên chính xác thay vì `LIKE '%test%'` để khỏi xoá nhầm:
+
+```sql
+-- B1: xem trước
+SELECT campaign, COUNT(*) AS so_dong FROM events GROUP BY campaign ORDER BY so_dong DESC;
+-- B2: xoá, thay danh sách bằng đúng tên test lấy từ B1
+DELETE FROM events WHERE campaign IN ('TEST-BUFFER-FIX-KHONG-XOA-DUOC-TU-DONG', 'Test V.494', ...);
+```
+
+### F. Trạng thái triển khai
+
+| Nơi | Trạng thái |
+|---|---|
+| GitHub `claude/ecstatic-hopper-mj1v2x` | Đã push đầy đủ |
+| GitLab `cm-dashboard` (production) | `api/email-dashboard.js` mới **chưa deploy** (bản đang chạy mới có tới fix `countUp`) · `db_cleanup_test.js` + `.gitlab-ci.yml` đã lên |
+| Outlook VBA | `CampaignTracker.bas` v4.95 — user tự paste vào Module1, **cần làm trước campaign thật tiếp theo** |
+
 
 ## 🔧 24/08 — Jira dashboard: ẩn Squad/Dự án 0 task, thêm bảng Epic Văn hóa, đổi tiêu chí Xuất sắc nhất — nhánh `claude/dashboard-empty-projects-squads-vrb18p`
 

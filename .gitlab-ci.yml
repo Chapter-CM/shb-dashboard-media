@@ -92,6 +92,25 @@ db_check:
     - npm install --no-save mysql2
     - node db/db_check.js
 
+# Xoá THẬT dữ liệu test khỏi bảng events — dùng khi người vận hành không có
+# quyền vào database trực tiếp (CI đã có sẵn MYSQL_* trong CI/CD Variables).
+# Chạy TAY (when: manual), và MẶC ĐỊNH CHỈ XEM TRƯỚC, không xoá gì:
+#   - Bấm chạy job -> in ra danh sách campaign test + số dòng sẽ xoá, và danh
+#     sách campaign được giữ lại để đối chiếu.
+#   - Muốn xoá thật: chạy lại job kèm biến CONFIRM_DELETE = XOA
+#     (GitLab: Pipelines -> job -> nút ▶ -> Variables).
+#   - Muốn xoá đúng vài campaign: thêm ONLY_CAMPAIGNS = "ten-1,ten-2"
+# Xem chi tiết quy tắc nhận diện trong db/db_cleanup_test.js.
+db_cleanup_test:
+  stage: db_check
+  image: gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-alpine-amd
+  when: manual
+  allow_failure: true
+  dependencies: []
+  script:
+    - npm install --no-save mysql2
+    - node db/db_cleanup_test.js
+
 pages:
   stage: pages
   image: gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-alpine-amd
