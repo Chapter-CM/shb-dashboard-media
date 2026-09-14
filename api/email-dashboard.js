@@ -1106,11 +1106,40 @@ function devicePanel(d){
   return '<div class="panel"><div class="panel-h" data-tip="Số lượt mở (open events) theo thiết bị. Đóng rồi mở lại = +1 lượt. Outlook tự reload trong 5s = không tính. % = tỷ lệ lượt mở từ thiết bị này trên tổng lượt mở.">Thiết bị · <span style="font-size:12px;font-weight:500;color:var(--muted)">bấm để lọc</span>'+((F.device&&F.device.length)?'<button class="csv" onclick="clearFilter(\'device\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'')+'</div><div class="funnel">'+bars+'</div><div style="font-size:11px;color:var(--faint);margin-top:10px">% = tỷ lệ lượt mở từ thiết bị này / tổng lượt mở. Số = lượt (đóng+mở lại = +1). Proxy = load giả bởi security gateway.</div></div>';
 }
 
+/* Phan trang cho bang phan khuc: danh sach don vi co the rat dai (hang tram
+   phong ban), truoc day do het 1 lan lam trang bi keo dai. Dung cung kieu
+   pager voi bang Person-level (.pager), 10 don vi / trang. */
+var SEG_PAGE=10;
+var _segAttr='dept',_segPage=0;
+
+function segPages(list){return Math.max(1,Math.ceil(((list&&list.length)||0)/SEG_PAGE));}
+
+function segPager(list){
+  var n=(list&&list.length)||0;
+  if(!n)return '';
+  if(n<=SEG_PAGE)return '<span class="pinfo">'+n+' đơn vị</span>';
+  var pages=segPages(list);
+  return '<span class="pinfo">'+(_segPage*SEG_PAGE+1)+'–'+Math.min(n,(_segPage+1)*SEG_PAGE)+' / '+n+' đơn vị</span>'
+    +'<button onclick="segPage(-1)"'+(_segPage<=0?' disabled':'')+'>‹ Trước</button>'
+    +'<button onclick="segPage(1)"'+(_segPage>=pages-1?' disabled':'')+'>Sau ›</button>';
+}
+
+function segPaint(){
+  var list=(window.__seg||{})[_segAttr]||[];
+  var box=document.getElementById('segbox');if(box)box.innerHTML=segBars(list,_segAttr);
+  var pg=document.getElementById('pg-seg');if(pg)pg.innerHTML=segPager(list);
+}
+
+function segPage(delta){_segPage+=delta;segPaint();}
+
 function segBars(list,attr){
   attr=attr||'dept';
   if(!list||!list.length||list.every(function(g){return g.name==='(Chưa phân loại)';}))return '<div class="nd">Chưa có dữ liệu phân khúc.<br>Dữ liệu được parse tự động từ tên người nhận theo định dạng:<br><b>Tên (Cấp Bậc - Phòng Ban - Khối)</b></div>';
   var F=_filter||{};var rows='';
-  list.forEach(function(g){
+  var pages=segPages(list);
+  if(_segPage>=pages)_segPage=pages-1;
+  if(_segPage<0)_segPage=0;
+  list.slice(_segPage*SEG_PAGE,(_segPage+1)*SEG_PAGE).forEach(function(g){
     var low=g.sent<MIN_N,isActive=isSel(attr,g.name);
     var tip='Reach: '+g.reach+'% · '+g.open+' người mở / '+g.sent+' người được gửi'+(low?' · Mẫu nhỏ, không đủ tin cậy':g.reach>=REACH_TARGET?' · Đạt mục tiêu':' · Dưới mục tiêu '+REACH_TARGET+'%')+(g.name!=='(Chưa phân loại)'?' · Bấm để lọc toàn dashboard theo đơn vị này':'');
     var clk=g.name!=='(Chưa phân loại)'?' onclick="setFilter(\''+attr+'\',\''+jsq(g.name)+'\')" '+'data-tip="'+esc(tip)+'"':'';
@@ -1126,12 +1155,16 @@ function segBars(list,attr){
 function segmentSection(d){
   if(!d.sum.hasSeg)return '<section id="s-seg"><div class="eyebrow">Phân khúc '+qclearBtn()+'</div><div class="notice"><b>Chưa có dữ liệu phân loại.</b> Cần tên người nhận theo định dạng: <b>Tên (Cấp Bậc - Phòng Ban - Khối)</b> trong trường rcpt của macro.</div></section>';
   window.__seg=d.segments;
+  // Ve lai toan dashboard (doi bo loc/khoang ngay) thi khung phan khuc quay ve
+  // tab "Phong ban" nhu truoc gio -> dua luon trang ve 1 cho khop.
+  _segAttr='dept';_segPage=0;
   var worst=d.segments.dept.filter(function(g){return g.sent>=3&&g.name!=='(Chưa phân loại)';})[0];
   var F=_filter||{};var activeSegFilter=(F.dept&&F.dept.length)||(F.role&&F.role.length)||(F.loc&&F.loc.length);
   var clearBtn=activeSegFilter?'<button class="csv" onclick="(function(){delete _filter.dept;delete _filter.role;delete _filter.loc;paint();})()" style="font-size:11px;padding:4px 9px">× Bỏ lọc phân khúc</button>':'';
   return '<section id="s-seg"><div class="eyebrow">Phân khúc · reach theo đơn vị (bấm bar để lọc) '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h"><div class="seg-tg"><button class="on" onclick="segView(\'dept\',this)" data-tip="Reach theo phòng ban / trung tâm">Phòng ban</button><button onclick="segView(\'role\',this)" data-tip="Reach theo cấp bậc chức danh">Cấp bậc</button><button onclick="segView(\'loc\',this)" data-tip="Reach theo khối nghiệp vụ">Chi nhánh/Khối</button></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--faint)" data-tip="Vạch trắng đứng = mục tiêu reach '+REACH_TARGET+'%">Vạch = mục tiêu '+REACH_TARGET+'%</span>'+clearBtn+'</div></div>'
-    +'<div id="segbox">'+segBars(d.segments.dept,'dept')+'</div></div>'
+    +'<div id="segbox">'+segBars(d.segments.dept,'dept')+'</div>'
+    +'<div class="pager" id="pg-seg">'+segPager(d.segments.dept)+'</div></div>'
     +(worst?'<div class="so">→ Đơn vị cần chú ý: <b>'+fmtSeg(worst.name)+'</b> ('+worst.reach+'% reach). Đề xuất nhắc qua trưởng đơn vị hoặc gửi email riêng.</div>':'')
     +'</section>';
 }
@@ -1177,7 +1210,7 @@ function campaignSection(d){
     +'<div class="tw"><table><thead><tr>'
     +th('camp','name','Chiến dịch','pin','Tên chiến dịch. Bấm tiêu đề để sắp xếp; bấm 1 dòng để lọc toàn dashboard.')
     +th('camp','last','Gửi lúc','num','Thời gian gửi/hoạt động gần nhất của chiến dịch')
-    +th('camp','sent','Đã gửi','num','Đã gửi = số người nhận duy nhất có sự kiện gửi')
+    +th('camp','sent','Người nhận','num','Người nhận = số người nhận duy nhất có sự kiện gửi (1 người nhận nhiều đợt vẫn tính 1)')
     +th('camp','opens','Đã mở (lượt)','num','Tổng lượt mở, đã trừ mở-lại &lt;5s')
     +th('camp','reach','Tỉ lệ mở','num','Tỉ lệ mở = Người mở ÷ Người gửi (person-level, đã loại proxy)')
     +th('camp','clickers','Đã click','num','Số người unique đã click ≥1 link')
@@ -1574,7 +1607,7 @@ function syncDashboard(){
   });
 }
 function toggleDensity(){_density=_density==='compact'?'comfortable':'compact';try{localStorage.setItem('shb-et-density',_density);}catch(e){}applyDensity();}
-function segView(attr,el){document.querySelectorAll('.seg-tg button').forEach(function(b){b.classList.remove('on');});el.classList.add('on');document.getElementById('segbox').innerHTML=segBars(window.__seg[attr],attr);}
+function segView(attr,el){document.querySelectorAll('.seg-tg button').forEach(function(b){b.classList.remove('on');});el.classList.add('on');_segAttr=attr;_segPage=0;segPaint();}
 function exportFU(){var rows=window.__fu||[];if(!rows.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac,Chien Dich,Thoi Gian Mo\n';rows.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+fmtCamp(r.campaign)+'","'+fmtTime(r.first)+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mo-chua-click-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 function exportRecipients(){var rows=window.__rec||[];if(!rows.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac,So Lan Mo,Mo Gan Nhat,So Lan Click\n';rows.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+(r.opened?r.openCount:0)+'","'+(r.lastOpen?fmtTime(r.lastOpen):'')+'","'+(r.clicked?r.clickCount:0)+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='nguoi-nhan-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 function findMandatory(name){return(window.__mandatory||[]).filter(function(M){return M.name===name;})[0];}
