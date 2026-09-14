@@ -12,6 +12,43 @@ const SUPABASE_URL = process.env.EMAIL_SUPABASE_URL || process.env.SUPABASE_URL 
 const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
 const EVENTS_LIMIT = parseInt(process.env.EMAIL_EVENTS_LIMIT || process.env.EVENTS_LIMIT || '40000', 10);
 
+/* ── Ẩn chiến dịch test khỏi dashboard ──────────────────────────────────────
+ * Dữ liệu test vẫn nằm trong database (hệ thống chưa có API xoá, và người dùng
+ * không có quyền vào DB) — nhưng bị lọc bỏ NGAY SAU KHI ĐỌC nên không lọt vào
+ * bất kỳ chỉ số nào: thẻ KPI, phễu, phân khúc, biểu đồ, bộ lọc chiến dịch.
+ *
+ * 2 quy tắc ẩn:
+ *   1. Tên chiến dịch bắt đầu bằng "test" (sau khi bỏ dấu cách/gạch nối) —
+ *      quy ước đặt tên: campaign thật ĐỪNG bắt đầu bằng chữ "Test".
+ *   2. Có tên trong danh sách HIDDEN_EXACT bên dưới (cho các bản test lỡ đặt
+ *      tên không theo quy ước 1).
+ *
+ * Chỉnh không cần sửa code: đặt biến môi trường EMAIL_HIDDEN_CAMPAIGNS =
+ * danh sách tên ngăn cách bằng dấu phẩy (thay cho HIDDEN_EXACT).
+ * Đặt EMAIL_HIDDEN_CAMPAIGNS='' và EMAIL_HIDE_TEST_PREFIX='0' để hiện lại tất cả.
+ */
+const HIDE_TEST_PREFIX = process.env.EMAIL_HIDE_TEST_PREFIX !== '0';
+const HIDDEN_EXACT = (process.env.EMAIL_HIDDEN_CAMPAIGNS != null
+  ? process.env.EMAIL_HIDDEN_CAMPAIGNS.split(',')
+  : [
+      'TEST-BUFFER-FIX-KHONG-XOA-DUOC-TU-DONG',
+      'Thong Bao Test Vui Long Bo Qua V2',
+    ]
+).map(normCamp).filter(Boolean);
+
+/** Chuẩn hoá tên chiến dịch để so khớp: bỏ dấu cách, gạch nối, dấu chấm… nên
+ *  "Test V.494", "test-v494", "TEST_V494" đều quy về cùng một chuỗi. */
+function normCamp(s) {
+  return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function isHiddenCampaign(name) {
+  const n = normCamp(name);
+  if (!n) return false;
+  if (HIDE_TEST_PREFIX && n.indexOf('test') === 0) return true;
+  return HIDDEN_EXACT.indexOf(n) > -1;
+}
+
 function fetchLogs() {
   // Có MySQL nội bộ (MYSQL_HOST) thì fetchOne bên dưới tự rẽ sang db-client — chỉ chặn khi thiếu cả 2.
   if (!dbClient.isEnabled() && (!SUPABASE_URL || !SERVICE_KEY)) return Promise.resolve([]);
@@ -96,7 +133,9 @@ function fetchLogs() {
 module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
-  const logs = await fetchLogs().catch(() => []);
+  const raw = await fetchLogs().catch(() => []);
+  // Lọc bỏ dữ liệu test trước khi đưa vào trang (xem HIDDEN_EXACT ở đầu file)
+  const logs = raw.filter((l) => !isHiddenCampaign(l && l.campaign));
   // ts tu DB la UTC that (ghi bang new Date().toISOString() o api/email-track.js),
   // nhung mysql2 dateStrings:true tra ve "YYYY-MM-DD HH:MM:SS" khong co "Z" - moi
   // xu ly (process()/dailySeries()/fmtTime()...) chay CLIENT-SIDE trong trinh duyet
