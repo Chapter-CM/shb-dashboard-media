@@ -1607,9 +1607,16 @@ function countUp(){
   try{if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)return;
     document.querySelectorAll('.kv,.tier .tv,.exec-kp .v,.dh-v').forEach(function(el){
       var txt=el.textContent.trim();var m=txt.match(/^(\d[\d.,]*)(.*)$/);if(!m)return;
-      var target=parseFloat(m[1].replace(/,/g,''));var suf=m[2]||'';if(isNaN(target)||target<=0)return;
+      // nf() format theo vi-VN nen phan cach nghin la dau CHAM ("5.000"), truoc
+      // day chi bo dau PHAY -> parseFloat("5.000") doc thanh 5,0 -> moi so tu
+      // 1000 tro len hien sai (5000->5, 1891->2, 3728->4), duoi 1000 van dung
+      // vi khong co phan cach. Bo ca . va , nhung CHI khi dung la phan cach
+      // nghin (theo sau dung 3 chu so) de khong pha so thap phan that.
+      var target=parseFloat(m[1].replace(/[.,](?=\d{3}(?:\D|$))/g,''));var suf=m[2]||'';if(isNaN(target)||target<=0)return;
       var start=performance.now(),dur=700;
-      function tick(now){var p=Math.min(1,(now-start)/dur);var e=1-Math.pow(1-p,3);el.textContent=Math.round(target*e)+suf;if(p<1)requestAnimationFrame(tick);}
+      // nf() lai o moi buoc: neu ghi thang so tho thi ket thuc animation se mat
+      // dau phan cach nghin (5000 thay vi 5.000).
+      function tick(now){var p=Math.min(1,(now-start)/dur);var e=1-Math.pow(1-p,3);el.textContent=nf(Math.round(target*e))+suf;if(p<1)requestAnimationFrame(tick);}
       requestAnimationFrame(tick);
     });
   }catch(e){}
