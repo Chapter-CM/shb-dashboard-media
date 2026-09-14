@@ -63,7 +63,6 @@ Public Sub SeedFakeSentItems()
     Dim sentFolder As folder
     Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
 
-    Application.EnableEvents = False   ' tranh rule/add-in khac can thiep khi Move hang loat
     Dim i As Long
     For i = 1 To cnt
         Dim m As MailItem
@@ -81,7 +80,6 @@ Public Sub SeedFakeSentItems()
         Set m = Nothing
         If i Mod 100 = 0 Then DoEvents
     Next i
-    Application.EnableEvents = True
 
     On Error Resume Next
     Kill dummyPath
