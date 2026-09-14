@@ -94,6 +94,17 @@ Public Sub SeedFakeSentItems()
            vbInformation, "Seed xong"
 End Sub
 
+' Ham phu de goi tu Immediate Window (Ctrl+G) chi trong 1 dong, khong
+' can "Dim" (Immediate Window khong cho phep khai bao bien bang Dim -
+' gay loi "Invalid in Immediate pane"). Vi du go:
+'   ?RunShrinkTest("test-shrink-01")
+Public Function RunShrinkTest(slug As String) As String
+    Dim d As String
+    Dim n As Long
+    n = ShrinkCampaignSentItems(slug, d)
+    RunShrinkTest = n & " mail da rut gon." & vbCrLf & "Diag: " & d
+End Function
+
 Private Sub CreateDummyFile(path As String, sizeKB As Long)
     Dim fnum As Integer: fnum = FreeFile
     Open path For Binary Access Write As #fnum
