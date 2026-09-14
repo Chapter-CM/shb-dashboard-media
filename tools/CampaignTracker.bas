@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.93
+' SHB CM Campaign Tracker v4.94
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -571,8 +571,28 @@ Option Explicit
 '     "5-10 link/anh deu can tracking".
 ' ================================================================
 
+' CHANGES vs v4.93
+'   - Nguoi dung van bi day hop thu (~1.8GB) chi sau ~300 mail du
+'     SHRINK_EVERY da chay dinh ky. Nguyen nhan that su: ScanFolderForShrink()
+'     (goi tu ShrinkCampaignSentItems()) tu truoc gio CHI ghi de itm.HTMLBody
+'     thanh placeholder, KHONG he dong cham den itm.Attachments - neu mail
+'     nang chu yeu do FILE DINH KEM THAT hoac ANH CHEN KIEU "Insert Picture"
+'     (khac voi anh host tren SharePoint/banner chi la <img src=link>), thi
+'     "rut gon" chi xoa duoc vai KB chu, con phan nang nhat (anh/file, ~2MB/
+'     mail) van nam nguyen trong ban luu Sent Items - giai thich dung ket
+'     qua nguoi dung thay (dung luong gan nhu khong giam du Shrink van chay).
+'   - Sua: them vong lap xoa toan bo itm.Attachments (tu cuoi ve dau) NGAY
+'     SAU khi gan HTMLBody placeholder, TRUOC itm.Save - ap dung chung cho
+'     ca 2 loai (file dinh kem that va anh inline Insert Picture) vi Outlook
+'     luu ca hai trong cung 1 collection Attachments, khong can phan biet.
+'   - Giam SHRINK_EVERY tu 100 xuong 50: rut gon som hon, dung luong tich
+'     luy giua 2 lan rut gon thap hon - danh doi them 1 chut thoi gian quet
+'     Sent Items (ShrinkCampaignSentItems quet toan bo folder moi lan goi)
+'     de doi lay it rui ro day hop thu giua chung hon.
+' ================================================================
+
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.93"
+Private Const VER       As String = "4.94"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1020,7 +1040,7 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
     Dim sentFail As Long: sentFail = 0
     Dim failDiag As String: failDiag = ""
     Const BATCH As Long = 50
-    Const SHRINK_EVERY As Long = 100
+    Const SHRINK_EVERY As Long = 50
 
     Dim i As Long
     For i = 0 To nLst - 1
@@ -1292,6 +1312,16 @@ Private Sub ScanFolderForShrink(fld As folder, slug As String, hasCampInfo As Bo
                 On Error Resume Next
                 Err.Clear
                 itm.HTMLBody = placeholderHTML
+                ' Xoa toan bo attachments - bao gom CA file dinh kem that
+                ' LAN anh chen kieu Insert Picture (inline image), vi ca 2
+                ' loai deu nam chung trong collection Attachments cua
+                ' Outlook. Chi rut gon HTMLBody (nhu truoc day) KHONG giai
+                ' phong duoc dung luong neu mail nang chu yeu do anh/file
+                ' dinh kem - day la ly do hop thu van day du da chay Shrink.
+                Dim aIdx As Long
+                For aIdx = itm.Attachments.Count To 1 Step -1
+                    itm.Attachments.Remove aIdx
+                Next aIdx
                 itm.Save
                 If Err.Number = 0 Then
                     n = n + 1
