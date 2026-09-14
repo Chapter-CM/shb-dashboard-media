@@ -44,26 +44,50 @@ function fetchLogs() {
     });
   }
 
-  function fetchParallel(basePath, pages) {
-    var reqs = [];
-    for (var i = 0; i < pages; i++) {
-      reqs.push(fetchOne(basePath + '&limit=' + PAGE + '&offset=' + (i * PAGE)));
+  // Lấy theo LÔ NHỎ TUẦN TỰ, không bắn hết một lúc: pool MySQL chỉ có 5 kết nối
+  // (lib/db-client.js, connectionLimit=5). Bản nâng trần đầu tiên bắn thẳng 40
+  // request song song đã làm job sync_data fail -> public/ không được tạo ->
+  // nginx trả 403 trên production. BATCH=3 giữ tổng số kết nối đồng thời (2 truy
+  // vấn chạy song song = 6) tương đương mức 7 vốn đã chạy ổn định.
+  // DỪNG SỚM ngay khi một trang trả về ít hơn PAGE dòng (đã hết dữ liệu) nên đặt
+  // trần cao cũng không sinh query thừa khi DB còn ít dữ liệu.
+  function fetchPaged(basePath, maxPages) {
+    var BATCH = 3, out = [];
+    function step(from) {
+      if (from >= maxPages) return Promise.resolve(out);
+      var to = Math.min(from + BATCH, maxPages), reqs = [];
+      for (var i = from; i < to; i++) {
+        reqs.push(fetchOne(basePath + '&limit=' + PAGE + '&offset=' + (i * PAGE)));
+      }
+      return Promise.all(reqs).then(function(results) {
+        var more = true;
+        results.forEach(function(r) {
+          out = out.concat(r);
+          if (r.length < PAGE) more = false;   // trang thiếu = đã chạm đáy dữ liệu
+        });
+        return more ? step(to) : out;
+      });
     }
-    return Promise.all(reqs).then(function(results) {
-      return [].concat.apply([], results);
-    });
+    return step(0);
   }
+
+  // Trần lấy dữ liệu bám theo EVENTS_LIMIT (env EMAIL_EVENTS_LIMIT, mặc định
+  // 40000) thay vì hardcode 5/2 trang (= 7000 dòng) như trước — một campaign gửi
+  // 6000 người tự nó đã sinh 6000 dòng "sent" nên tự vượt trần cũ. Chia 80/20 cho
+  // sent / các loại còn lại: mỗi người nhận sinh đúng 1 dòng "sent", còn mở/click
+  // ít hơn nhiều. Đây chỉ là TRẦN TRÊN — fetchPaged dừng sớm khi hết dữ liệu.
+  var sentMax  = Math.max(1, Math.ceil(EVENTS_LIMIT * 0.8 / PAGE));
+  var otherMax = Math.max(1, Math.ceil(EVENTS_LIMIT * 0.2 / PAGE));
 
   return Promise.all([
     // not.in.(sent,dwell): bỏ qua event dwell còn sót trong DB (tính năng đo
     // thời gian đọc đã gỡ — chờ migrate hạ tầng nội bộ, xem KE_HOACH_MIGRATION.md)
-    // order=ts.desc (MỚI trước) cho cả 2: giới hạn 5 trang = 5000 dòng "sent"
-    // là có chủ đích (pool MySQL chỉ 5 kết nối, xem lib/db-client.js) — nhưng
-    // trước đây "sent" dùng ts.asc nên khi tổng số event vượt 5000, phần bị cắt
-    // là dữ liệu MỚI (campaign vừa gửi biến mất khỏi dashboard) thay vì dữ liệu
-    // cũ, ngược với cảnh báo "dữ liệu cũ có thể bị cắt" hiển thị ở UI.
-    fetchParallel(base + '&pos=eq.sent&order=ts.desc',              5),
-    fetchParallel(base + '&pos=not.in.(sent,dwell)&order=ts.desc', 2)
+    // order=ts.desc (MỚI trước) cho cả 2: khi chạm trần thì phần bị cắt là dữ liệu
+    // CŨ, đúng như cảnh báo "dữ liệu cũ có thể bị cắt" hiển thị ở UI. Trước đây
+    // "sent" dùng ts.asc nên phần bị cắt lại là dữ liệu MỚI — campaign vừa gửi
+    // biến mất khỏi dashboard.
+    fetchPaged(base + '&pos=eq.sent&order=ts.desc',              sentMax),
+    fetchPaged(base + '&pos=not.in.(sent,dwell)&order=ts.desc', otherMax)
   ])
   .then(function(r) { return r[0].concat(r[1]); })
   .catch(function()  { return []; });
