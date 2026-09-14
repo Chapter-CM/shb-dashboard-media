@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.94
+' SHB CM Campaign Tracker v4.95
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
@@ -591,12 +591,28 @@ Option Explicit
 '     de doi lay it rui ro day hop thu giua chung hon.
 ' ================================================================
 
+' CHANGES vs v4.94
+'   - Nguoi dung bao dashboard "Da gui" thap hon nhieu so voi so nguoi
+'     nhan that (vd gui 6000+ chi ghi nhan ~3783). Xac dinh nguyen nhan:
+'     m_Bag(0 To 399) - mang giu song cac request async "pos=sent" -
+'     chi co 400 cho, dung Mod 400 de quay vong. Voi campaign > 400
+'     nguoi, request thu 401 tro di GHI DE len o nho cua request cu; neu
+'     request cu chua kip server phan hoi (do do tre mang/proxy noi bo)
+'     ma bi ghi de, VBA giai phong COM object ngay, HUY NGANG request do
+'     giua chung - server khong bao gio nhan duoc tin "da gui", du mail
+'     that su da gui thanh cong toi nguoi nhan.
+'   - Sua: m_Bag doi thanh mang dong, ReDim DUNG BANG so nguoi nhan cua
+'     TUNG campaign (trong DoFullMode, ngay sau khi biet nLst) - khong
+'     con quay vong/ghi de giua chung nua, moi request duoc giu song cho
+'     toi khi thuc su hoan tat.
+' ================================================================
+
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.94"
+Private Const VER       As String = "4.95"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
-Private m_Bag(0 To 399) As Object
+Private m_Bag() As Object
 Private m_BagN           As Long
 
 ' Giu song bien watcher trong suot phien Outlook (xem RecallNotifWatcher.cls)
@@ -994,6 +1010,18 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
                "Nguoi nhan khong lay duoc SMTP:" & diag, vbExclamation, "SHB Tracker"
         Exit Sub
     End If
+
+    ' Cap phat m_Bag DUNG BANG so nguoi nhan - truoc day co dinh 400 cho,
+    ' dung Mod 400 de quay vong. Voi campaign > 400 nguoi, request async
+    ' pos=sent thu 401 tro di se GHI DE len o nho cua request thu 1 -
+    ' neu request cu CHUA kip nhan phan hoi tu server (do proxy/mang noi
+    ' bo co do tre) ma bi ghi de, VBA giai phong COM object ngay, HUY
+    ' NGANG request dang gui do - server khong bao gio nhan duoc "da
+    ' gui", du mail thuc su da gui thanh cong. Day la nguyen nhan dashboard
+    ' ghi nhan it hon so nguoi nhan that (vd gui 6000 chi ghi nhan ~3783).
+    ' Sua: cap du cho tung nguoi nhan trong CHINH campaign nay - khong
+    ' bao gio bi ghi de giua chung nua.
+    ReDim m_Bag(0 To nLst)
 
     ' Ghi lai Content-ID GOC cua tung file dinh kem (anh nhung - inline
     ' image) trong draft, THEO THU TU - de sau nay so sanh voi Content-ID
@@ -1628,7 +1656,10 @@ End Function
 
 ' ================================================================
 ' FIRE HTTP - async fire-and-forget (WinInet, SHB proxy compatible)
-' m_Bag keeps object references alive until overwritten.
+' m_Bag keeps object references alive until response completes - phai
+' duoc ReDim du cho (>= so lan se goi FireHttp) TRUOC khi dung, xem
+' DoFullMode. Khong con dung Mod/quay vong - tranh ghi de len request
+' dang gui do giua chung (xem giai thich chi tiet tai cho ReDim m_Bag).
 ' ================================================================
 Private Sub FireHttp(url As String)
     On Error Resume Next
@@ -1637,8 +1668,10 @@ Private Sub FireHttp(url As String)
     If Not h Is Nothing Then
         h.Open "GET", url, True   ' True = async
         h.send
-        Set m_Bag(m_BagN Mod 400) = h
-        m_BagN = m_BagN + 1
+        If m_BagN <= UBound(m_Bag) Then
+            Set m_Bag(m_BagN) = h
+            m_BagN = m_BagN + 1
+        End If
     End If
     On Error GoTo 0
 End Sub
