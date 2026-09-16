@@ -1,7 +1,7 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v5.01   <-- PHIEN BAN CUA FILE NAY
+' SHB CM Campaign Tracker v5.02   <-- PHIEN BAN CUA FILE NAY
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
 '
 ' KIEM TRA NHANH DA DAN DUNG BAN CHUA: dong tren day va hang so VER ben duoi
@@ -651,6 +651,27 @@ Option Explicit
 '   - Neu Items.Sort khong dung duoc, tu dong quay lai quet toan bo nhu ban cu.
 ' ================================================================
 
+' CHANGES vs v5.01
+'   - Phu HET moi hom thu, khong chi cac account duoc cau hinh. Tu v4.72 den
+'     v5.01, moi vong quet deu duyet Application.Session.Accounts. Nhung mot
+'     HOM THU DUNG CHUNG them kieu "Open these additional mailboxes" KHONG
+'     xuat hien trong Accounts - no chi co trong Session.Stores. Nghia la
+'     neu gui campaign tu mot hom thu nhu vay thi TOAN BO co che deu vo tac
+'     dung ma khong bao loi gi: khong rut gon, khong dem duoc Outbox, khong
+'     recall duoc, thong bao recall khong duoc don.
+'   - Them AllStores() - gom CA Accounts LAN Stores, khu trung theo StoreID -
+'     va AllDefaultFolders(folderType) dung chung cho moi noi can duyet hom
+'     thu. Thay cho 5 vong lap duyet account gan nhu giong het nhau truoc
+'     day (moi cai co ban sao rieng cua logic dedup + duong lui), nen tu nay
+'     sua 1 cho la ca 5 duong deu duoc.
+'   - Ap dung cho: StartSentWatch (watcher rut gon), OutboxPendingCount
+'     (dieu kien dung cua timer), ShrinkCampaignSentItems, RecallCampaign,
+'     va watcher don thong bao recall.
+'   - Giu nguyen duong lui ve folder mac dinh khi khong liet ke duoc store
+'     nao - van dung tinh chat "khong bao gio te hon ban cu".
+'   - Khong dong gi den du lieu gui len dashboard.
+' ================================================================
+
 ' CHANGES vs v5.00
 '   - Them ResumeShrinkIfPending() - ban im lang cua ShrinkNow, de
 '     ThisOutlookSession goi tu dong trong Application_Startup. Bit not
@@ -792,7 +813,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "5.01"
+Private Const VER       As String = "5.02"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -864,38 +885,91 @@ Private m_ShrinkIdle As Long        ' so nhip lien tiep Outbox da rong
 ' mail vao Outbox, con truyen di that su mat ~2 giay/mail - voi 6700 nguoi la
 ' vai tieng). Bao lau Outbox con mail thi bay gio van con ban sao 4MB tiep tuc
 ' roi vao Sent Items, tuc la van con viec cho Shrink lam.
-Private Function OutboxPendingCount() As Long
-    Dim total As Long: total = 0
-    Dim scannedAny As Boolean: scannedAny = False
+' ================================================================
+' LIET KE HOM THU - dung chung cho MOI co che quet trong file nay
+' ================================================================
+' Tra ve folder mac dinh loai folderType (olFolderSentMail / olFolderOutbox)
+' cua MOI hom thu dang mo trong Outlook, khong trung lap.
+'
+' Duyet CA HAI nguon vi chung KHONG bao nhau:
+'   - Session.Accounts: cac account duoc cau hinh (moi cai co profile rieng).
+'     Day la nguon duy nhat duoc dung tu v4.72 den v5.01.
+'   - Session.Stores: MOI kho du lieu dang mo. Quan trong: hom thu DUNG CHUNG
+'     them kieu "Open these additional mailboxes" xuat hien o day nhung
+'     KHONG xuat hien trong Accounts - nghia la truoc day loai hom thu do bi
+'     BO SOT hoan toan: khong rut gon, khong recall, khong dem Outbox. Neu
+'     gui campaign tu mot hom thu nhu vay thi toan bo co che deu vo tac dung
+'     ma khong bao loi gi.
+'
+' Khu trung theo StoreID nen mot hom thu xuat hien o ca 2 nguon chi duoc xu
+' ly 1 lan. Neu ca hai deu khong ra gi (moi truong la), quay ve folder mac
+' dinh cua profile - giu dung tinh chat "khong bao gio te hon ban cu".
+Private Function AllStores() As Collection
+    Dim res As Collection: Set res = New Collection
     Dim seenStoreIDs As String: seenStoreIDs = "|"
-    Dim acc As Object, store As Object, fld As folder, storeID As String
+    Dim storeID As String
 
     On Error Resume Next
+
+    Dim acc As Object, st As Object
     For Each acc In Application.Session.Accounts
-        Set store = Nothing
-        Set store = acc.DeliveryStore
-        If Not store Is Nothing Then
+        Set st = Nothing
+        Set st = acc.DeliveryStore
+        If Not st Is Nothing Then
             storeID = ""
-            storeID = store.StoreID
+            storeID = st.StoreID
             If Len(storeID) > 0 And InStr(seenStoreIDs, "|" & storeID & "|") = 0 Then
                 seenStoreIDs = seenStoreIDs & storeID & "|"
-                Set fld = Nothing
-                Set fld = store.GetDefaultFolder(olFolderOutbox)
-                If Not fld Is Nothing Then
-                    total = total + fld.Items.Count
-                    scannedAny = True
-                End If
+                res.Add st
             End If
         End If
     Next acc
 
-    ' Du phong giong cac ham khac trong file: neu khong duyet duoc account nao
-    ' thi quay ve Outbox cua account mac dinh.
-    If Not scannedAny Then
+    For Each st In Application.Session.Stores
+        storeID = ""
+        storeID = st.StoreID
+        If Len(storeID) > 0 And InStr(seenStoreIDs, "|" & storeID & "|") = 0 Then
+            seenStoreIDs = seenStoreIDs & storeID & "|"
+            res.Add st
+        End If
+    Next st
+
+    On Error GoTo 0
+
+    Set AllStores = res
+End Function
+
+Private Function AllDefaultFolders(ByVal folderType As Long) As Collection
+    Dim res As Collection: Set res = New Collection
+    Dim st As Object, fld As folder
+
+    On Error Resume Next
+    For Each st In AllStores()
         Set fld = Nothing
-        Set fld = Application.Session.GetDefaultFolder(olFolderOutbox)
-        If Not fld Is Nothing Then total = total + fld.Items.Count
+        Set fld = st.GetDefaultFolder(folderType)
+        If Not fld Is Nothing Then res.Add fld
+    Next st
+
+    ' Duong lui cuoi cung: moi truong la khong liet ke duoc store nao thi van
+    ' lam duoc dung nhu ban v4.68 - khong bao gio te hon.
+    If res.Count = 0 Then
+        Set fld = Nothing
+        Set fld = Application.Session.GetDefaultFolder(folderType)
+        If Not fld Is Nothing Then res.Add fld
     End If
+    On Error GoTo 0
+
+    Set AllDefaultFolders = res
+End Function
+
+Private Function OutboxPendingCount() As Long
+    Dim total As Long: total = 0
+    Dim fld As folder
+
+    On Error Resume Next
+    For Each fld In AllDefaultFolders(olFolderOutbox)
+        total = total + fld.Items.Count
+    Next fld
     On Error GoTo 0
 
     OutboxPendingCount = total
@@ -1038,48 +1112,21 @@ Private Sub StartSentWatch(slug As String, knownSubject As String)
     Set m_SentWatchers = New Collection
 
     Dim ph As String: ph = ShrinkPlaceholderHTML(slug)
-    Dim seenStoreIDs As String: seenStoreIDs = "|"
-    Dim acc As Object, store As Object, fld As folder, storeID As String
+    Dim fld As folder
     Dim w As SentItemsWatcher
-    Dim madeAny As Boolean: madeAny = False
 
-    For Each acc In Application.Session.Accounts
-        Set store = Nothing
-        Set store = acc.DeliveryStore
-        If Not store Is Nothing Then
-            storeID = ""
-            storeID = store.StoreID
-            If Len(storeID) > 0 And InStr(seenStoreIDs, "|" & storeID & "|") = 0 Then
-                seenStoreIDs = seenStoreIDs & storeID & "|"
-                Set fld = Nothing
-                Set fld = store.GetDefaultFolder(olFolderSentMail)
-                If Not fld Is Nothing Then
-                    Set w = New SentItemsWatcher
-                    w.Slug = slug
-                    w.KnownSubject = knownSubject
-                    w.PlaceholderHTML = ph
-                    Set w.SentItems = fld.Items
-                    m_SentWatchers.Add w
-                    madeAny = True
-                End If
-            End If
-        End If
-    Next acc
+    ' AllDefaultFolders() phu CA account cau hinh LAN hom thu dung chung
+    ' (xem giai thich tai chinh ham do) - nen du gui tu hom thu nao, ban sao
+    ' roi vao Sent Items cua hom thu do deu co watcher rieng theo doi.
+    For Each fld In AllDefaultFolders(olFolderSentMail)
+        Set w = New SentItemsWatcher
+        w.Slug = slug
+        w.KnownSubject = knownSubject
+        w.PlaceholderHTML = ph
+        Set w.SentItems = fld.Items
+        m_SentWatchers.Add w
+    Next fld
 
-    ' Du phong giong cac ham khac trong file: neu khong duyet duoc account
-    ' nao thi bam vao Sent Items cua account mac dinh.
-    If Not madeAny Then
-        Set fld = Nothing
-        Set fld = Application.Session.GetDefaultFolder(olFolderSentMail)
-        If Not fld Is Nothing Then
-            Set w = New SentItemsWatcher
-            w.Slug = slug
-            w.KnownSubject = knownSubject
-            w.PlaceholderHTML = ph
-            Set w.SentItems = fld.Items
-            m_SentWatchers.Add w
-        End If
-    End If
     On Error GoTo 0
 End Sub
 
@@ -1968,52 +2015,14 @@ Public Function ShrinkCampaignSentItems(slug As String, _
     Dim matched As Long: matched = 0
     Dim scanned As Long: scanned = 0
     Dim sampleDiag As String: sampleDiag = ""
-    Dim accountsScanned As Long: accountsScanned = 0
-
-    Dim seenStoreIDs As String: seenStoreIDs = "|"
-    Dim acc As Object, store As Object, sentFolder As folder, storeID As String
-    For Each acc In Application.Session.Accounts
-        On Error Resume Next
-        Set store = Nothing
-        Set store = acc.DeliveryStore
-        On Error GoTo 0
-        If store Is Nothing Then GoTo NextAccount
-        storeID = ""
-        On Error Resume Next
-        storeID = store.StoreID
-        On Error GoTo 0
-        If Len(storeID) = 0 Or InStr(seenStoreIDs, "|" & storeID & "|") > 0 Then GoTo NextAccount
-        seenStoreIDs = seenStoreIDs & storeID & "|"
-
-        Set sentFolder = Nothing
-        On Error Resume Next
-        Set sentFolder = store.GetDefaultFolder(olFolderSentMail)
-        On Error GoTo 0
-        If sentFolder Is Nothing Then GoTo NextAccount
-
-        accountsScanned = accountsScanned + 1
+    ' AllDefaultFolders() phu ca account cau hinh lan hom thu dung chung, va
+    ' tu co duong lui ve folder mac dinh neu khong liet ke duoc gi.
+    Dim sentFolder As folder
+    For Each sentFolder In AllDefaultFolders(olFolderSentMail)
         ScanFolderForShrink sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
                              tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag, _
                              fastScanFrom
-NextAccount:
-    Next acc
-
-    ' Du phong: neu vi ly do nao do khong quet duoc account nao qua vong
-    ' lap tren (vd acc.DeliveryStore khong tra ve duoc voi kieu account/
-    ' profile nao do), quay lai dung cach cu (v4.68) de KHONG BAO GIO te
-    ' hon truoc - GetDefaultFolder luon tra ve it nhat Sent Items cua
-    ' account mac dinh.
-    If accountsScanned = 0 Then
-        Set sentFolder = Nothing
-        On Error Resume Next
-        Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
-        On Error GoTo 0
-        If Not sentFolder Is Nothing Then
-            ScanFolderForShrink sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
-                                 tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag, _
-                                 fastScanFrom
-        End If
-    End If
+    Next sentFolder
 
     If matched = 0 Then
         diag = "(khong tim thay mail nao co CMSlug = '" & slug & "'" & _
@@ -2514,33 +2523,26 @@ Public Sub RecallCampaign()
     Set m_RecallWatchers = Nothing
     Set m_RecallWatchers = New Collection
 
-    Dim wAcc As Object, wStore As Object, wStoreID As String
-    Dim wSeenStoreIDs As String: wSeenStoreIDs = "|"
-    For Each wAcc In Application.Session.Accounts
-        Set wStore = Nothing
-        Set wStore = wAcc.DeliveryStore
-        If Not wStore Is Nothing Then
-            wStoreID = ""
-            wStoreID = wStore.StoreID
-            If Len(wStoreID) > 0 And InStr(wSeenStoreIDs, "|" & wStoreID & "|") = 0 Then
-                wSeenStoreIDs = wSeenStoreIDs & wStoreID & "|"
-
-                Dim wInbox As Object, wDeleted As Object
-                Set wInbox = wStore.GetDefaultFolder(olFolderInbox)
-                Set wDeleted = wStore.GetDefaultFolder(olFolderDeletedItems)
-                If Not wInbox Is Nothing And Not wDeleted Is Nothing Then
-                    Dim wWatcher As RecallNotifWatcher
-                    Set wWatcher = New RecallNotifWatcher
-                    Set wWatcher.InboxItems = wInbox.Items
-                    ' Theo doi luon Deleted Items - xoa lan 2 ngay tai do de
-                    ' xoa VINH VIEN (khong chi chuyen vao roi nam lai chiem
-                    ' dung luong).
-                    Set wWatcher.DeletedItemsItems = wDeleted.Items
-                    m_RecallWatchers.Add wWatcher
-                End If
-            End If
+    ' Dung chung AllStores() voi Shrink/Outbox - nho vay watcher duoc tao cho
+    ' ca hom thu dung chung (khong phai account rieng), tuc thong bao recall
+    ' bay ve hom thu do cung duoc don tu dong.
+    Dim wStore As Object
+    For Each wStore In AllStores()
+        Dim wInbox As Object, wDeleted As Object
+        Set wInbox = Nothing
+        Set wDeleted = Nothing
+        Set wInbox = wStore.GetDefaultFolder(olFolderInbox)
+        Set wDeleted = wStore.GetDefaultFolder(olFolderDeletedItems)
+        If Not wInbox Is Nothing And Not wDeleted Is Nothing Then
+            Dim wWatcher As RecallNotifWatcher
+            Set wWatcher = New RecallNotifWatcher
+            Set wWatcher.InboxItems = wInbox.Items
+            ' Theo doi luon Deleted Items - xoa lan 2 ngay tai do de xoa
+            ' VINH VIEN (khong chi chuyen vao roi nam lai chiem dung luong).
+            Set wWatcher.DeletedItemsItems = wDeleted.Items
+            m_RecallWatchers.Add wWatcher
         End If
-    Next wAcc
+    Next wStore
 
     ' Du phong: neu vi ly do nao do khong tao duoc watcher cho account nao
     ' (vd loi acc.DeliveryStore nhu da gap voi Shrink/Recall truoc day),
@@ -2577,51 +2579,15 @@ Public Sub RecallCampaign()
     Dim sampleDiag As String: sampleDiag = ""
     Dim sampled As Long: sampled = 0
 
-    ' Quet Sent Items cua TAT CA account trong profile - xem ghi chu tuong
-    ' tu tai ShrinkCampaignSentItems() o tren.
-    Dim accountsScanned As Long: accountsScanned = 0
-    Dim seenStoreIDs As String: seenStoreIDs = "|"
-    Dim acc As Object, store As Object, sentFolder As folder, storeID As String
-    For Each acc In Application.Session.Accounts
-        On Error Resume Next
-        Set store = Nothing
-        Set store = acc.DeliveryStore
-        On Error GoTo 0
-        If store Is Nothing Then GoTo NextAccount
-
-        storeID = ""
-        On Error Resume Next
-        storeID = store.StoreID
-        On Error GoTo 0
-        If Len(storeID) = 0 Or InStr(seenStoreIDs, "|" & storeID & "|") > 0 Then GoTo NextAccount
-        seenStoreIDs = seenStoreIDs & storeID & "|"
-
-        Set sentFolder = Nothing
-        On Error Resume Next
-        Set sentFolder = store.GetDefaultFolder(olFolderSentMail)
-        On Error GoTo 0
-        If sentFolder Is Nothing Then GoTo NextAccount
-
-        accountsScanned = accountsScanned + 1
+    ' Quet Sent Items cua MOI hom thu dang mo - ke ca hom thu dung chung
+    ' khong phai account rieng (xem AllDefaultFolders). Nho vay recall duoc
+    ' campaign da gui tu bat ky hom thu nao, khong chi hom thu mac dinh.
+    Dim sentFolder As folder
+    For Each sentFolder In AllDefaultFolders(olFolderSentMail)
         ScanFolderForRecall sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
                              tBuf, placeholderHTML, matched, recalled, failed, failDiag, _
                              shrunkR, sampled, sampleDiag
-NextAccount:
-    Next acc
-
-    ' Du phong: giong ShrinkCampaignSentItems(), neu khong quet duoc
-    ' account nao qua vong lap tren thi quay lai dung cach cu (v4.68).
-    If accountsScanned = 0 Then
-        Set sentFolder = Nothing
-        On Error Resume Next
-        Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
-        On Error GoTo 0
-        If Not sentFolder Is Nothing Then
-            ScanFolderForRecall sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
-                                 tBuf, placeholderHTML, matched, recalled, failed, failDiag, _
-                                 shrunkR, sampled, sampleDiag
-        End If
-    End If
+    Next sentFolder
 
     If matched = 0 Then
         Dim noMatchMsg As String
