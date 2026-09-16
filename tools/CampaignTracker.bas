@@ -1,8 +1,13 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.95
+' SHB CM Campaign Tracker v5.01   <-- PHIEN BAN CUA FILE NAY
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
+'
+' KIEM TRA NHANH DA DAN DUNG BAN CHUA: dong tren day va hang so VER ben duoi
+' (Private Const VER) phai TRUNG NHAU va trung voi ban ban dinh dan. Truoc
+' day dong tren day bi de quen o "v4.95" suot nhieu ban lien, khien khong ai
+' kiem tra duoc bang mat - tu nay phai sua CA HAI moi lan doi phien ban.
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
