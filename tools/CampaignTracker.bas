@@ -646,6 +646,27 @@ Option Explicit
 '   - Neu Items.Sort khong dung duoc, tu dong quay lai quet toan bo nhu ban cu.
 ' ================================================================
 
+' CHANGES vs v5.00
+'   - Them ResumeShrinkIfPending() - ban im lang cua ShrinkNow, de
+'     ThisOutlookSession goi tu dong trong Application_Startup. Bit not
+'     truong hop DUY NHAT con phai thao tac tay: dong/khoi dong lai Outlook
+'     giua mot dot gui dai. Watcher va Windows Timer deu song trong PHIEN
+'     Outlook nen chet theo khi dong Outlook; tu nay chung duoc bat lai ngay
+'     o lan mo Outlook tiep theo, khong can nho chay ShrinkNow nua.
+'   - Ham tu thoat ngay khi Outbox khong con mail cho gui, nen Outlook khoi
+'     dong binh thuong thi no khong lam gi, khong ton tai nguyen, khong hien
+'     hop thoai. Cung CO Y khong quet rut gon ngay luc startup (may dang ban,
+'     quet ca Sent Items se lam Outlook nhu bi treo) - nhip timer dau tien
+'     sau 60 giay se lo phan do.
+'   - Cap nhat tools/ThisOutlookSession-snippet.txt: ghi ro doan
+'     Application_Startup can co (goi ca StartArchiveAutoTimer lan
+'     ResumeShrinkIfPending), va ghi ro doan Application_Reminder cu (co che
+'     TaskItem da bo tu v4.56) co the xoa di.
+'   - Gui campaign MOI thi van tu dong hoan toan nhu truoc - SendCampaign da
+'     tu bat watcher o dau DoFullMode va timer o cuoi; ShrinkNow chi con la
+'     phuong an du phong khi Application_Startup khong chay duoc.
+' ================================================================
+
 ' CHANGES vs v4.99 (+ FILE MOI: tools/SentItemsWatcher.cls - PHAI IMPORT)
 '   - Rut gon gio chay theo SU KIEN thay vi theo LICH. Truoc day moi co che
 '     rut gon deu la QUET DINH KY (moi 50 mail trong vong lap, va Windows
@@ -766,7 +787,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "5.00"
+Private Const VER       As String = "5.01"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -1094,6 +1115,49 @@ Private Function FindLatestCampaignSlug() As String
 
     FindLatestCampaignSlug = best
 End Function
+
+' ================================================================
+' PUBLIC: ResumeShrinkIfPending - goi tu Application_Startup
+' ================================================================
+' Ban IM LANG cua ShrinkNow, danh cho ThisOutlookSession goi tu dong moi
+' khi Outlook khoi dong. Muc dich: bit not truong hop duy nhat ma nguoi
+' dung con phai thao tac tay - dong/khoi dong lai Outlook giua mot dot gui
+' dai. Watcher va Windows Timer deu song trong PHIEN Outlook nen chet theo
+' khi dong Outlook; ham nay bat lai chung ngay o lan mo tiep theo.
+'
+' Chi lam gi do khi THAT SU con viec (Outbox van con mail cho gui), nen
+' khi Outlook khoi dong binh thuong thi no thoat ngay, khong ton tai nguyen
+' va khong hien bat ky hop thoai nao.
+'
+' Cach dat vao ThisOutlookSession: xem tools/ThisOutlookSession-snippet.txt
+Public Sub ResumeShrinkIfPending()
+    On Error Resume Next
+
+    Dim slug As String, targetStr As String
+    slug = GetSetting("SHBTracker", "LastCampaign", "slug", "")
+    targetStr = GetSetting("SHBTracker", "LastCampaign", "target", "0")
+    If Len(Trim(slug)) = 0 Then slug = FindLatestCampaignSlug()
+    If Len(Trim(slug)) = 0 Then Exit Sub
+
+    ' Khong con mail cho gui => dot gui truoc da xong, khong con ban sao moi
+    ' nao sinh ra nua. Thoat ngay, khong bat watcher/timer vo ich.
+    If OutboxPendingCount() = 0 Then Exit Sub
+
+    Dim knownSubject As String, tS As Date, tE As Date
+    If LoadCampaignInfo(slug, knownSubject, tS, tE) Then
+        StartSentWatch slug, knownSubject
+    Else
+        StartSentWatch slug, ""
+    End If
+    StartShrinkTimer slug, CLng(Val(targetStr))
+
+    ' CO Y khong quet rut gon ngay tai day: luc Outlook vua khoi dong may
+    ' con ban, quet ca Sent Items se lam Outlook nhu bi treo mot luc. Nhip
+    ' timer dau tien (sau 60 giay) se lo phan do - khong dang de danh doi.
+
+    On Error GoTo 0
+End Sub
+
 
 Public Sub ShrinkNow()
     Dim slug As String, targetStr As String
