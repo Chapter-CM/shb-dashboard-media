@@ -1,8 +1,13 @@
 Option Explicit
 
 ' ================================================================
-' SHB CM Campaign Tracker v4.95
+' SHB CM Campaign Tracker v5.02   <-- PHIEN BAN CUA FILE NAY
 ' Stack  : Outlook Classic Desktop/Mobile (VBA macro) -> /api/track public -> MySQL
+'
+' KIEM TRA NHANH DA DAN DUNG BAN CHUA: dong tren day va hang so VER ben duoi
+' (Private Const VER) phai TRUNG NHAU va trung voi ban ban dinh dan. Truoc
+' day dong tren day bi de quen o "v4.95" suot nhieu ban lien, khien khong ai
+' kiem tra duoc bang mat - tu nay phai sua CA HAI moi lan doi phien ban.
 '
 ' Nguon chinh thuc DUY NHAT cua macro nay la file trong repo shb-dashboard-media
 ' (repo email-tracker-data cu da nghi, khong dung nua - tranh update nham 2 noi).
@@ -607,19 +612,231 @@ Option Explicit
 '     toi khi thuc su hoan tat.
 ' ================================================================
 
+' CHANGES vs v4.95
+'   - Toi uu TOC DO gui campaign lon (6000+ nguoi). KHONG doi bat ky du lieu
+'     nao gui len dashboard (campaign/eid/rcpt/squad/type/role/dept/loc giu
+'     nguyen tuyet doi), KHONG doi dieu kien doi sanh cua Shrink/Recall.
+'   - (1) ExpandEntry(): buoc dedup theo SMTP truoc day quet TUYEN TINH ca
+'     danh sach da co cho TUNG nguoi nhan, va goi Split() o moi vong lap -
+'     voi 6700 nguoi la ~22 trieu vong lap kem ~22 trieu lan cap phat mang
+'     tam. Day la phan lon thoi gian "loading" ~30 phut TRUOC khi mail dau
+'     tien vao Outbox (giai doan nay chay xong moi bat dau gui). Doi sang
+'     Scripting.Dictionary - tra cuu O(1), khong Split. Ket qua lst()/nLst
+'     giong HET ban cu (cung thu tu, cung noi dung, cung quy tac dedup) nen
+'     role/dept/loc gui len dashboard khong doi. Neu moi truong khong tao
+'     duoc Dictionary, TU DONG quay lai cach quet cu - khong bao gio te hon.
+'   - (2) ScanFolderForShrink(): truoc day moi lan goi deu duyet TOAN BO Sent
+'     Items (ke ca hang nghin mail cu khong the nao khop), va goi fld.Items(i)
+'     - lay lai collection Items qua COM - o TUNG vong lap. Trong luc gui,
+'     ham nay duoc goi lai moi SHRINK_EVERY = 50 mail (voi 6700 nguoi la ~134
+'     lan) nen chi phi cong don rat lon, lam cham CHINH giai doan nap mail
+'     vao Outbox. Sua 2 diem:
+'       (a) Cache "Set itms = fld.Items" 1 lan thay vi lay lai moi vong lap -
+'           ap dung cho MOI truong hop goi, khong doi hanh vi.
+'       (b) Them tham so fastScanFrom, CHI dung cho cac lan goi DINH KY trong
+'           luc dang gui: sap xep Items TANG dan theo [SentOn] roi VAN duyet
+'           nguoc (Count -> 1) dung chieu nhu ban cu - tuc la di tu mail moi
+'           nhat lui dan ve qua khu - nen DUNG SOM duoc ngay khi da di qua
+'           thoi diem bat dau campaign. Mail cua campaign nay khong the co
+'           SentOn som hon moc do nen khong bo sot. Giu chieu duyet nguoc vi
+'           day la chieu an toan khi vua duyet vua sua item.
+'           Moc dung som con duoc lui them 10 phut de phong dong ho may tram
+'           va Exchange lech nhau - tha quet thua vai mail cu con hon bo sot.
+'     Dieu kien doi sanh (CMSlug / Subject + SentOn) GIU NGUYEN 100%, chi thu
+'     hep pham vi duyet.
+'   - Lan quet CUOI CUNG sau vong lap, cac lan chay tu Windows Timer va tu
+'     RecallCampaign() van quet TOAN BO nhu cu (fastScanFrom = 0) - trang
+'     thai cuoi cung cua hop thu khong doi, van "vet" het duoc mail con sot,
+'     ke ca mail cua lan gui TRUOC cung slug.
+'   - Neu Items.Sort khong dung duoc, tu dong quay lai quet toan bo nhu ban cu.
+' ================================================================
+
+' CHANGES vs v5.01
+'   - Phu HET moi hom thu, khong chi cac account duoc cau hinh. Tu v4.72 den
+'     v5.01, moi vong quet deu duyet Application.Session.Accounts. Nhung mot
+'     HOM THU DUNG CHUNG them kieu "Open these additional mailboxes" KHONG
+'     xuat hien trong Accounts - no chi co trong Session.Stores. Nghia la
+'     neu gui campaign tu mot hom thu nhu vay thi TOAN BO co che deu vo tac
+'     dung ma khong bao loi gi: khong rut gon, khong dem duoc Outbox, khong
+'     recall duoc, thong bao recall khong duoc don.
+'   - Them AllStores() - gom CA Accounts LAN Stores, khu trung theo StoreID -
+'     va AllDefaultFolders(folderType) dung chung cho moi noi can duyet hom
+'     thu. Thay cho 5 vong lap duyet account gan nhu giong het nhau truoc
+'     day (moi cai co ban sao rieng cua logic dedup + duong lui), nen tu nay
+'     sua 1 cho la ca 5 duong deu duoc.
+'   - Ap dung cho: StartSentWatch (watcher rut gon), OutboxPendingCount
+'     (dieu kien dung cua timer), ShrinkCampaignSentItems, RecallCampaign,
+'     va watcher don thong bao recall.
+'   - Giu nguyen duong lui ve folder mac dinh khi khong liet ke duoc store
+'     nao - van dung tinh chat "khong bao gio te hon ban cu".
+'   - Khong dong gi den du lieu gui len dashboard.
+' ================================================================
+
+' CHANGES vs v5.00
+'   - Them ResumeShrinkIfPending() - ban im lang cua ShrinkNow, de
+'     ThisOutlookSession goi tu dong trong Application_Startup. Bit not
+'     truong hop DUY NHAT con phai thao tac tay: dong/khoi dong lai Outlook
+'     giua mot dot gui dai. Watcher va Windows Timer deu song trong PHIEN
+'     Outlook nen chet theo khi dong Outlook; tu nay chung duoc bat lai ngay
+'     o lan mo Outlook tiep theo, khong can nho chay ShrinkNow nua.
+'   - Ham tu thoat ngay khi Outbox khong con mail cho gui, nen Outlook khoi
+'     dong binh thuong thi no khong lam gi, khong ton tai nguyen, khong hien
+'     hop thoai. Cung CO Y khong quet rut gon ngay luc startup (may dang ban,
+'     quet ca Sent Items se lam Outlook nhu bi treo) - nhip timer dau tien
+'     sau 60 giay se lo phan do.
+'   - Cap nhat tools/ThisOutlookSession-snippet.txt: ghi ro doan
+'     Application_Startup can co (goi ca StartArchiveAutoTimer lan
+'     ResumeShrinkIfPending), va ghi ro doan Application_Reminder cu (co che
+'     TaskItem da bo tu v4.56) co the xoa di.
+'   - Gui campaign MOI thi van tu dong hoan toan nhu truoc - SendCampaign da
+'     tu bat watcher o dau DoFullMode va timer o cuoi; ShrinkNow chi con la
+'     phuong an du phong khi Application_Startup khong chay duoc.
+' ================================================================
+
+' CHANGES vs v4.99 (+ FILE MOI: tools/SentItemsWatcher.cls - PHAI IMPORT)
+'   - Rut gon gio chay theo SU KIEN thay vi theo LICH. Truoc day moi co che
+'     rut gon deu la QUET DINH KY (moi 50 mail trong vong lap, va Windows
+'     Timer moi 60 giay). Ca hai deu co cung 2 diem yeu: luon co do tre, va
+'     luon phai quet lai ca thu muc Sent Items chi de xem co gi moi khong.
+'   - Them SentItemsWatcher.cls: nghe Outlook.Items.ItemAdd tren Sent Items
+'     cua TUNG account. Ngay khi Outlook gui xong 1 mail va ban sao roi vao
+'     Sent Items, watcher rut gon NGAY ban sao do. Khong do tre, va khong
+'     phai quet gi ca vi Outlook dua thang item vao tay qua tham so su kien.
+'     Day la co che dung ban chat nhat cho bai toan nay: ban sao sinh ra
+'     theo su kien thi phai duoc don theo su kien.
+'   - StartSentWatch() duoc goi NGAY DAU DoFullMode (truoc khi gui mail dau
+'     tien, vi ban sao bat dau roi vao Sent Items ngay trong luc vong lap
+'     con chay) va trong ShrinkNow() (de bat lai sau khi khoi dong lai
+'     Outlook). Tao 1 watcher cho moi account, dedup theo StoreID, co duong
+'     lui ve account mac dinh - giong co che da dung cho Shrink/Recall.
+'   - VAN GIU ca 2 co che quet dinh ky lam LUOI AN TOAN, khong bo, vi:
+'       + Outlook co gioi han da biet: ItemAdd co the khong kich hoat khi
+'         nhieu item vao thu muc cung luc (thuong noi den nguong ~16 item).
+'         Luc gui that thi mail cach nhau vai giay nen gan nhu khong dinh,
+'         nhung khong loai tru duoc.
+'       + Sua/luu 1 item ngay khi no vua den doi khi bi Outlook tu choi;
+'         truong hop do lan quet sau se vet not.
+'   - Tach ShrinkPlaceholderHTML() dung chung cho ca watcher lan ScanFolder-
+'     ForShrink, de 2 duong rut gon khong bao gio sinh ra 2 chuoi khac nhau.
+'   - Khong dong gi den du lieu gui len dashboard, khong dong den dieu kien
+'     doi sanh cua Recall. Ban sao van nam trong Sent Items (chi bi rut gon
+'     som hon truoc) nen RecallCampaign() hoat dong y nhu cu.
+' ================================================================
+
+' CHANGES vs v4.98
+'   - ShrinkNow() bao "Khong tim thay campaign nao da gui truoc do" ngay lan
+'     dau dung that. Nguyen nhan: no chi doc muc Registry "LastCampaign", ma
+'     muc do CHI duoc ghi boi chinh v4.98 tro di (trong StartShrinkTimer).
+'     Campaign dang chay duoc gui bang ban CU nen muc do chua ton tai -
+'     dung luc can nhat thi macro lai vo dung. Day la thieu sot cua v4.98:
+'     tinh nang cuu ho lai phu thuoc vao state ma chi ban moi tao ra.
+'   - Sua: them FindLatestCampaignSlug() doc muc Registry "Campaigns" - muc
+'     nay da duoc SaveCampaignInfo() ghi tu v4.58, tuc moi campaign cu deu
+'     co - va chon ban ghi co thoi diem ket thuc moi nhat. Nho vay ShrinkNow
+'     dung duoc cho ca campaign da gui bang cac ban truoc v4.98.
+'   - Du phong cuoi: neu van khong tu tim duoc thi cho nhap tay slug.
+'   - Hien them chan doan khi rut gon duoc 0 mail (thuong la nhan nham slug)
+'     thay vi bao chung chung.
+' ================================================================
+
+' CHANGES vs v4.97
+'   - BO HAN huong di cua v4.97 (tuy chon khong luu ban sao vao Sent Items).
+'     Ly do: Recall la YEU CAU BAT BUOC cua nguoi dung, ma RecallCampaign()
+'     phai co ban sao trong Sent Items moi mo ra va goi lenh thu hoi duoc.
+'     Khong luu ban sao = mat han kha nang recall -> khong chap nhan duoc.
+'     Quay lai m.DeleteAfterSubmit = False (luon luu ban sao) nhu truoc.
+'   - Tim ra NGUYEN NHAN GOC THAT SU cua viec day hop thu (cac ban v4.96/v4.97
+'     deu chua dung cho): SHRINK_TIMER_MAX_ATTEMPTS = 12, tuc timer tu rut gon
+'     chi song 12 PHUT sau khi vong lap gui ket thuc. Nhung vong lap VBA ket
+'     thuc RAT SOM so voi luc dot gui thuc su xong:
+'       + Vong lap chi DAY mail vao Outbox (nhanh).
+'       + Outlook truyen di that su ~2 giay/mail -> 6700 nguoi mat VAI TIENG.
+'       + Moi mail truyen xong moi sinh ra 1 ban sao (~4MB) trong Sent Items.
+'     Tuc la: Shrink song ~12 phut, trong khi ban sao tiep tuc do vao Sent
+'     Items suot 3-4 tieng sau do. Toan bo phan nay KHONG duoc rut gon ->
+'     hop thu day -> Exchange CHAN gui -> dot gui dut giua chung. Dung hien
+'     tuong da quan sat truc tiep tren campaign 6700 nguoi.
+'     Dieu kien dung "shrunk >= target" cung sai: moi lan quet deu dem ca
+'     nhung mail DA rut gon tu truoc (van khop slug), nen con so do khong
+'     phan anh "con viec de lam hay khong".
+'   - Sua: dieu kien dung cua timer gio dua vao OUTBOX, khong dua vao so lan
+'     thu. Them OutboxPendingCount() dem mail con cho gui trong Outbox cua
+'     tat ca account; bao lau Outbox con mail thi con ban sao moi sinh ra nen
+'     timer chay tiep. Chi dung khi Outbox rong SHRINK_IDLE_PASSES (2) nhip
+'     lien tiep. SHRINK_TIMER_MAX_ATTEMPTS nang tu 12 len 720 (12 tieng) va
+'     chi con y nghia la TRAN AN TOAN de khong chay vo han.
+'   - Them macro Public ShrinkNow() (khong tham so nen hien trong Alt+F8):
+'     bit lo hong con lai - timer la cua Windows gan vao PHIEN Outlook, dong
+'     hoac khoi dong lai Outlook la no chet han va khong tu khoi phuc. Sau khi
+'     mo lai Outlook, chay ShrinkNow 1 lan de rut gon ngay va BAT LAI timer.
+'     StartShrinkTimer() luu slug/target ra Registry de ShrinkNow doc lai duoc
+'     sau khi moi bien module-level da bi xoa trang.
+'   - MsgBox ket thuc SendCampaign noi ro dot gui con chay ngam vai tieng va
+'     dan nguoi dung chay ShrinkNow neu co khoi dong lai Outlook.
+'   - Khong dong gi den du lieu gui len dashboard.
+' ================================================================
+
+' CHANGES vs v4.96
+'   - SUA GOC RE bai toan DAY HOP THU lam DUT dot gui giua chung. Da quan sat
+'     truc tiep tren campaign that 6700 nguoi: gui duoc vai nghin mail thi
+'     hop thu bao "MAILBOX FULL", Exchange CHAN gui, Outbox dung han; xoa bot
+'     Sent Items thi Outbox chay lai ngay - xac nhan dung nguyen nhan.
+'   - Chan doan: tu truoc den nay code LUON dat m.DeleteAfterSubmit = False
+'     (luon luu 1 ban sao day du vao Sent Items cho MOI nguoi nhan) roi dung
+'     co che Shrink chay theo sau de rut gon lai. Voi mail co anh nhung
+'     (~4MB/ban), moi vai tram mail da lap day quota. Shrink KHONG BAO GIO
+'     thang duoc cuoc dua nay, vi ban chat:
+'       + Exchange can VAI PHUT de mail "chot" thi moi sua/rut gon duoc,
+'         trong khi mail moi do vao Sent Items moi ~2 giay.
+'       + Shrink chay bang Windows Timer cua PHIEN Outlook hien tai - dong
+'         hoac khoi dong lai Outlook la timer chet han, khong tu khoi phuc,
+'         va tu do khong con gi don dep nua.
+'     Toi uu cho Shrink nhanh hon (nhu da lam o v4.96) chi keo dai thoi diem
+'     thua chu khong giai quyet duoc - vi day la loi THIET KE: tao ra rac roi
+'     moi di don, thay vi khong tao ra rac.
+'   - Sua: them lua chon "Luu ban sao vao Sent Items?" ngay o buoc hoi truoc
+'     khi gui, va truyen xuong DoFullMode:
+'       + KHONG luu (mac dinh, khuyen nghi cho campaign lon): dat
+'         m.DeleteAfterSubmit = True -> Outlook khong tao ban sao nao ca.
+'         Hop thu khong phinh to, khong can Shrink, khong can archive, khong
+'         phai canh dung luong. Danh doi: KHONG recall duoc campaign do.
+'       + CO luu: giu nguyen hanh vi cu (DeleteAfterSubmit = False + Shrink
+'         + timer) de con dung duoc RecallCampaign() cho campaign nho.
+'     Khi KHONG luu thi bo han cac lan goi Shrink dinh ky, lan Shrink cuoi va
+'     Windows Timer - khong con gi de don nen khong ton thoi gian quet vo ich.
+'   - Recall va an toan dung luong la hai muc tieu LOAI TRU NHAU o quy mo lon:
+'     muon recall thi phai giu ban sao, ma giu ban sao thi day hop thu. Vi vay
+'     day duoc lam thanh lua chon co y thuc cua nguoi gui, khong tu quyet.
+'   - Dashboard KHONG bi anh huong o ca 2 lua chon: du lieu tracking (pos=sent)
+'     da duoc ban len server ngay trong vong lap gui, con pixel mo/click nam
+'     trong ban cua NGUOI NHAN - khong lien quan gi den ban luu cua nguoi gui.
+' ================================================================
+
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.95"
+Private Const VER       As String = "5.02"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
 Private m_Bag() As Object
 Private m_BagN           As Long
 
+' Dedup SMTP trong luc ExpandEntry() giai nhom phan phoi. Dung Dictionary
+' thay cho vong quet tuyen tinh + Split() cu (xem CHANGES vs v4.95) - ket
+' qua dedup y het, chi khac toc do. Nothing = moi truong khong tao duoc
+' Dictionary -> ExpandEntry tu quay lai cach quet cu.
+Private m_SeenSmtp       As Object
+
 ' Giu song bien watcher trong suot phien Outlook (xem RecallNotifWatcher.cls)
 ' Mot watcher RIENG cho MOI account (khong chi 1 watcher cho account mac
 ' dinh nhu truoc) - vi thong bao "Message Recall Success/Failure" bay ve
 ' Inbox cua DUNG account da recall, khong phai luon la account mac dinh.
 Private m_RecallWatchers As Collection
+
+' Giu song cac watcher Sent Items (SentItemsWatcher.cls) trong suot phien
+' Outlook - mot watcher RIENG cho moi account. Neu bien nay bi giai phong
+' thi WithEvents ben trong cung chet theo va khong con rut gon theo su
+' kien nua (luc do chi con cac lan quet dinh ky lam luoi an toan).
+Private m_SentWatchers   As Collection
 
 ' ================================================================
 ' WINDOWS TIMER - chay ngam HOAN TOAN de tu dong rut gon Sent Items sau
@@ -643,16 +860,125 @@ Private m_RecallWatchers As Collection
 
 Private Const SHRINK_TIMER_ID As Long = 918273
 Private Const SHRINK_TIMER_INTERVAL_MS As Long = 60000    ' kiem tra lai moi 60 giay
-Private Const SHRINK_TIMER_MAX_ATTEMPTS As Long = 12       ' toi da 12 phut
+
+' Tran an toan tuyet doi, KHONG phai thoi gian song du kien: 720 lan x 60
+' giay = 12 tieng. Truoc day tran nay la 12 (tuc 12 PHUT) va do chinh la
+' nguyen nhan goc lam day hop thu o campaign lon - xem CHANGES vs v4.97.
+' Timer that ra tu dung khi Outbox da rong va khong con gi de rut gon
+' (xem ShrinkTimerProc), tran nay chi de khong bao gio chay vo han.
+Private Const SHRINK_TIMER_MAX_ATTEMPTS As Long = 720
+
+' So lan quet lien tiep KHONG con gi de rut gon va Outbox da rong thi coi
+' nhu xong han. Dung 2 de tranh tat nham ngay tai 1 nhip trong (vd Outlook
+' vua gui xong nhung ban sao chua kip xuat hien trong Sent Items).
+Private Const SHRINK_IDLE_PASSES As Long = 2
 
 Private m_ShrinkTimerOn As Boolean
 Private m_ShrinkSlug As String
 Private m_ShrinkTarget As Long      ' so mail can rut gon (sentOK cua campaign)
 Private m_ShrinkAttempts As Long
+Private m_ShrinkIdle As Long        ' so nhip lien tiep Outbox da rong
 
-' Bat dau (hoac gia han) timer ngam de tiep tuc thu rut gon slug nay sau
-' moi 60 giay, toi da 12 lan, cho den khi du (shrunk >= target) hoac het
-' luot thu. Chi theo doi 1 campaign "dang cho" tai 1 thoi diem - neu gui
+' Dem so mail CON DANG CHO GUI trong Outbox cua tat ca account trong profile.
+' Day la tin hieu quyet dinh de biet dot gui da thuc su xong hay chua: vong
+' lap VBA ket thuc RAT SOM so voi luc Outlook truyen xong (vong lap chi day
+' mail vao Outbox, con truyen di that su mat ~2 giay/mail - voi 6700 nguoi la
+' vai tieng). Bao lau Outbox con mail thi bay gio van con ban sao 4MB tiep tuc
+' roi vao Sent Items, tuc la van con viec cho Shrink lam.
+' ================================================================
+' LIET KE HOM THU - dung chung cho MOI co che quet trong file nay
+' ================================================================
+' Tra ve folder mac dinh loai folderType (olFolderSentMail / olFolderOutbox)
+' cua MOI hom thu dang mo trong Outlook, khong trung lap.
+'
+' Duyet CA HAI nguon vi chung KHONG bao nhau:
+'   - Session.Accounts: cac account duoc cau hinh (moi cai co profile rieng).
+'     Day la nguon duy nhat duoc dung tu v4.72 den v5.01.
+'   - Session.Stores: MOI kho du lieu dang mo. Quan trong: hom thu DUNG CHUNG
+'     them kieu "Open these additional mailboxes" xuat hien o day nhung
+'     KHONG xuat hien trong Accounts - nghia la truoc day loai hom thu do bi
+'     BO SOT hoan toan: khong rut gon, khong recall, khong dem Outbox. Neu
+'     gui campaign tu mot hom thu nhu vay thi toan bo co che deu vo tac dung
+'     ma khong bao loi gi.
+'
+' Khu trung theo StoreID nen mot hom thu xuat hien o ca 2 nguon chi duoc xu
+' ly 1 lan. Neu ca hai deu khong ra gi (moi truong la), quay ve folder mac
+' dinh cua profile - giu dung tinh chat "khong bao gio te hon ban cu".
+Private Function AllStores() As Collection
+    Dim res As Collection: Set res = New Collection
+    Dim seenStoreIDs As String: seenStoreIDs = "|"
+    Dim storeID As String
+
+    On Error Resume Next
+
+    Dim acc As Object, st As Object
+    For Each acc In Application.Session.Accounts
+        Set st = Nothing
+        Set st = acc.DeliveryStore
+        If Not st Is Nothing Then
+            storeID = ""
+            storeID = st.StoreID
+            If Len(storeID) > 0 And InStr(seenStoreIDs, "|" & storeID & "|") = 0 Then
+                seenStoreIDs = seenStoreIDs & storeID & "|"
+                res.Add st
+            End If
+        End If
+    Next acc
+
+    For Each st In Application.Session.Stores
+        storeID = ""
+        storeID = st.StoreID
+        If Len(storeID) > 0 And InStr(seenStoreIDs, "|" & storeID & "|") = 0 Then
+            seenStoreIDs = seenStoreIDs & storeID & "|"
+            res.Add st
+        End If
+    Next st
+
+    On Error GoTo 0
+
+    Set AllStores = res
+End Function
+
+Private Function AllDefaultFolders(ByVal folderType As Long) As Collection
+    Dim res As Collection: Set res = New Collection
+    Dim st As Object, fld As folder
+
+    On Error Resume Next
+    For Each st In AllStores()
+        Set fld = Nothing
+        Set fld = st.GetDefaultFolder(folderType)
+        If Not fld Is Nothing Then res.Add fld
+    Next st
+
+    ' Duong lui cuoi cung: moi truong la khong liet ke duoc store nao thi van
+    ' lam duoc dung nhu ban v4.68 - khong bao gio te hon.
+    If res.Count = 0 Then
+        Set fld = Nothing
+        Set fld = Application.Session.GetDefaultFolder(folderType)
+        If Not fld Is Nothing Then res.Add fld
+    End If
+    On Error GoTo 0
+
+    Set AllDefaultFolders = res
+End Function
+
+Private Function OutboxPendingCount() As Long
+    Dim total As Long: total = 0
+    Dim fld As folder
+
+    On Error Resume Next
+    For Each fld In AllDefaultFolders(olFolderOutbox)
+        total = total + fld.Items.Count
+    Next fld
+    On Error GoTo 0
+
+    OutboxPendingCount = total
+End Function
+
+' Bat dau (hoac gia han) timer ngam de tiep tuc rut gon slug nay sau moi 60
+' giay, CHO DEN KHI Outbox rong han (tuc Outlook da truyen xong toan bo dot
+' gui) chu khong phai chi vai phut nhu truoc. Chi theo doi 1 campaign "dang
+' cho" tai 1 thoi diem - neu gui
 ' campaign MOI trong luc campaign truoc chua rut gon xong, thu rut gon
 ' campaign cu them 1 lan NGAY tai day truoc khi chuyen sang theo doi
 ' campaign moi (khong bo do dang nhu truoc).
@@ -671,6 +997,12 @@ Private Sub StartShrinkTimer(slug As String, target As Long)
     m_ShrinkSlug = slug
     m_ShrinkTarget = target
     m_ShrinkAttempts = 0
+    m_ShrinkIdle = 0
+
+    ' Luu slug/target ra Registry de macro ShrinkNow() bat lai duoc sau khi
+    ' dong/mo lai Outlook (luc do moi bien module-level deu da bi xoa trang).
+    SaveSetting "SHBTracker", "LastCampaign", "slug", slug
+    SaveSetting "SHBTracker", "LastCampaign", "target", CStr(target)
 #If VBA7 Then
     Dim h As LongPtr
 #Else
@@ -689,6 +1021,9 @@ Private Sub StopShrinkTimer()
     On Error Resume Next
     KillTimer 0, SHRINK_TIMER_ID
     m_ShrinkTimerOn = False
+    ' Het viec thi go luon watcher Sent Items - dot gui da xong, khong con
+    ' ban sao moi nao sinh ra de phai rut gon nua.
+    StopSentWatch
     On Error GoTo 0
 End Sub
 
@@ -716,11 +1051,227 @@ Public Sub ShrinkTimerProc(ByVal hwnd As Long, ByVal uMsg As Long, ByVal nIDEven
     Dim diag As String: diag = ""
     Dim shrunk As Long: shrunk = ShrinkCampaignSentItems(m_ShrinkSlug, diag)
 
-    If shrunk >= m_ShrinkTarget Or m_ShrinkAttempts >= SHRINK_TIMER_MAX_ATTEMPTS Then
+    ' Dieu kien dung MOI: dua vao Outbox, khong dua vao so lan thu nua.
+    ' Truoc day dung khi "shrunk >= target HOAC qua 12 lan" - ca hai deu sai
+    ' voi campaign lon:
+    '   - Vong lap VBA ket thuc khi mail moi chi nam trong OUTBOX, Outlook con
+    '     phai truyen di hang tieng nua, moi mail truyen xong lai sinh them 1
+    '     ban sao 4MB trong Sent Items. Tat Shrink sau 12 phut = bo troi toan
+    '     bo phan con lai -> day hop thu -> Exchange chan gui -> dut dot gui.
+    '   - "shrunk >= target" cung khong dung de danh gia da xong: moi lan quet
+    '     deu dem ca nhung mail DA rut gon tu truoc (chung van khop slug), nen
+    '     con so nay khong phan anh "con gi moi de lam hay khong".
+    ' Bao lau Outbox con mail thi con ban sao moi se sinh ra -> phai chay tiep.
+    Dim pending As Long: pending = OutboxPendingCount()
+    If pending > 0 Then
+        m_ShrinkIdle = 0
+    Else
+        m_ShrinkIdle = m_ShrinkIdle + 1
+    End If
+
+    If m_ShrinkIdle >= SHRINK_IDLE_PASSES Or m_ShrinkAttempts >= SHRINK_TIMER_MAX_ATTEMPTS Then
         StopShrinkTimer
     End If
     On Error GoTo 0
 End Sub
+
+' ================================================================
+' PUBLIC: ShrinkNow - hien trong Alt+F8 (khong co tham so)
+' ================================================================
+' Dung khi timer rut gon da chet ma dot gui VAN CHUA xong, dien hinh nhat la
+' sau khi DONG/KHOI DONG LAI Outlook giua chung: timer la cua Windows gan vao
+' PHIEN Outlook cu, dong Outlook la mat han va KHONG tu khoi phuc. Neu khong
+' bat lai, moi mail gui tiep sau do deu de lai 1 ban sao day du (co the ~4MB)
+' trong Sent Items ma khong ai rut gon -> day hop thu -> Exchange CHAN gui.
+'
+' Macro nay doc lai slug cua campaign gan nhat tu Registry (do StartShrinkTimer
+' luu), rut gon ngay 1 lan roi bat lai timer de no tu chay tiep den khi Outbox
+' rong. Chay duoc nhieu lan, vo hai neu khong con gi de lam.
+' Chuoi placeholder thay cho body mail sau khi rut gon. Tach rieng de
+' SentItemsWatcher (rut gon theo su kien) va ScanFolderForShrink (rut gon
+' theo lan quet) luon dung Y HET mot chuoi - neu 2 noi lech nhau thi mail
+' rut gon boi co che nay se khac mail rut gon boi co che kia.
+Private Function ShrinkPlaceholderHTML(slug As String) As String
+    Dim placeholder As String
+    placeholder = "[Noi dung da duoc rut gon de tiet kiem dung luong hop thu - " & _
+                  "email goc da gui thanh cong toi nguoi nhan. Campaign: " & slug & "]"
+    ShrinkPlaceholderHTML = "<html><body style=""font-family:Segoe UI,Arial,sans-serif;" & _
+                            "color:#666;font-size:13px;"">" & placeholder & "</body></html>"
+End Function
+
+' ================================================================
+' SENT ITEMS WATCHER - rut gon theo SU KIEN (xem SentItemsWatcher.cls)
+' ================================================================
+' Tao 1 watcher cho Sent Items cua MOI account trong profile (dedup theo
+' StoreID, giong co che da dung cho Shrink/Recall/Archive). Moi khi Outlook
+' gui xong 1 mail va ban sao roi vao Sent Items, watcher rut gon NGAY ban
+' sao do - khong cho den lan quet dinh ky tiep theo, khong phai quet lai
+' ca thu muc de tim xem co gi moi.
+Private Sub StartSentWatch(slug As String, knownSubject As String)
+    On Error Resume Next
+    Set m_SentWatchers = New Collection
+
+    Dim ph As String: ph = ShrinkPlaceholderHTML(slug)
+    Dim fld As folder
+    Dim w As SentItemsWatcher
+
+    ' AllDefaultFolders() phu CA account cau hinh LAN hom thu dung chung
+    ' (xem giai thich tai chinh ham do) - nen du gui tu hom thu nao, ban sao
+    ' roi vao Sent Items cua hom thu do deu co watcher rieng theo doi.
+    For Each fld In AllDefaultFolders(olFolderSentMail)
+        Set w = New SentItemsWatcher
+        w.Slug = slug
+        w.KnownSubject = knownSubject
+        w.PlaceholderHTML = ph
+        Set w.SentItems = fld.Items
+        m_SentWatchers.Add w
+    Next fld
+
+    On Error GoTo 0
+End Sub
+
+Private Sub StopSentWatch()
+    On Error Resume Next
+    Set m_SentWatchers = Nothing
+    On Error GoTo 0
+End Sub
+
+' Tim slug cua campaign gui GAN NHAT bang cach doc muc Registry "Campaigns"
+' ma SaveCampaignInfo() da ghi tu phien ban v4.58 - nho vay ShrinkNow() dung
+' duoc cho ca nhung campaign da gui bang BAN CU (truoc v4.98, chua co muc
+' "LastCampaign"). Chon ban ghi co thoi diem ket thuc (tEnd) lon nhat.
+Private Function FindLatestCampaignSlug() As String
+    Dim best As String: best = ""
+    Dim bestT As Double: bestT = -1
+
+    On Error Resume Next
+    Dim arr As Variant
+    arr = GetAllSettings("SHBTracker", "Campaigns")
+    If IsArray(arr) Then
+        Dim k As Long
+        For k = LBound(arr, 1) To UBound(arr, 1)
+            Dim sName As String: sName = CStr(arr(k, 0))
+            Dim sVal As String: sVal = CStr(arr(k, 1))
+            Dim parts() As String: parts = Split(sVal, "|")
+            If UBound(parts) >= 2 Then
+                Dim tv As Double: tv = -1
+                tv = CDbl(parts(2))
+                If tv > bestT Then
+                    bestT = tv
+                    best = sName
+                End If
+            End If
+        Next k
+    End If
+    On Error GoTo 0
+
+    FindLatestCampaignSlug = best
+End Function
+
+' ================================================================
+' PUBLIC: ResumeShrinkIfPending - goi tu Application_Startup
+' ================================================================
+' Ban IM LANG cua ShrinkNow, danh cho ThisOutlookSession goi tu dong moi
+' khi Outlook khoi dong. Muc dich: bit not truong hop duy nhat ma nguoi
+' dung con phai thao tac tay - dong/khoi dong lai Outlook giua mot dot gui
+' dai. Watcher va Windows Timer deu song trong PHIEN Outlook nen chet theo
+' khi dong Outlook; ham nay bat lai chung ngay o lan mo tiep theo.
+'
+' Chi lam gi do khi THAT SU con viec (Outbox van con mail cho gui), nen
+' khi Outlook khoi dong binh thuong thi no thoat ngay, khong ton tai nguyen
+' va khong hien bat ky hop thoai nao.
+'
+' Cach dat vao ThisOutlookSession: xem tools/ThisOutlookSession-snippet.txt
+Public Sub ResumeShrinkIfPending()
+    On Error Resume Next
+
+    Dim slug As String, targetStr As String
+    slug = GetSetting("SHBTracker", "LastCampaign", "slug", "")
+    targetStr = GetSetting("SHBTracker", "LastCampaign", "target", "0")
+    If Len(Trim(slug)) = 0 Then slug = FindLatestCampaignSlug()
+    If Len(Trim(slug)) = 0 Then Exit Sub
+
+    ' Khong con mail cho gui => dot gui truoc da xong, khong con ban sao moi
+    ' nao sinh ra nua. Thoat ngay, khong bat watcher/timer vo ich.
+    If OutboxPendingCount() = 0 Then Exit Sub
+
+    Dim knownSubject As String, tS As Date, tE As Date
+    If LoadCampaignInfo(slug, knownSubject, tS, tE) Then
+        StartSentWatch slug, knownSubject
+    Else
+        StartSentWatch slug, ""
+    End If
+    StartShrinkTimer slug, CLng(Val(targetStr))
+
+    ' CO Y khong quet rut gon ngay tai day: luc Outlook vua khoi dong may
+    ' con ban, quet ca Sent Items se lam Outlook nhu bi treo mot luc. Nhip
+    ' timer dau tien (sau 60 giay) se lo phan do - khong dang de danh doi.
+
+    On Error GoTo 0
+End Sub
+
+
+Public Sub ShrinkNow()
+    Dim slug As String, targetStr As String
+    On Error Resume Next
+    slug = GetSetting("SHBTracker", "LastCampaign", "slug", "")
+    targetStr = GetSetting("SHBTracker", "LastCampaign", "target", "0")
+    On Error GoTo 0
+
+    ' Du phong 1: campaign gui bang ban CU (truoc v4.98) khong co muc
+    ' "LastCampaign" - tu do lai tu muc "Campaigns" da co tu lau.
+    If Len(Trim(slug)) = 0 Then slug = FindLatestCampaignSlug()
+
+    ' Du phong 2: van khong ra thi cho nhap tay.
+    If Len(Trim(slug)) = 0 Then
+        slug = Trim(InputBox( _
+            "Khong tu tim duoc campaign nao tren may nay." & vbCrLf & vbCrLf & _
+            "Nhap slug campaign can rut gon (chinh la dong 'Slug (DB)' hien" & vbCrLf & _
+            "trong hop thoai xac nhan luc gui, vd: ban-tin-so-3-...):", _
+            "SHB Tracker v" & VER))
+    End If
+
+    If Len(Trim(slug)) = 0 Then Exit Sub
+
+    Dim diag As String: diag = ""
+    Dim shrunk As Long: shrunk = ShrinkCampaignSentItems(slug, diag)
+    Dim pending As Long: pending = OutboxPendingCount()
+
+    Dim msg As String
+    msg = "Campaign: " & slug & vbCrLf & _
+          "Da rut gon trong lan quet nay: " & shrunk & " mail" & vbCrLf & _
+          "Con trong Outbox (cho gui): " & pending & " mail"
+
+    ' Rut gon duoc 0 mail thuong la do nhan nham slug (vd may co nhieu
+    ' campaign cu) - hien chan doan de biet duong xu ly, thay vi bao chung
+    ' chung roi de nguoi dung tu doan.
+    If shrunk = 0 And Len(diag) > 0 Then
+        msg = msg & vbCrLf & vbCrLf & "Chan doan: " & diag
+    End If
+
+    If pending > 0 Then
+        ' Bat lai CA HAI co che: watcher (rut gon ngay khi mail vua den) va
+        ' timer quet dinh ky (luoi an toan). Lay lai Subject goc da luu de
+        ' watcher nhan dien duoc mail vua den ngay ca khi chua doc noi CMSlug.
+        Dim knownSubject As String, tS As Date, tE As Date
+        If LoadCampaignInfo(slug, knownSubject, tS, tE) Then
+            StartSentWatch slug, knownSubject
+        Else
+            StartSentWatch slug, ""
+        End If
+        StartShrinkTimer slug, CLng(Val(targetStr))
+        msg = msg & vbCrLf & vbCrLf & _
+              "Da BAT LAI che do tu rut gon ngam. Cu de Outlook mo, khong can" & vbCrLf & _
+              "bam gi them - moi mail se duoc rut gon NGAY khi gui xong, va con" & vbCrLf & _
+              "co lan quet dinh ky lam luoi an toan den khi Outbox rong han."
+    Else
+        msg = msg & vbCrLf & vbCrLf & _
+              "Outbox da rong - dot gui da xong, khong can bat lai timer."
+    End If
+
+    MsgBox msg, vbInformation, "SHB Tracker v" & VER
+End Sub
+
 
 ' ================================================================
 ' PUBLIC: SendCampaign
@@ -839,6 +1390,7 @@ Public Sub SendCampaign()
 
     Dim doClick As Boolean
     doClick = (MsgBox("Bat click tracking?", vbYesNo + vbQuestion, "SHB Tracker") = vbYes)
+
 
     Dim eid0 As String
     eid0 = Format(Now, "yyMMddHHmm") & Format((CLng(Timer * 100) Mod 9000) + 1000, "0000")
@@ -987,8 +1539,21 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
     Dim campStart As Date: campStart = Now
     Dim origSubject As String: origSubject = draft.subject
 
+    ' Bat watcher TRUOC khi gui mail dau tien: ban sao bat dau roi vao Sent
+    ' Items ngay trong luc vong lap con dang chay, nen watcher phai san sang
+    ' tu truoc do thi moi bat duoc tu mail dau tien.
+    StartSentWatch slug, origSubject
+
     Dim lst() As String: ReDim lst(0 To 4999)
     Dim nLst As Long: nLst = 0
+
+    ' Khoi tao lai bo dedup cho RIENG campaign nay (khong dung chung voi
+    ' lan gui truoc). Neu khong tao duoc, ExpandEntry tu dong quay lai cach
+    ' quet tuyen tinh cu - ket qua van dung, chi cham nhu ban 4.95.
+    On Error Resume Next
+    Set m_SeenSmtp = Nothing
+    Set m_SeenSmtp = CreateObject("Scripting.Dictionary")
+    On Error GoTo 0
 
     Dim rcp As Recipient
     Dim diag As String: diag = ""
@@ -1151,6 +1716,10 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         m.UserProperties.Add "CMEID", olText
         m.UserProperties("CMEID").Value = eid
 
+        ' Luon giu ban sao trong Sent Items: RecallCampaign() BAT BUOC phai co
+        ' ban sao nay de mo ra va goi lenh thu hoi. Ban sao KHONG can day du
+        ' noi dung - ban da rut gon (~14KB) van recall duoc binh thuong - nen
+        ' huong xu ly dung luong la rut gon cho kip, khong phai bo ban sao.
         m.DeleteAfterSubmit = False
         m.send
         sentOK = sentOK + 1
@@ -1181,7 +1750,9 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         ' SHRINK_EVERY mail (khong phai tung mail mot) de item da gui truoc do
         ' du "on dinh" trong Sent Items, tranh loi sua MailItem ngay sau .send().
         If (i + 1) Mod SHRINK_EVERY = 0 And i < nLst - 1 Then
-            ShrinkCampaignSentItems slug
+            ' Truyen campStart -> quet nhanh (dung som khi da di qua moc bat
+            ' dau campaign). Lan quet cuoi cung sau vong lap van quet toan bo.
+            ShrinkCampaignSentItems slug, , campStart
         End If
 
         GoTo NextPerson
@@ -1209,24 +1780,28 @@ NextPerson:
     ' khac voi UserProperty CMSlug can vai phut moi doc on dinh duoc).
     SaveCampaignInfo slug, origSubject, campStart, Now
 
-    ' Thu rut gon NGAY 1 lan (bat duoc phan da "chot" - thuong la mail gui
-    ' som trong campaign lon nho SHRINK_EVERY o tren). KHONG chan (block)
-    ' SendCampaign de cho them - nguoi dung can duoc tra lai quyen dieu
-    ' khien ngay (vd de huy gui giua chung trong Outbox neu can).
+    Dim doneMsg As String
+    doneMsg = "Hoan thanh!" & vbCrLf & "Thanh cong: " & sentOK & vbCrLf & "Loi: " & sentFail
+
+    ' Thu rut gon NGAY 1 lan (bat duoc phan da "chot"). KHONG chan (block)
+    ' SendCampaign de cho them - nguoi dung can duoc tra lai quyen dieu khien
+    ' ngay (vd de huy gui giua chung trong Outbox neu can).
     Dim shrinkDiag As String: shrinkDiag = ""
     Dim shrunk As Long: shrunk = ShrinkCampaignSentItems(slug, shrinkDiag)
+    doneMsg = doneMsg & vbCrLf & "Da rut gon Sent Items: " & shrunk & " / " & sentOK
 
-    Dim doneMsg As String
-    doneMsg = "Hoan thanh!" & vbCrLf & "Thanh cong: " & sentOK & vbCrLf & "Loi: " & sentFail & _
-              vbCrLf & "Da rut gon Sent Items: " & shrunk & " / " & sentOK
-
-    If shrunk < sentOK Then
-        ' Bat Windows Timer chay ngam - tu dong thu lai moi 60 giay, toi da
-        ' 12 phut, KHONG can nguoi dung bam gi, KHONG hien popup nao them.
-        StartShrinkTimer slug, sentOK
-        doneMsg = doneMsg & vbCrLf & "(Con " & (sentOK - shrunk) & " mail Exchange chua 'chot' kip - " & _
-                  "se TU DONG rut gon ngam trong vai phut toi, khong can lam gi them.)"
-    End If
+    ' Bat Windows Timer chay ngam. Timer nay phai song HET thoi gian Outlook
+    ' con dang truyen mail trong Outbox (co the vai tieng voi campaign lon),
+    ' KHONG phai chi vai phut sau khi vong lap ket thuc - xem StartShrinkTimer.
+    StartShrinkTimer slug, sentOK
+    doneMsg = doneMsg & vbCrLf & vbCrLf & _
+              "Outlook se tiep tuc truyen so mail con lai trong Outbox (co the" & vbCrLf & _
+              "mat vai tieng). Co che tu rut gon se chay ngam SUOT thoi gian do," & vbCrLf & _
+              "khong can bam gi them." & vbCrLf & vbCrLf & _
+              "NEU DONG/KHOI DONG LAI OUTLOOK: timer dung han. Mo lai Outlook roi" & vbCrLf & _
+              "chay macro ShrinkNow (Alt+F8) mot lan de bat lai - neu khong, cac" & vbCrLf & _
+              "mail gui sau do se khong duoc rut gon va co the lam DAY HOP THU," & vbCrLf & _
+              "khi do Exchange se CHAN viec gui so mail con lai."
     If sentFail > 0 Then doneMsg = doneMsg & vbCrLf & vbCrLf & "Chi tiet loi:" & failDiag
     MsgBox doneMsg, vbInformation, "SHB Tracker v" & VER
 End Sub
@@ -1309,10 +1884,50 @@ Private Sub ScanFolderForShrink(fld As folder, slug As String, hasCampInfo As Bo
                                   knownSubject As String, tCampStart As Date, tCampEnd As Date, _
                                   tBuf As Date, placeholderHTML As String, _
                                   ByRef diag As String, ByRef matched As Long, ByRef n As Long, _
-                                  ByRef scanned As Long, ByRef sampleDiag As String)
+                                  ByRef scanned As Long, ByRef sampleDiag As String, _
+                                  Optional fastScanFrom As Date = 0)
+    ' Cache collection Items MOT LAN thay vi goi fld.Items(i) moi vong lap
+    ' (moi lan goi fld.Items la 1 lan lay lai collection qua COM). Khong
+    ' doi hanh vi, chi bot chi phi.
+    Dim itms As Object: Set itms = fld.Items
+
+    ' fastScanFrom > 0: chi dung cho cac lan goi DINH KY trong luc dang gui.
+    ' Sap xep TANG dan theo [SentOn], roi van duyet NGUOC (Count -> 1) dung
+    ' nhu ban cu - tuc la bat dau tu mail MOI NHAT va lui dan ve qua khu,
+    ' nho do co the DUNG SOM ngay khi da di qua thoi diem bat dau campaign
+    ' (mail cua campaign dang gui khong the co SentOn som hon moc do, nen
+    ' khong bo sot mail nao can rut gon). Chieu duyet nguoc duoc GIU NGUYEN
+    ' vi day la chieu an toan khi vua duyet vua sua item. Neu Sort khong
+    ' dung duoc, earlyExit = False -> quet toan bo y het ban cu.
+    Dim earlyExit As Boolean: earlyExit = False
+    If fastScanFrom > 0 Then
+        On Error Resume Next
+        Err.Clear
+        itms.Sort "[SentOn]", False
+        earlyExit = (Err.Number = 0)
+        On Error GoTo 0
+    End If
+
+    ' Lui moc dung som them 10 phut so voi thoi diem bat dau campaign: dong
+    ' ho may tram (campStart = Now) va dong ho Exchange (sinh ra SentOn) co
+    ' the lech nhau vai phut, neu cat dung tai campStart thi mail dau
+    ' campaign co the bi dung som bo qua. Quet thua vai mail cu la vo hai,
+    ' bo sot mail can rut gon moi la van de.
+    Dim cutoff As Date: cutoff = 0
+    If earlyExit Then cutoff = fastScanFrom - TimeSerial(0, 10, 0)
+
     Dim i As Long
-    For i = fld.Items.Count To 1 Step -1
-        Dim itm As Object: Set itm = fld.Items(i)
+    For i = itms.Count To 1 Step -1
+        Dim itm As Object: Set itm = itms(i)
+        If earlyExit Then
+            Dim sOn As Date: sOn = 0
+            On Error Resume Next
+            sOn = itm.SentOn
+            On Error GoTo 0
+            ' sOn = 0 nghia la item khong co SentOn (vd ReportItem) - khong
+            ' dung lai vi day khong phai dau hieu da di qua moc thoi gian.
+            If sOn > 0 And sOn < cutoff Then Exit For
+        End If
         If TypeName(itm) = "MailItem" Then
             Dim itmSlug As String: itmSlug = "(khong doc duoc)"
             Dim upErr As Long: upErr = 0
@@ -1374,16 +1989,18 @@ Private Sub ScanFolderForShrink(fld As folder, slug As String, hasCampInfo As Bo
     Next i
 End Sub
 
+' fastScanFrom (tuy chon, mac dinh 0 = quet toan bo nhu tu truoc den nay):
+' chi cac lan goi DINH KY trong luc dang gui moi truyen gia tri (thoi diem
+' bat dau campaign) de duoc dung som. Lan goi cuoi cung sau vong lap, cac
+' lan tu Windows Timer, tu ThisOutlookSession va tu RecallCampaign() deu
+' KHONG truyen -> van quet toan bo, dam bao vet het mail con sot.
 Public Function ShrinkCampaignSentItems(slug As String, _
-                                          Optional ByRef diag As String = "") As Long
+                                          Optional ByRef diag As String = "", _
+                                          Optional fastScanFrom As Date = 0) As Long
     Dim n As Long: n = 0
 
-    Dim placeholder As String
-    placeholder = "[Noi dung da duoc rut gon de tiet kiem dung luong hop thu - " & _
-                  "email goc da gui thanh cong toi nguoi nhan. Campaign: " & slug & "]"
     Dim placeholderHTML As String
-    placeholderHTML = "<html><body style=""font-family:Segoe UI,Arial,sans-serif;" & _
-                       "color:#666;font-size:13px;"">" & placeholder & "</body></html>"
+    placeholderHTML = ShrinkPlaceholderHTML(slug)
 
     ' Cung cach tim NHANH nhu RecallCampaign() - Subject + khoang thoi gian
     ' gui (thuoc tinh GOC, doc duoc TUC THI) lam dieu kien BO SUNG, khong chi
@@ -1398,50 +2015,14 @@ Public Function ShrinkCampaignSentItems(slug As String, _
     Dim matched As Long: matched = 0
     Dim scanned As Long: scanned = 0
     Dim sampleDiag As String: sampleDiag = ""
-    Dim accountsScanned As Long: accountsScanned = 0
-
-    Dim seenStoreIDs As String: seenStoreIDs = "|"
-    Dim acc As Object, store As Object, sentFolder As folder, storeID As String
-    For Each acc In Application.Session.Accounts
-        On Error Resume Next
-        Set store = Nothing
-        Set store = acc.DeliveryStore
-        On Error GoTo 0
-        If store Is Nothing Then GoTo NextAccount
-        storeID = ""
-        On Error Resume Next
-        storeID = store.StoreID
-        On Error GoTo 0
-        If Len(storeID) = 0 Or InStr(seenStoreIDs, "|" & storeID & "|") > 0 Then GoTo NextAccount
-        seenStoreIDs = seenStoreIDs & storeID & "|"
-
-        Set sentFolder = Nothing
-        On Error Resume Next
-        Set sentFolder = store.GetDefaultFolder(olFolderSentMail)
-        On Error GoTo 0
-        If sentFolder Is Nothing Then GoTo NextAccount
-
-        accountsScanned = accountsScanned + 1
+    ' AllDefaultFolders() phu ca account cau hinh lan hom thu dung chung, va
+    ' tu co duong lui ve folder mac dinh neu khong liet ke duoc gi.
+    Dim sentFolder As folder
+    For Each sentFolder In AllDefaultFolders(olFolderSentMail)
         ScanFolderForShrink sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
-                             tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag
-NextAccount:
-    Next acc
-
-    ' Du phong: neu vi ly do nao do khong quet duoc account nao qua vong
-    ' lap tren (vd acc.DeliveryStore khong tra ve duoc voi kieu account/
-    ' profile nao do), quay lai dung cach cu (v4.68) de KHONG BAO GIO te
-    ' hon truoc - GetDefaultFolder luon tra ve it nhat Sent Items cua
-    ' account mac dinh.
-    If accountsScanned = 0 Then
-        Set sentFolder = Nothing
-        On Error Resume Next
-        Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
-        On Error GoTo 0
-        If Not sentFolder Is Nothing Then
-            ScanFolderForShrink sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
-                                 tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag
-        End If
-    End If
+                             tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag, _
+                             fastScanFrom
+    Next sentFolder
 
     If matched = 0 Then
         diag = "(khong tim thay mail nao co CMSlug = '" & slug & "'" & _
@@ -1529,11 +2110,21 @@ Private Sub ExpandEntry(ae As AddressEntry, ByRef lst() As String, ByRef n As Lo
         End If
         smtp = LCase(Trim(smtp))
         If Len(smtp) > 5 And InStr(smtp, "@") > 0 Then
-            ' Dedup by SMTP
+            ' Dedup by SMTP - dung Dictionary (O(1)) thay cho vong quet
+            ' tuyen tinh + Split() cu. Quy tac dedup KHONG DOI: van la so
+            ' sanh chinh xac chuoi smtp da LCase/Trim, van bo qua nguoi
+            ' trung va giu lai lan xuat hien DAU TIEN -> lst()/nLst sinh ra
+            ' y het ban cu. Neu khong co Dictionary (m_SeenSmtp = Nothing),
+            ' quay lai dung vong quet cu de khong bao gio te hon.
             Dim k As Long
-            For k = 0 To n - 1
-                If Split(lst(k), "~")(0) = smtp Then GoTo AlreadyIn
-            Next k
+            If m_SeenSmtp Is Nothing Then
+                For k = 0 To n - 1
+                    If Split(lst(k), "~")(0) = smtp Then GoTo AlreadyIn
+                Next k
+            Else
+                If m_SeenSmtp.Exists(smtp) Then GoTo AlreadyIn
+                m_SeenSmtp.Add smtp, True
+            End If
             If n > UBound(lst) Then ReDim Preserve lst(0 To n + 999)
             ' Parse display name: "Ten (Role - Dept - Loc)"
             Dim role As String: role = ""
@@ -1932,33 +2523,26 @@ Public Sub RecallCampaign()
     Set m_RecallWatchers = Nothing
     Set m_RecallWatchers = New Collection
 
-    Dim wAcc As Object, wStore As Object, wStoreID As String
-    Dim wSeenStoreIDs As String: wSeenStoreIDs = "|"
-    For Each wAcc In Application.Session.Accounts
-        Set wStore = Nothing
-        Set wStore = wAcc.DeliveryStore
-        If Not wStore Is Nothing Then
-            wStoreID = ""
-            wStoreID = wStore.StoreID
-            If Len(wStoreID) > 0 And InStr(wSeenStoreIDs, "|" & wStoreID & "|") = 0 Then
-                wSeenStoreIDs = wSeenStoreIDs & wStoreID & "|"
-
-                Dim wInbox As Object, wDeleted As Object
-                Set wInbox = wStore.GetDefaultFolder(olFolderInbox)
-                Set wDeleted = wStore.GetDefaultFolder(olFolderDeletedItems)
-                If Not wInbox Is Nothing And Not wDeleted Is Nothing Then
-                    Dim wWatcher As RecallNotifWatcher
-                    Set wWatcher = New RecallNotifWatcher
-                    Set wWatcher.InboxItems = wInbox.Items
-                    ' Theo doi luon Deleted Items - xoa lan 2 ngay tai do de
-                    ' xoa VINH VIEN (khong chi chuyen vao roi nam lai chiem
-                    ' dung luong).
-                    Set wWatcher.DeletedItemsItems = wDeleted.Items
-                    m_RecallWatchers.Add wWatcher
-                End If
-            End If
+    ' Dung chung AllStores() voi Shrink/Outbox - nho vay watcher duoc tao cho
+    ' ca hom thu dung chung (khong phai account rieng), tuc thong bao recall
+    ' bay ve hom thu do cung duoc don tu dong.
+    Dim wStore As Object
+    For Each wStore In AllStores()
+        Dim wInbox As Object, wDeleted As Object
+        Set wInbox = Nothing
+        Set wDeleted = Nothing
+        Set wInbox = wStore.GetDefaultFolder(olFolderInbox)
+        Set wDeleted = wStore.GetDefaultFolder(olFolderDeletedItems)
+        If Not wInbox Is Nothing And Not wDeleted Is Nothing Then
+            Dim wWatcher As RecallNotifWatcher
+            Set wWatcher = New RecallNotifWatcher
+            Set wWatcher.InboxItems = wInbox.Items
+            ' Theo doi luon Deleted Items - xoa lan 2 ngay tai do de xoa
+            ' VINH VIEN (khong chi chuyen vao roi nam lai chiem dung luong).
+            Set wWatcher.DeletedItemsItems = wDeleted.Items
+            m_RecallWatchers.Add wWatcher
         End If
-    Next wAcc
+    Next wStore
 
     ' Du phong: neu vi ly do nao do khong tao duoc watcher cho account nao
     ' (vd loi acc.DeliveryStore nhu da gap voi Shrink/Recall truoc day),
@@ -1977,12 +2561,8 @@ Public Sub RecallCampaign()
     Dim shrunkR As Long: shrunkR = 0
     Dim failDiag As String: failDiag = ""
 
-    Dim placeholder As String
-    placeholder = "[Noi dung da duoc rut gon de tiet kiem dung luong hop thu - " & _
-                  "email goc da gui thanh cong toi nguoi nhan. Campaign: " & slug & "]"
     Dim placeholderHTML As String
-    placeholderHTML = "<html><body style=""font-family:Segoe UI,Arial,sans-serif;" & _
-                       "color:#666;font-size:13px;"">" & placeholder & "</body></html>"
+    placeholderHTML = ShrinkPlaceholderHTML(slug)
 
     ' Tim theo Subject + khoang thoi gian gui (SaveCampaignInfo luc SendCampaign)
     ' truoc - day la thuoc tinh GOC cua mail, doc duoc NGAY, khong can doi
@@ -1999,51 +2579,15 @@ Public Sub RecallCampaign()
     Dim sampleDiag As String: sampleDiag = ""
     Dim sampled As Long: sampled = 0
 
-    ' Quet Sent Items cua TAT CA account trong profile - xem ghi chu tuong
-    ' tu tai ShrinkCampaignSentItems() o tren.
-    Dim accountsScanned As Long: accountsScanned = 0
-    Dim seenStoreIDs As String: seenStoreIDs = "|"
-    Dim acc As Object, store As Object, sentFolder As folder, storeID As String
-    For Each acc In Application.Session.Accounts
-        On Error Resume Next
-        Set store = Nothing
-        Set store = acc.DeliveryStore
-        On Error GoTo 0
-        If store Is Nothing Then GoTo NextAccount
-
-        storeID = ""
-        On Error Resume Next
-        storeID = store.StoreID
-        On Error GoTo 0
-        If Len(storeID) = 0 Or InStr(seenStoreIDs, "|" & storeID & "|") > 0 Then GoTo NextAccount
-        seenStoreIDs = seenStoreIDs & storeID & "|"
-
-        Set sentFolder = Nothing
-        On Error Resume Next
-        Set sentFolder = store.GetDefaultFolder(olFolderSentMail)
-        On Error GoTo 0
-        If sentFolder Is Nothing Then GoTo NextAccount
-
-        accountsScanned = accountsScanned + 1
+    ' Quet Sent Items cua MOI hom thu dang mo - ke ca hom thu dung chung
+    ' khong phai account rieng (xem AllDefaultFolders). Nho vay recall duoc
+    ' campaign da gui tu bat ky hom thu nao, khong chi hom thu mac dinh.
+    Dim sentFolder As folder
+    For Each sentFolder In AllDefaultFolders(olFolderSentMail)
         ScanFolderForRecall sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
                              tBuf, placeholderHTML, matched, recalled, failed, failDiag, _
                              shrunkR, sampled, sampleDiag
-NextAccount:
-    Next acc
-
-    ' Du phong: giong ShrinkCampaignSentItems(), neu khong quet duoc
-    ' account nao qua vong lap tren thi quay lai dung cach cu (v4.68).
-    If accountsScanned = 0 Then
-        Set sentFolder = Nothing
-        On Error Resume Next
-        Set sentFolder = Application.Session.GetDefaultFolder(olFolderSentMail)
-        On Error GoTo 0
-        If Not sentFolder Is Nothing Then
-            ScanFolderForRecall sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
-                                 tBuf, placeholderHTML, matched, recalled, failed, failDiag, _
-                                 shrunkR, sampled, sampleDiag
-        End If
-    End If
+    Next sentFolder
 
     If matched = 0 Then
         Dim noMatchMsg As String
