@@ -38,10 +38,24 @@ Option Explicit
 '     Truong hop do o day se that bai lang le (On Error Resume Next) va
 '     lan quet dinh ky sau se vet not.
 '
-' CACH IMPORT (VBA Editor - Alt+F11):
-'   File > Import File... > chon file SentItemsWatcher.cls nay.
-'   (Khac voi CampaignTracker.bas - .cls phai import nhu 1 class module
-'   rieng, khong dan noi dung vao module thuong duoc.)
+' CACH NAP - CHON 1 TRONG 2, DUNG DAN VAO MODULE THUONG:
+'
+' Cach 1 (khuyen nghi) - Import ca file:
+'   VBA Editor (Alt+F11) > File > Import File... > chon file .cls nay.
+'   Import xong no PHAI nam trong nhanh "Class Modules" o Project Explorer.
+'
+' Cach 2 - Tao tay roi dan code:
+'   Insert > Class Module (KHONG phai Insert > Module).
+'   Trong cua so Properties (F4), doi (Name) thanh: SentItemsWatcher
+'   Roi dan code BAT DAU TU DONG "Option Explicit" tro xuong.
+'   TUYET DOI KHONG dan 5 dong dau cua file (VERSION 1.0 CLASS / BEGIN /
+'   MultiUse / End / Attribute VB_Name) - day la phan dinh dang FILE, chi
+'   co nghia khi Import; dan vao code pane se bao loi bien dich
+'   "Expected: end of statement".
+'
+' Dau hieu nap SAI: SentItemsWatcher xuat hien trong nhanh "Modules" thay
+' vi "Class Modules". Khi do phai xoa di (chuot phai > Remove, chon No khi
+' hoi export) va nap lai cho dung.
 '
 ' CACH DUNG: khong goi truc tiep class nay - SendCampaign() va
 ' ShrinkNow() trong CampaignTracker.bas tu dong tao watcher.
@@ -52,7 +66,6 @@ Option Explicit
 ' ================================================================
 
 Public WithEvents SentItems As Outlook.Items
-Attribute SentItems.VB_VarHelpID = -1
 
 ' Dieu kien nhan dien mail thuoc campaign dang theo doi. Dung CA HAI vi
 ' moi cai manh o mot hoan canh:
