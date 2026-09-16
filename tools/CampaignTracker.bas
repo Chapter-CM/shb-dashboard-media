@@ -646,6 +646,22 @@ Option Explicit
 '   - Neu Items.Sort khong dung duoc, tu dong quay lai quet toan bo nhu ban cu.
 ' ================================================================
 
+' CHANGES vs v4.98
+'   - ShrinkNow() bao "Khong tim thay campaign nao da gui truoc do" ngay lan
+'     dau dung that. Nguyen nhan: no chi doc muc Registry "LastCampaign", ma
+'     muc do CHI duoc ghi boi chinh v4.98 tro di (trong StartShrinkTimer).
+'     Campaign dang chay duoc gui bang ban CU nen muc do chua ton tai -
+'     dung luc can nhat thi macro lai vo dung. Day la thieu sot cua v4.98:
+'     tinh nang cuu ho lai phu thuoc vao state ma chi ban moi tao ra.
+'   - Sua: them FindLatestCampaignSlug() doc muc Registry "Campaigns" - muc
+'     nay da duoc SaveCampaignInfo() ghi tu v4.58, tuc moi campaign cu deu
+'     co - va chon ban ghi co thoi diem ket thuc moi nhat. Nho vay ShrinkNow
+'     dung duoc cho ca campaign da gui bang cac ban truoc v4.98.
+'   - Du phong cuoi: neu van khong tu tim duoc thi cho nhap tay slug.
+'   - Hien them chan doan khi rut gon duoc 0 mail (thuong la nhan nham slug)
+'     thay vi bao chung chung.
+' ================================================================
+
 ' CHANGES vs v4.97
 '   - BO HAN huong di cua v4.97 (tuy chon khong luu ban sao vao Sent Items).
 '     Ly do: Recall la YEU CAU BAT BUOC cua nguoi dung, ma RecallCampaign()
@@ -720,7 +736,7 @@ Option Explicit
 ' ================================================================
 
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.98"
+Private Const VER       As String = "4.99"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -932,6 +948,38 @@ End Sub
 ' Macro nay doc lai slug cua campaign gan nhat tu Registry (do StartShrinkTimer
 ' luu), rut gon ngay 1 lan roi bat lai timer de no tu chay tiep den khi Outbox
 ' rong. Chay duoc nhieu lan, vo hai neu khong con gi de lam.
+' Tim slug cua campaign gui GAN NHAT bang cach doc muc Registry "Campaigns"
+' ma SaveCampaignInfo() da ghi tu phien ban v4.58 - nho vay ShrinkNow() dung
+' duoc cho ca nhung campaign da gui bang BAN CU (truoc v4.98, chua co muc
+' "LastCampaign"). Chon ban ghi co thoi diem ket thuc (tEnd) lon nhat.
+Private Function FindLatestCampaignSlug() As String
+    Dim best As String: best = ""
+    Dim bestT As Double: bestT = -1
+
+    On Error Resume Next
+    Dim arr As Variant
+    arr = GetAllSettings("SHBTracker", "Campaigns")
+    If IsArray(arr) Then
+        Dim k As Long
+        For k = LBound(arr, 1) To UBound(arr, 1)
+            Dim sName As String: sName = CStr(arr(k, 0))
+            Dim sVal As String: sVal = CStr(arr(k, 1))
+            Dim parts() As String: parts = Split(sVal, "|")
+            If UBound(parts) >= 2 Then
+                Dim tv As Double: tv = -1
+                tv = CDbl(parts(2))
+                If tv > bestT Then
+                    bestT = tv
+                    best = sName
+                End If
+            End If
+        Next k
+    End If
+    On Error GoTo 0
+
+    FindLatestCampaignSlug = best
+End Function
+
 Public Sub ShrinkNow()
     Dim slug As String, targetStr As String
     On Error Resume Next
@@ -939,12 +987,20 @@ Public Sub ShrinkNow()
     targetStr = GetSetting("SHBTracker", "LastCampaign", "target", "0")
     On Error GoTo 0
 
+    ' Du phong 1: campaign gui bang ban CU (truoc v4.98) khong co muc
+    ' "LastCampaign" - tu do lai tu muc "Campaigns" da co tu lau.
+    If Len(Trim(slug)) = 0 Then slug = FindLatestCampaignSlug()
+
+    ' Du phong 2: van khong ra thi cho nhap tay.
     If Len(Trim(slug)) = 0 Then
-        MsgBox "Khong tim thay campaign nao da gui truoc do tren may nay." & vbCrLf & _
-               "(Macro nay chi dung sau khi da chay SendCampaign it nhat 1 lan.)", _
-               vbExclamation, "SHB Tracker v" & VER
-        Exit Sub
+        slug = Trim(InputBox( _
+            "Khong tu tim duoc campaign nao tren may nay." & vbCrLf & vbCrLf & _
+            "Nhap slug campaign can rut gon (chinh la dong 'Slug (DB)' hien" & vbCrLf & _
+            "trong hop thoai xac nhan luc gui, vd: ban-tin-so-3-...):", _
+            "SHB Tracker v" & VER))
     End If
+
+    If Len(Trim(slug)) = 0 Then Exit Sub
 
     Dim diag As String: diag = ""
     Dim shrunk As Long: shrunk = ShrinkCampaignSentItems(slug, diag)
@@ -954,6 +1010,13 @@ Public Sub ShrinkNow()
     msg = "Campaign: " & slug & vbCrLf & _
           "Da rut gon trong lan quet nay: " & shrunk & " mail" & vbCrLf & _
           "Con trong Outbox (cho gui): " & pending & " mail"
+
+    ' Rut gon duoc 0 mail thuong la do nhan nham slug (vd may co nhieu
+    ' campaign cu) - hien chan doan de biet duong xu ly, thay vi bao chung
+    ' chung roi de nguoi dung tu doan.
+    If shrunk = 0 And Len(diag) > 0 Then
+        msg = msg & vbCrLf & vbCrLf & "Chan doan: " & diag
+    End If
 
     If pending > 0 Then
         StartShrinkTimer slug, CLng(Val(targetStr))
