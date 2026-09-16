@@ -607,13 +607,58 @@ Option Explicit
 '     toi khi thuc su hoan tat.
 ' ================================================================
 
+' CHANGES vs v4.95
+'   - Toi uu TOC DO gui campaign lon (6000+ nguoi). KHONG doi bat ky du lieu
+'     nao gui len dashboard (campaign/eid/rcpt/squad/type/role/dept/loc giu
+'     nguyen tuyet doi), KHONG doi dieu kien doi sanh cua Shrink/Recall.
+'   - (1) ExpandEntry(): buoc dedup theo SMTP truoc day quet TUYEN TINH ca
+'     danh sach da co cho TUNG nguoi nhan, va goi Split() o moi vong lap -
+'     voi 6700 nguoi la ~22 trieu vong lap kem ~22 trieu lan cap phat mang
+'     tam. Day la phan lon thoi gian "loading" ~30 phut TRUOC khi mail dau
+'     tien vao Outbox (giai doan nay chay xong moi bat dau gui). Doi sang
+'     Scripting.Dictionary - tra cuu O(1), khong Split. Ket qua lst()/nLst
+'     giong HET ban cu (cung thu tu, cung noi dung, cung quy tac dedup) nen
+'     role/dept/loc gui len dashboard khong doi. Neu moi truong khong tao
+'     duoc Dictionary, TU DONG quay lai cach quet cu - khong bao gio te hon.
+'   - (2) ScanFolderForShrink(): truoc day moi lan goi deu duyet TOAN BO Sent
+'     Items (ke ca hang nghin mail cu khong the nao khop), va goi fld.Items(i)
+'     - lay lai collection Items qua COM - o TUNG vong lap. Trong luc gui,
+'     ham nay duoc goi lai moi SHRINK_EVERY = 50 mail (voi 6700 nguoi la ~134
+'     lan) nen chi phi cong don rat lon, lam cham CHINH giai doan nap mail
+'     vao Outbox. Sua 2 diem:
+'       (a) Cache "Set itms = fld.Items" 1 lan thay vi lay lai moi vong lap -
+'           ap dung cho MOI truong hop goi, khong doi hanh vi.
+'       (b) Them tham so fastScanFrom, CHI dung cho cac lan goi DINH KY trong
+'           luc dang gui: sap xep Items TANG dan theo [SentOn] roi VAN duyet
+'           nguoc (Count -> 1) dung chieu nhu ban cu - tuc la di tu mail moi
+'           nhat lui dan ve qua khu - nen DUNG SOM duoc ngay khi da di qua
+'           thoi diem bat dau campaign. Mail cua campaign nay khong the co
+'           SentOn som hon moc do nen khong bo sot. Giu chieu duyet nguoc vi
+'           day la chieu an toan khi vua duyet vua sua item.
+'           Moc dung som con duoc lui them 10 phut de phong dong ho may tram
+'           va Exchange lech nhau - tha quet thua vai mail cu con hon bo sot.
+'     Dieu kien doi sanh (CMSlug / Subject + SentOn) GIU NGUYEN 100%, chi thu
+'     hep pham vi duyet.
+'   - Lan quet CUOI CUNG sau vong lap, cac lan chay tu Windows Timer va tu
+'     RecallCampaign() van quet TOAN BO nhu cu (fastScanFrom = 0) - trang
+'     thai cuoi cung cua hop thu khong doi, van "vet" het duoc mail con sot,
+'     ke ca mail cua lan gui TRUOC cung slug.
+'   - Neu Items.Sort khong dung duoc, tu dong quay lai quet toan bo nhu ban cu.
+' ================================================================
+
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.95"
+Private Const VER       As String = "4.96"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
 Private m_Bag() As Object
 Private m_BagN           As Long
+
+' Dedup SMTP trong luc ExpandEntry() giai nhom phan phoi. Dung Dictionary
+' thay cho vong quet tuyen tinh + Split() cu (xem CHANGES vs v4.95) - ket
+' qua dedup y het, chi khac toc do. Nothing = moi truong khong tao duoc
+' Dictionary -> ExpandEntry tu quay lai cach quet cu.
+Private m_SeenSmtp       As Object
 
 ' Giu song bien watcher trong suot phien Outlook (xem RecallNotifWatcher.cls)
 ' Mot watcher RIENG cho MOI account (khong chi 1 watcher cho account mac
@@ -990,6 +1035,14 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
     Dim lst() As String: ReDim lst(0 To 4999)
     Dim nLst As Long: nLst = 0
 
+    ' Khoi tao lai bo dedup cho RIENG campaign nay (khong dung chung voi
+    ' lan gui truoc). Neu khong tao duoc, ExpandEntry tu dong quay lai cach
+    ' quet tuyen tinh cu - ket qua van dung, chi cham nhu ban 4.95.
+    On Error Resume Next
+    Set m_SeenSmtp = Nothing
+    Set m_SeenSmtp = CreateObject("Scripting.Dictionary")
+    On Error GoTo 0
+
     Dim rcp As Recipient
     Dim diag As String: diag = ""
     For Each rcp In draft.Recipients
@@ -1181,7 +1234,9 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         ' SHRINK_EVERY mail (khong phai tung mail mot) de item da gui truoc do
         ' du "on dinh" trong Sent Items, tranh loi sua MailItem ngay sau .send().
         If (i + 1) Mod SHRINK_EVERY = 0 And i < nLst - 1 Then
-            ShrinkCampaignSentItems slug
+            ' Truyen campStart -> quet nhanh (dung som khi da di qua moc bat
+            ' dau campaign). Lan quet cuoi cung sau vong lap van quet toan bo.
+            ShrinkCampaignSentItems slug, , campStart
         End If
 
         GoTo NextPerson
@@ -1309,10 +1364,50 @@ Private Sub ScanFolderForShrink(fld As folder, slug As String, hasCampInfo As Bo
                                   knownSubject As String, tCampStart As Date, tCampEnd As Date, _
                                   tBuf As Date, placeholderHTML As String, _
                                   ByRef diag As String, ByRef matched As Long, ByRef n As Long, _
-                                  ByRef scanned As Long, ByRef sampleDiag As String)
+                                  ByRef scanned As Long, ByRef sampleDiag As String, _
+                                  Optional fastScanFrom As Date = 0)
+    ' Cache collection Items MOT LAN thay vi goi fld.Items(i) moi vong lap
+    ' (moi lan goi fld.Items la 1 lan lay lai collection qua COM). Khong
+    ' doi hanh vi, chi bot chi phi.
+    Dim itms As Object: Set itms = fld.Items
+
+    ' fastScanFrom > 0: chi dung cho cac lan goi DINH KY trong luc dang gui.
+    ' Sap xep TANG dan theo [SentOn], roi van duyet NGUOC (Count -> 1) dung
+    ' nhu ban cu - tuc la bat dau tu mail MOI NHAT va lui dan ve qua khu,
+    ' nho do co the DUNG SOM ngay khi da di qua thoi diem bat dau campaign
+    ' (mail cua campaign dang gui khong the co SentOn som hon moc do, nen
+    ' khong bo sot mail nao can rut gon). Chieu duyet nguoc duoc GIU NGUYEN
+    ' vi day la chieu an toan khi vua duyet vua sua item. Neu Sort khong
+    ' dung duoc, earlyExit = False -> quet toan bo y het ban cu.
+    Dim earlyExit As Boolean: earlyExit = False
+    If fastScanFrom > 0 Then
+        On Error Resume Next
+        Err.Clear
+        itms.Sort "[SentOn]", False
+        earlyExit = (Err.Number = 0)
+        On Error GoTo 0
+    End If
+
+    ' Lui moc dung som them 10 phut so voi thoi diem bat dau campaign: dong
+    ' ho may tram (campStart = Now) va dong ho Exchange (sinh ra SentOn) co
+    ' the lech nhau vai phut, neu cat dung tai campStart thi mail dau
+    ' campaign co the bi dung som bo qua. Quet thua vai mail cu la vo hai,
+    ' bo sot mail can rut gon moi la van de.
+    Dim cutoff As Date: cutoff = 0
+    If earlyExit Then cutoff = fastScanFrom - TimeSerial(0, 10, 0)
+
     Dim i As Long
-    For i = fld.Items.Count To 1 Step -1
-        Dim itm As Object: Set itm = fld.Items(i)
+    For i = itms.Count To 1 Step -1
+        Dim itm As Object: Set itm = itms(i)
+        If earlyExit Then
+            Dim sOn As Date: sOn = 0
+            On Error Resume Next
+            sOn = itm.SentOn
+            On Error GoTo 0
+            ' sOn = 0 nghia la item khong co SentOn (vd ReportItem) - khong
+            ' dung lai vi day khong phai dau hieu da di qua moc thoi gian.
+            If sOn > 0 And sOn < cutoff Then Exit For
+        End If
         If TypeName(itm) = "MailItem" Then
             Dim itmSlug As String: itmSlug = "(khong doc duoc)"
             Dim upErr As Long: upErr = 0
@@ -1374,8 +1469,14 @@ Private Sub ScanFolderForShrink(fld As folder, slug As String, hasCampInfo As Bo
     Next i
 End Sub
 
+' fastScanFrom (tuy chon, mac dinh 0 = quet toan bo nhu tu truoc den nay):
+' chi cac lan goi DINH KY trong luc dang gui moi truyen gia tri (thoi diem
+' bat dau campaign) de duoc dung som. Lan goi cuoi cung sau vong lap, cac
+' lan tu Windows Timer, tu ThisOutlookSession va tu RecallCampaign() deu
+' KHONG truyen -> van quet toan bo, dam bao vet het mail con sot.
 Public Function ShrinkCampaignSentItems(slug As String, _
-                                          Optional ByRef diag As String = "") As Long
+                                          Optional ByRef diag As String = "", _
+                                          Optional fastScanFrom As Date = 0) As Long
     Dim n As Long: n = 0
 
     Dim placeholder As String
@@ -1423,7 +1524,8 @@ Public Function ShrinkCampaignSentItems(slug As String, _
 
         accountsScanned = accountsScanned + 1
         ScanFolderForShrink sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
-                             tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag
+                             tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag, _
+                             fastScanFrom
 NextAccount:
     Next acc
 
@@ -1439,7 +1541,8 @@ NextAccount:
         On Error GoTo 0
         If Not sentFolder Is Nothing Then
             ScanFolderForShrink sentFolder, slug, hasCampInfo, knownSubject, tCampStart, tCampEnd, _
-                                 tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag
+                                 tBuf, placeholderHTML, diag, matched, n, scanned, sampleDiag, _
+                                 fastScanFrom
         End If
     End If
 
@@ -1529,11 +1632,21 @@ Private Sub ExpandEntry(ae As AddressEntry, ByRef lst() As String, ByRef n As Lo
         End If
         smtp = LCase(Trim(smtp))
         If Len(smtp) > 5 And InStr(smtp, "@") > 0 Then
-            ' Dedup by SMTP
+            ' Dedup by SMTP - dung Dictionary (O(1)) thay cho vong quet
+            ' tuyen tinh + Split() cu. Quy tac dedup KHONG DOI: van la so
+            ' sanh chinh xac chuoi smtp da LCase/Trim, van bo qua nguoi
+            ' trung va giu lai lan xuat hien DAU TIEN -> lst()/nLst sinh ra
+            ' y het ban cu. Neu khong co Dictionary (m_SeenSmtp = Nothing),
+            ' quay lai dung vong quet cu de khong bao gio te hon.
             Dim k As Long
-            For k = 0 To n - 1
-                If Split(lst(k), "~")(0) = smtp Then GoTo AlreadyIn
-            Next k
+            If m_SeenSmtp Is Nothing Then
+                For k = 0 To n - 1
+                    If Split(lst(k), "~")(0) = smtp Then GoTo AlreadyIn
+                Next k
+            Else
+                If m_SeenSmtp.Exists(smtp) Then GoTo AlreadyIn
+                m_SeenSmtp.Add smtp, True
+            End If
             If n > UBound(lst) Then ReDim Preserve lst(0 To n + 999)
             ' Parse display name: "Ten (Role - Dept - Loc)"
             Dim role As String: role = ""
