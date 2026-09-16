@@ -646,8 +646,44 @@ Option Explicit
 '   - Neu Items.Sort khong dung duoc, tu dong quay lai quet toan bo nhu ban cu.
 ' ================================================================
 
+' CHANGES vs v4.96
+'   - SUA GOC RE bai toan DAY HOP THU lam DUT dot gui giua chung. Da quan sat
+'     truc tiep tren campaign that 6700 nguoi: gui duoc vai nghin mail thi
+'     hop thu bao "MAILBOX FULL", Exchange CHAN gui, Outbox dung han; xoa bot
+'     Sent Items thi Outbox chay lai ngay - xac nhan dung nguyen nhan.
+'   - Chan doan: tu truoc den nay code LUON dat m.DeleteAfterSubmit = False
+'     (luon luu 1 ban sao day du vao Sent Items cho MOI nguoi nhan) roi dung
+'     co che Shrink chay theo sau de rut gon lai. Voi mail co anh nhung
+'     (~4MB/ban), moi vai tram mail da lap day quota. Shrink KHONG BAO GIO
+'     thang duoc cuoc dua nay, vi ban chat:
+'       + Exchange can VAI PHUT de mail "chot" thi moi sua/rut gon duoc,
+'         trong khi mail moi do vao Sent Items moi ~2 giay.
+'       + Shrink chay bang Windows Timer cua PHIEN Outlook hien tai - dong
+'         hoac khoi dong lai Outlook la timer chet han, khong tu khoi phuc,
+'         va tu do khong con gi don dep nua.
+'     Toi uu cho Shrink nhanh hon (nhu da lam o v4.96) chi keo dai thoi diem
+'     thua chu khong giai quyet duoc - vi day la loi THIET KE: tao ra rac roi
+'     moi di don, thay vi khong tao ra rac.
+'   - Sua: them lua chon "Luu ban sao vao Sent Items?" ngay o buoc hoi truoc
+'     khi gui, va truyen xuong DoFullMode:
+'       + KHONG luu (mac dinh, khuyen nghi cho campaign lon): dat
+'         m.DeleteAfterSubmit = True -> Outlook khong tao ban sao nao ca.
+'         Hop thu khong phinh to, khong can Shrink, khong can archive, khong
+'         phai canh dung luong. Danh doi: KHONG recall duoc campaign do.
+'       + CO luu: giu nguyen hanh vi cu (DeleteAfterSubmit = False + Shrink
+'         + timer) de con dung duoc RecallCampaign() cho campaign nho.
+'     Khi KHONG luu thi bo han cac lan goi Shrink dinh ky, lan Shrink cuoi va
+'     Windows Timer - khong con gi de don nen khong ton thoi gian quet vo ich.
+'   - Recall va an toan dung luong la hai muc tieu LOAI TRU NHAU o quy mo lon:
+'     muon recall thi phai giu ban sao, ma giu ban sao thi day hop thu. Vi vay
+'     day duoc lam thanh lua chon co y thuc cua nguoi gui, khong tu quyet.
+'   - Dashboard KHONG bi anh huong o ca 2 lua chon: du lieu tracking (pos=sent)
+'     da duoc ban len server ngay trong vong lap gui, con pixel mo/click nam
+'     trong ban cua NGUOI NHAN - khong lien quan gi den ban luu cua nguoi gui.
+' ================================================================
+
 Private Const TRACK_URL As String = "https://service.dev-saha.aws.shb.com.vn/public-api/api/track"
-Private Const VER       As String = "4.96"
+Private Const VER       As String = "4.97"
 Private Const PH_EID    As String = "[[XEID9F2A]]"
 Private Const PH_RCPT   As String = "[[XRCP7B4C]]"
 
@@ -885,6 +921,25 @@ Public Sub SendCampaign()
     Dim doClick As Boolean
     doClick = (MsgBox("Bat click tracking?", vbYesNo + vbQuestion, "SHB Tracker") = vbYes)
 
+    ' Luu ban sao vao Sent Items hay khong - day la danh doi QUAN TRONG NHAT
+    ' voi campaign lon, xem giai thich day du o CHANGES vs v4.96.
+    ' Mac dinh la KHONG (vbDefaultButton2) vi voi campaign hang nghin nguoi,
+    ' luu ban sao gan nhu chac chan lam day hop thu va CHAN dut viec gui.
+    Dim keepSent As Boolean
+    keepSent = (MsgBox( _
+        "Luu ban sao tung mail vao Sent Items?" & vbCrLf & vbCrLf & _
+        "KHONG (khuyen nghi cho campaign lon):" & vbCrLf & _
+        "   - Hop thu KHONG phinh to, gui thong suot tu dau den cuoi." & vbCrLf & _
+        "   - Khong can rut gon, khong can archive, khong phai canh dung luong." & vbCrLf & _
+        "   - DANH DOI: KHONG the thu hoi (RecallCampaign) campaign nay." & vbCrLf & vbCrLf & _
+        "CO (chi nen dung cho campaign nho):" & vbCrLf & _
+        "   - Giu ban sao de con dung duoc RecallCampaign()." & vbCrLf & _
+        "   - RUI RO: mail co anh nhung nang vai MB; vai tram mail la du lam" & vbCrLf & _
+        "     DAY HOP THU, khi do Exchange CHAN gui va ca dot gui dung giua chung." & vbCrLf & vbCrLf & _
+        "Dashboard KHONG bi anh huong trong ca hai truong hop" & vbCrLf & _
+        "(du lieu tracking da duoc gui len server ngay luc gui).", _
+        vbYesNo + vbQuestion + vbDefaultButton2, "SHB Tracker v" & VER) = vbYes)
+
     Dim eid0 As String
     eid0 = Format(Now, "yyMMddHHmm") & Format((CLng(Timer * 100) Mod 9000) + 1000, "0000")
 
@@ -904,12 +959,14 @@ Public Sub SendCampaign()
          "Loai        : " & mType & vbCrLf & _
          "Preview text: " & Left(prevTxt, 60) & vbCrLf & _
          "Click track : " & IIf(doClick, "Bat", "Tat") & vbCrLf & _
+         "Luu Sent    : " & IIf(keepSent, "CO (con recall duoc - coi chung day hop thu)", _
+                                          "KHONG (hop thu an toan - KHONG recall duoc)") & vbCrLf & _
          String(32, "-") & vbCrLf & "Tiep tuc?"
     If MsgBox(cm, vbYesNo + vbQuestion, "SHB Tracker") = vbNo Then Exit Sub
 
     m_BagN = 0
     If fullMode Then
-        DoFullMode draft, campName, slug, squad, mType, eid0, doClick, prevTxt
+        DoFullMode draft, campName, slug, squad, mType, eid0, doClick, prevTxt, keepSent
     Else
         DoFastMode draft, slug, squad, mType, eid0
     End If
@@ -1023,7 +1080,8 @@ End Function
 ' ================================================================
 Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
                         squad As String, mType As String, eid0 As String, _
-                        doClick As Boolean, prevTxt As String)
+                        doClick As Boolean, prevTxt As String, _
+                        Optional keepSent As Boolean = True)
 
     ' Ghi lai thoi diem bat dau gui + Subject goc (KHONG doi trong suot vong
     ' lap - chi doi HTMLBody/Recipients cho tung nguoi) - de RecallCampaign()
@@ -1204,7 +1262,15 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         m.UserProperties.Add "CMEID", olText
         m.UserProperties("CMEID").Value = eid
 
-        m.DeleteAfterSubmit = False
+        ' DeleteAfterSubmit = True  -> Outlook KHONG luu ban sao vao Sent Items.
+        ' Day la diem sua GOC RE cua bai toan day hop thu: truoc day luon de
+        ' False (luon luu ban sao) roi dung co che Shrink chay theo sau de rut
+        ' gon - nhung Shrink khong bao gio thang duoc cuoc dua do (Exchange can
+        ' vai phut moi cho sua mail, trong khi mail moi do vao moi ~2 giay), nen
+        ' voi campaign hang nghin nguoi thi hop thu luon day truoc khi rut gon
+        ' kip, va khi day thi Exchange CHAN gui - dut ca dot gui giua chung.
+        ' Khong tao ra ban sao thi khong co gi de phai don.
+        m.DeleteAfterSubmit = Not keepSent
         m.send
         sentOK = sentOK + 1
         Set m = Nothing
@@ -1233,7 +1299,10 @@ Private Sub DoFullMode(draft As MailItem, campName As String, slug As String, _
         ' phinh to het 3000-3500 mail roi moi xep lai o cuoi. Cach nhau
         ' SHRINK_EVERY mail (khong phai tung mail mot) de item da gui truoc do
         ' du "on dinh" trong Sent Items, tranh loi sua MailItem ngay sau .send().
-        If (i + 1) Mod SHRINK_EVERY = 0 And i < nLst - 1 Then
+        ' Chi can rut gon khi CO luu ban sao vao Sent Items. Neu keepSent =
+        ' False thi khong co ban sao nao duoc tao ra -> khong co gi de rut gon,
+        ' bo han buoc nay (vua nhanh hon, vua khong quet Sent Items vo ich).
+        If keepSent And (i + 1) Mod SHRINK_EVERY = 0 And i < nLst - 1 Then
             ' Truyen campStart -> quet nhanh (dung som khi da di qua moc bat
             ' dau campaign). Lan quet cuoi cung sau vong lap van quet toan bo.
             ShrinkCampaignSentItems slug, , campStart
@@ -1264,23 +1333,38 @@ NextPerson:
     ' khac voi UserProperty CMSlug can vai phut moi doc on dinh duoc).
     SaveCampaignInfo slug, origSubject, campStart, Now
 
-    ' Thu rut gon NGAY 1 lan (bat duoc phan da "chot" - thuong la mail gui
-    ' som trong campaign lon nho SHRINK_EVERY o tren). KHONG chan (block)
-    ' SendCampaign de cho them - nguoi dung can duoc tra lai quyen dieu
-    ' khien ngay (vd de huy gui giua chung trong Outbox neu can).
-    Dim shrinkDiag As String: shrinkDiag = ""
-    Dim shrunk As Long: shrunk = ShrinkCampaignSentItems(slug, shrinkDiag)
-
     Dim doneMsg As String
-    doneMsg = "Hoan thanh!" & vbCrLf & "Thanh cong: " & sentOK & vbCrLf & "Loi: " & sentFail & _
-              vbCrLf & "Da rut gon Sent Items: " & shrunk & " / " & sentOK
+    doneMsg = "Hoan thanh!" & vbCrLf & "Thanh cong: " & sentOK & vbCrLf & "Loi: " & sentFail
 
-    If shrunk < sentOK Then
-        ' Bat Windows Timer chay ngam - tu dong thu lai moi 60 giay, toi da
-        ' 12 phut, KHONG can nguoi dung bam gi, KHONG hien popup nao them.
-        StartShrinkTimer slug, sentOK
-        doneMsg = doneMsg & vbCrLf & "(Con " & (sentOK - shrunk) & " mail Exchange chua 'chot' kip - " & _
-                  "se TU DONG rut gon ngam trong vai phut toi, khong can lam gi them.)"
+    If keepSent Then
+        ' Chi co y nghia khi CO luu ban sao. Thu rut gon NGAY 1 lan (bat duoc
+        ' phan da "chot" - thuong la mail gui som trong campaign lon nho
+        ' SHRINK_EVERY o tren). KHONG chan (block) SendCampaign de cho them -
+        ' nguoi dung can duoc tra lai quyen dieu khien ngay (vd de huy gui
+        ' giua chung trong Outbox neu can).
+        Dim shrinkDiag As String: shrinkDiag = ""
+        Dim shrunk As Long: shrunk = ShrinkCampaignSentItems(slug, shrinkDiag)
+        doneMsg = doneMsg & vbCrLf & "Da rut gon Sent Items: " & shrunk & " / " & sentOK
+
+        If shrunk < sentOK Then
+            ' Bat Windows Timer chay ngam - tu dong thu lai moi 60 giay, toi da
+            ' 12 phut, KHONG can nguoi dung bam gi, KHONG hien popup nao them.
+            StartShrinkTimer slug, sentOK
+            doneMsg = doneMsg & vbCrLf & "(Con " & (sentOK - shrunk) & " mail Exchange chua 'chot' kip - " & _
+                      "se TU DONG rut gon ngam trong vai phut toi, khong can lam gi them.)"
+        End If
+
+        doneMsg = doneMsg & vbCrLf & vbCrLf & _
+                  "LUU Y: dang luu ban sao vao Sent Items. Neu mail nang (anh nhung)" & vbCrLf & _
+                  "hay theo doi dung luong hop thu - day hop thu se CHAN viec gui" & vbCrLf & _
+                  "so mail con lai trong Outbox. Co the chay ArchiveNow de giai phong." & vbCrLf & _
+                  "LUU Y 2: co che tu rut gon chay bang timer cua PHIEN Outlook nay -" & vbCrLf & _
+                  "dong/khoi dong lai Outlook la no DUNG HAN, khong tu khoi phuc."
+    Else
+        doneMsg = doneMsg & vbCrLf & vbCrLf & _
+                  "Khong luu ban sao vao Sent Items (theo lua chon luc gui)." & vbCrLf & _
+                  "=> Hop thu khong phinh to, khong can rut gon/archive." & vbCrLf & _
+                  "=> KHONG the thu hoi (RecallCampaign) campaign nay."
     End If
     If sentFail > 0 Then doneMsg = doneMsg & vbCrLf & vbCrLf & "Chi tiet loi:" & failDiag
     MsgBox doneMsg, vbInformation, "SHB Tracker v" & VER
