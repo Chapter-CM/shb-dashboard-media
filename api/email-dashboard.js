@@ -11,6 +11,15 @@ const LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABEwAAAF1CAYAAADy
 const SUPABASE_URL = process.env.EMAIL_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
 const EVENTS_LIMIT = parseInt(process.env.EMAIL_EVENTS_LIMIT || process.env.EVENTS_LIMIT || '40000', 10);
+// Trần RIÊNG cho nhóm "mở/click/xác nhận đọc" (pos != sent) — TÁCH khỏi
+// EVENTS_LIMIT thay vì lấy 20% cố định của nó (xem lịch sử ở fetchLogs()).
+// Lý do tách: 1 người có thể mở lại nhiều lần (đóng+mở lại = +1 lượt), nên
+// tổng lượt mở của MỘT campaign có thể NGANG HOẶC VƯỢT số người nhận —
+// giả định "mở luôn ít hơn gửi nhiều lần" đã sai trên thực tế (case CDS
+// 16/09: 6.749 người nhận nhưng 7.151 lượt mở). Mặc định nâng lên 60000 để
+// nhiều campaign lớn gửi liên tiếp không đẩy lượt mở campaign cũ hơn ra khỏi
+// cửa sổ dữ liệu (đã xảy ra với Transformation Talk 4 sau khi CDS chạy).
+const OPEN_EVENTS_LIMIT = parseInt(process.env.EMAIL_OPEN_EVENTS_LIMIT || '60000', 10);
 
 /* ── Ẩn chiến dịch test khỏi dashboard ──────────────────────────────────────
  * Dữ liệu test vẫn nằm trong database (hệ thống chưa có API xoá, và người dùng
@@ -110,11 +119,16 @@ function fetchLogs() {
 
   // Trần lấy dữ liệu bám theo EVENTS_LIMIT (env EMAIL_EVENTS_LIMIT, mặc định
   // 40000) thay vì hardcode 5/2 trang (= 7000 dòng) như trước — một campaign gửi
-  // 6000 người tự nó đã sinh 6000 dòng "sent" nên tự vượt trần cũ. Chia 80/20 cho
-  // sent / các loại còn lại: mỗi người nhận sinh đúng 1 dòng "sent", còn mở/click
-  // ít hơn nhiều. Đây chỉ là TRẦN TRÊN — fetchPaged dừng sớm khi hết dữ liệu.
-  var sentMax  = Math.max(1, Math.ceil(EVENTS_LIMIT * 0.8 / PAGE));
-  var otherMax = Math.max(1, Math.ceil(EVENTS_LIMIT * 0.2 / PAGE));
+  // 6000 người tự nó đã sinh 6000 dòng "sent" nên tự vượt trần cũ.
+  // sentMax dùng riêng EVENTS_LIMIT (mỗi người nhận = đúng 1 dòng "sent").
+  // otherMax dùng OPEN_EVENTS_LIMIT RIÊNG (env EMAIL_OPEN_EVENTS_LIMIT, mặc
+  // định 60000) — TRƯỚC ĐÂY lấy cố định 20% của EVENTS_LIMIT (= 8000 dòng khi
+  // EVENTS_LIMIT=40000) nên khi 2 campaign lớn gửi gần nhau, tổng lượt mở
+  // (kể cả mở lại) vượt 8000 → phần CŨ (campaign gửi trước) bị cắt khỏi
+  // dashboard dù dữ liệu vẫn còn nguyên trong DB (đã xảy ra thật, xem
+  // HANDOFF.md). Đây chỉ là TRẦN TRÊN — fetchPaged dừng sớm khi hết dữ liệu.
+  var sentMax  = Math.max(1, Math.ceil(EVENTS_LIMIT / PAGE));
+  var otherMax = Math.max(1, Math.ceil(OPEN_EVENTS_LIMIT / PAGE));
 
   return Promise.all([
     // not.in.(sent,dwell): bỏ qua event dwell còn sót trong DB (tính năng đo
@@ -134,6 +148,14 @@ module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   const raw = await fetchLogs().catch(() => []);
+  // Đếm theo nhóm TRÊN DỮ LIỆU THÔ (trước khi lọc test) — phải khớp đúng cách
+  // fetchLogs() chia trần (sentMax/otherMax) thì cảnh báo chạm trần mới đúng.
+  // Nếu chỉ so q.events (đã lọc test, gộp chung 2 nhóm) với 1 trần duy nhất
+  // như trước, nhóm "mở" có thể đã đầy 100% OPEN_EVENTS_LIMIT mà tổng vẫn
+  // còn xa EVENTS_LIMIT → cảnh báo không bao giờ bật, cắt dữ liệu âm thầm
+  // (đã xảy ra thật: Transformation Talk 4 mất lượt mở sau khi CDS chạy).
+  var rawSentN = 0, rawOtherN = 0;
+  raw.forEach(function(l) { if (l && l.pos === 'sent') rawSentN++; else rawOtherN++; });
   // Lọc bỏ dữ liệu test trước khi đưa vào trang (xem HIDDEN_EXACT ở đầu file)
   const logs = raw.filter((l) => !isHiddenCampaign(l && l.campaign));
   // ts tu DB la UTC that (ghi bang new Date().toISOString() o api/email-track.js),
@@ -153,7 +175,9 @@ module.exports = async (req, res) => {
     + '<title>SHB CM Email Tracker v4.5</title>'
     + '<style>' + FONT_FACE + CSS + 'html.embed body{padding-top:63px}.embed .mast{top:63px}.embed .mast .mast-row1{display:none}</style></head>'
     + '<body><script>try{if(window.self!==window.top)document.documentElement.classList.add(\'embed\')}catch(e){document.documentElement.classList.add(\'embed\')}</script><div id="app"></div>'
-    + '<script>const LOGS=' + safe + ';const REACH_TARGET=70;const MIN_N=5;const EVENTS_LIMIT=' + EVENTS_LIMIT + ';const LOGO_URI=' + JSON.stringify(LOGO_URI) + ';' + JS + '</script></body></html>');
+    + '<script>const LOGS=' + safe + ';const REACH_TARGET=70;const MIN_N=5;const EVENTS_LIMIT=' + EVENTS_LIMIT
+    + ';const OPEN_EVENTS_LIMIT=' + OPEN_EVENTS_LIMIT + ';const RAW_SENT_N=' + rawSentN + ';const RAW_OTHER_N=' + rawOtherN
+    + ';const LOGO_URI=' + JSON.stringify(LOGO_URI) + ';' + JS + '</script></body></html>');
 };
 
 /* ─── CSS ──────────────────────────────────────────────────────────────────── */
@@ -1420,7 +1444,17 @@ function dataHealthSection(d){
     +'<div class="panel"><div class="panel-h">Sức khoẻ dữ liệu email</div><div class="hz">'+hzRows+'</div></div>'
     +'<div class="panel" style="margin-top:16px">'
     +'<div class="dh-grid">'
-    +stat('Tổng sự kiện',q.events+(q.events>=EVENTS_LIMIT*0.95?' ⚠️':''),span,q.events>=EVENTS_LIMIT*0.95?'risk':'','Tổng số event đã ghi vào Supabase. Giới hạn query: '+EVENTS_LIMIT+'. '+(q.events>=EVENTS_LIMIT*0.95?'⚠️ Gần hoặc đạt giới hạn — dữ liệu cũ có thể bị cắt. Tăng EVENTS_LIMIT trên Vercel env.':'OK.'))
+    +(function(){
+      // Cảnh báo RIÊNG cho từng nhóm (sent vs mở/click) — trước đây chỉ so
+      // TỔNG với 1 trần duy nhất nên 1 nhóm có thể đã đầy 100% mà không ai
+      // biết (xem ghi chú OPEN_EVENTS_LIMIT trong api/email-dashboard.js).
+      var sentPct=Math.round(RAW_SENT_N/EVENTS_LIMIT*100), openPct=Math.round(RAW_OTHER_N/OPEN_EVENTS_LIMIT*100);
+      var sentHot=RAW_SENT_N>=EVENTS_LIMIT*0.95, openHot=RAW_OTHER_N>=OPEN_EVENTS_LIMIT*0.95;
+      var hot=sentHot||openHot;
+      var tip='Lượt gửi: '+nf(RAW_SENT_N)+'/'+nf(EVENTS_LIMIT)+' ('+sentPct+'%). Lượt mở/click: '+nf(RAW_OTHER_N)+'/'+nf(OPEN_EVENTS_LIMIT)+' ('+openPct+'%). '
+        +(hot?'⚠️ '+(sentHot?'Lượt gửi':'Lượt mở/click')+' gần hoặc đạt giới hạn — dữ liệu cũ nhất của nhóm này có thể đã bị cắt. Tăng '+(sentHot?'EMAIL_EVENTS_LIMIT':'EMAIL_OPEN_EVENTS_LIMIT')+' trên GitLab CI/CD Variables.':'OK.');
+      return stat('Tổng sự kiện',q.events+(hot?' ⚠️':''),span,hot?'risk':'',tip);
+    })()
     +stat('Người mở thật',q.humanOpens,'người (không phải proxy)','good','Người mở bằng thiết bị thật (không phải security gateway/proxy). Dùng để tính Reach kiểm chứng.')
     +stat('Open giả (proxy)',q.proxyOpens,pp+'% — gateway auto-fetch',pp>30?'risk':pp>10?'warn':'good','Open tự động bởi security gateway (GoogleImageProxy, Outlook Safelinks...). KHÔNG phải người thật — đã loại khỏi Reach kiểm chứng.')
     +stat('Thiếu phòng ban',s.hasSeg?(q.missingDept+' ('+mp+'%)'):'—',s.hasSeg?'phiên open':'chưa bật segment',mp>30?'risk':mp>10?'warn':'','Số lượt open không có thông tin phòng ban. Kiểm tra định dạng tên người nhận.')
