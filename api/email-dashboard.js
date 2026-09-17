@@ -10,16 +10,16 @@ const LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABEwAAAF1CAYAAADy
 // Fallback tên cũ để vẫn chạy nếu chỉ set 1 bộ.
 const SUPABASE_URL = process.env.EMAIL_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
-const EVENTS_LIMIT = parseInt(process.env.EMAIL_EVENTS_LIMIT || process.env.EVENTS_LIMIT || '40000', 10);
-// Trần RIÊNG cho nhóm "mở/click/xác nhận đọc" (pos != sent) — TÁCH khỏi
-// EVENTS_LIMIT thay vì lấy 20% cố định của nó (xem lịch sử ở fetchLogs()).
-// Lý do tách: 1 người có thể mở lại nhiều lần (đóng+mở lại = +1 lượt), nên
-// tổng lượt mở của MỘT campaign có thể NGANG HOẶC VƯỢT số người nhận —
-// giả định "mở luôn ít hơn gửi nhiều lần" đã sai trên thực tế (case CDS
-// 16/09: 6.749 người nhận nhưng 7.151 lượt mở). Mặc định nâng lên 60000 để
-// nhiều campaign lớn gửi liên tiếp không đẩy lượt mở campaign cũ hơn ra khỏi
-// cửa sổ dữ liệu (đã xảy ra với Transformation Talk 4 sau khi CDS chạy).
-const OPEN_EVENTS_LIMIT = parseInt(process.env.EMAIL_OPEN_EVENTS_LIMIT || '60000', 10);
+// BỎ TRẦN LẤY DỮ LIỆU theo yêu cầu (không lo hết dung lượng database) — trước
+// đây EVENTS_LIMIT/OPEN_EVENTS_LIMIT giới hạn số dòng lấy về, sắp xếp mới->cũ
+// nên khi database lớn dần, dữ liệu CŨ (campaign gửi trước) bị cắt khỏi
+// dashboard dù vẫn còn nguyên trong DB (đã xảy ra thật: Transformation Talk 4
+// mất lượt mở sau khi campaign CDS chạy, xem lịch sử commit). Giờ fetchLogs()
+// lấy HẾT dữ liệu, dừng tự nhiên khi trang trả về ít hơn PAGE dòng — không
+// còn khái niệm "trần" nữa. BATCH=3 (số query chạy song song mỗi lượt) VẪN
+// GIỮ NGUYÊN — đây không phải trần dữ liệu mà là giới hạn kỹ thuật để không
+// làm cạn pool kết nối MySQL (connectionLimit=5, lib/db-client.js); bỏ giới
+// hạn này mới thật sự gây sự cố 403 đã từng xảy ra (xem HANDOFF.md).
 
 /* ── Ẩn chiến dịch test khỏi dashboard ──────────────────────────────────────
  * Dữ liệu test vẫn nằm trong database (hệ thống chưa có API xoá, và người dùng
@@ -95,13 +95,12 @@ function fetchLogs() {
   // request song song đã làm job sync_data fail -> public/ không được tạo ->
   // nginx trả 403 trên production. BATCH=3 giữ tổng số kết nối đồng thời (2 truy
   // vấn chạy song song = 6) tương đương mức 7 vốn đã chạy ổn định.
-  // DỪNG SỚM ngay khi một trang trả về ít hơn PAGE dòng (đã hết dữ liệu) nên đặt
-  // trần cao cũng không sinh query thừa khi DB còn ít dữ liệu.
-  function fetchPaged(basePath, maxPages) {
+  // KHÔNG CÒN TRẦN: chạy tới khi trang trả về ít hơn PAGE dòng (đã chạm đáy
+  // dữ liệu thật) thì dừng — lấy đủ 100% dữ liệu trong bảng, bất kể lớn cỡ nào.
+  function fetchPaged(basePath) {
     var BATCH = 3, out = [];
     function step(from) {
-      if (from >= maxPages) return Promise.resolve(out);
-      var to = Math.min(from + BATCH, maxPages), reqs = [];
+      var to = from + BATCH, reqs = [];
       for (var i = from; i < to; i++) {
         reqs.push(fetchOne(basePath + '&limit=' + PAGE + '&offset=' + (i * PAGE)));
       }
@@ -117,28 +116,13 @@ function fetchLogs() {
     return step(0);
   }
 
-  // Trần lấy dữ liệu bám theo EVENTS_LIMIT (env EMAIL_EVENTS_LIMIT, mặc định
-  // 40000) thay vì hardcode 5/2 trang (= 7000 dòng) như trước — một campaign gửi
-  // 6000 người tự nó đã sinh 6000 dòng "sent" nên tự vượt trần cũ.
-  // sentMax dùng riêng EVENTS_LIMIT (mỗi người nhận = đúng 1 dòng "sent").
-  // otherMax dùng OPEN_EVENTS_LIMIT RIÊNG (env EMAIL_OPEN_EVENTS_LIMIT, mặc
-  // định 60000) — TRƯỚC ĐÂY lấy cố định 20% của EVENTS_LIMIT (= 8000 dòng khi
-  // EVENTS_LIMIT=40000) nên khi 2 campaign lớn gửi gần nhau, tổng lượt mở
-  // (kể cả mở lại) vượt 8000 → phần CŨ (campaign gửi trước) bị cắt khỏi
-  // dashboard dù dữ liệu vẫn còn nguyên trong DB (đã xảy ra thật, xem
-  // HANDOFF.md). Đây chỉ là TRẦN TRÊN — fetchPaged dừng sớm khi hết dữ liệu.
-  var sentMax  = Math.max(1, Math.ceil(EVENTS_LIMIT / PAGE));
-  var otherMax = Math.max(1, Math.ceil(OPEN_EVENTS_LIMIT / PAGE));
-
   return Promise.all([
     // not.in.(sent,dwell): bỏ qua event dwell còn sót trong DB (tính năng đo
     // thời gian đọc đã gỡ — chờ migrate hạ tầng nội bộ, xem KE_HOACH_MIGRATION.md)
-    // order=ts.desc (MỚI trước) cho cả 2: khi chạm trần thì phần bị cắt là dữ liệu
-    // CŨ, đúng như cảnh báo "dữ liệu cũ có thể bị cắt" hiển thị ở UI. Trước đây
-    // "sent" dùng ts.asc nên phần bị cắt lại là dữ liệu MỚI — campaign vừa gửi
-    // biến mất khỏi dashboard.
-    fetchPaged(base + '&pos=eq.sent&order=ts.desc',              sentMax),
-    fetchPaged(base + '&pos=not.in.(sent,dwell)&order=ts.desc', otherMax)
+    // order=ts.desc chỉ còn ý nghĩa hiển thị (mới trước), KHÔNG còn liên quan
+    // gì đến cắt dữ liệu vì đã bỏ trần — giữ nguyên thứ tự cho nhất quán.
+    fetchPaged(base + '&pos=eq.sent&order=ts.desc'),
+    fetchPaged(base + '&pos=not.in.(sent,dwell)&order=ts.desc')
   ])
   .then(function(r) { return r[0].concat(r[1]); })
   .catch(function()  { return []; });
@@ -148,12 +132,9 @@ module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   const raw = await fetchLogs().catch(() => []);
-  // Đếm theo nhóm TRÊN DỮ LIỆU THÔ (trước khi lọc test) — phải khớp đúng cách
-  // fetchLogs() chia trần (sentMax/otherMax) thì cảnh báo chạm trần mới đúng.
-  // Nếu chỉ so q.events (đã lọc test, gộp chung 2 nhóm) với 1 trần duy nhất
-  // như trước, nhóm "mở" có thể đã đầy 100% OPEN_EVENTS_LIMIT mà tổng vẫn
-  // còn xa EVENTS_LIMIT → cảnh báo không bao giờ bật, cắt dữ liệu âm thầm
-  // (đã xảy ra thật: Transformation Talk 4 mất lượt mở sau khi CDS chạy).
+  // Đếm theo nhóm TRÊN DỮ LIỆU THÔ (trước khi lọc test) — hiển thị THÔNG TIN
+  // ở panel "Sức khoẻ dữ liệu" (không còn ý nghĩa cảnh báo cắt dữ liệu vì đã
+  // bỏ trần, xem ghi chú ở fetchLogs()).
   var rawSentN = 0, rawOtherN = 0;
   raw.forEach(function(l) { if (l && l.pos === 'sent') rawSentN++; else rawOtherN++; });
   // Lọc bỏ dữ liệu test trước khi đưa vào trang (xem HIDDEN_EXACT ở đầu file)
@@ -175,8 +156,8 @@ module.exports = async (req, res) => {
     + '<title>SHB CM Email Tracker v4.5</title>'
     + '<style>' + FONT_FACE + CSS + 'html.embed body{padding-top:63px}.embed .mast{top:63px}.embed .mast .mast-row1{display:none}</style></head>'
     + '<body><script>try{if(window.self!==window.top)document.documentElement.classList.add(\'embed\')}catch(e){document.documentElement.classList.add(\'embed\')}</script><div id="app"></div>'
-    + '<script>const LOGS=' + safe + ';const REACH_TARGET=70;const MIN_N=5;const EVENTS_LIMIT=' + EVENTS_LIMIT
-    + ';const OPEN_EVENTS_LIMIT=' + OPEN_EVENTS_LIMIT + ';const RAW_SENT_N=' + rawSentN + ';const RAW_OTHER_N=' + rawOtherN
+    + '<script>const LOGS=' + safe + ';const REACH_TARGET=70;const MIN_N=5'
+    + ';const RAW_SENT_N=' + rawSentN + ';const RAW_OTHER_N=' + rawOtherN
     + ';const LOGO_URI=' + JSON.stringify(LOGO_URI) + ';' + JS + '</script></body></html>');
 };
 
@@ -1444,17 +1425,7 @@ function dataHealthSection(d){
     +'<div class="panel"><div class="panel-h">Sức khoẻ dữ liệu email</div><div class="hz">'+hzRows+'</div></div>'
     +'<div class="panel" style="margin-top:16px">'
     +'<div class="dh-grid">'
-    +(function(){
-      // Cảnh báo RIÊNG cho từng nhóm (sent vs mở/click) — trước đây chỉ so
-      // TỔNG với 1 trần duy nhất nên 1 nhóm có thể đã đầy 100% mà không ai
-      // biết (xem ghi chú OPEN_EVENTS_LIMIT trong api/email-dashboard.js).
-      var sentPct=Math.round(RAW_SENT_N/EVENTS_LIMIT*100), openPct=Math.round(RAW_OTHER_N/OPEN_EVENTS_LIMIT*100);
-      var sentHot=RAW_SENT_N>=EVENTS_LIMIT*0.95, openHot=RAW_OTHER_N>=OPEN_EVENTS_LIMIT*0.95;
-      var hot=sentHot||openHot;
-      var tip='Lượt gửi: '+nf(RAW_SENT_N)+'/'+nf(EVENTS_LIMIT)+' ('+sentPct+'%). Lượt mở/click: '+nf(RAW_OTHER_N)+'/'+nf(OPEN_EVENTS_LIMIT)+' ('+openPct+'%). '
-        +(hot?'⚠️ '+(sentHot?'Lượt gửi':'Lượt mở/click')+' gần hoặc đạt giới hạn — dữ liệu cũ nhất của nhóm này có thể đã bị cắt. Tăng '+(sentHot?'EMAIL_EVENTS_LIMIT':'EMAIL_OPEN_EVENTS_LIMIT')+' trên GitLab CI/CD Variables.':'OK.');
-      return stat('Tổng sự kiện',q.events+(hot?' ⚠️':''),span,hot?'risk':'',tip);
-    })()
+    +stat('Tổng sự kiện',q.events,span,'','Tổng số event lấy từ database — KHÔNG còn giới hạn, lấy đủ 100% dữ liệu hiện có. Lượt gửi: '+nf(RAW_SENT_N)+'. Lượt mở/click/xác nhận đọc: '+nf(RAW_OTHER_N)+'.')
     +stat('Người mở thật',q.humanOpens,'người (không phải proxy)','good','Người mở bằng thiết bị thật (không phải security gateway/proxy). Dùng để tính Reach kiểm chứng.')
     +stat('Open giả (proxy)',q.proxyOpens,pp+'% — gateway auto-fetch',pp>30?'risk':pp>10?'warn':'good','Open tự động bởi security gateway (GoogleImageProxy, Outlook Safelinks...). KHÔNG phải người thật — đã loại khỏi Reach kiểm chứng.')
     +stat('Thiếu phòng ban',s.hasSeg?(q.missingDept+' ('+mp+'%)'):'—',s.hasSeg?'phiên open':'chưa bật segment',mp>30?'risk':mp>10?'warn':'','Số lượt open không có thông tin phòng ban. Kiểm tra định dạng tên người nhận.')
