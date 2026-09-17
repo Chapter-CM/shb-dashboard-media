@@ -571,9 +571,18 @@ function deviceOf(ua){
   return 'unknown';
 }
 
-function process(logs){
-  if(!logs||!logs.length)return null;
+// Cache kết quả dựng session (bước tốn nhất: duyệt TỪNG event, sort topEvents
+// mỗi session) theo khoảng thời gian đang xem (_days/_from/_to) — KHÔNG phụ
+// thuộc _filter (lọc segment: chiến dịch/phòng ban/thiết bị...). Từ khi bỏ
+// trần lấy dữ liệu, số event trong 1 khoảng thời gian có thể lớn hơn nhiều so
+// với trước (campaign cũ không còn bị cắt), nên bước này ngày càng tốn — mà
+// trước đây bị CHẠY LẠI TỪ ĐẦU mỗi lần bấm 1 filter segment, dù logs không
+// đổi. Bấm filter giờ chỉ chạy lại phần lọc/tổng hợp (rẻ, tỉ lệ theo số
+// NGƯỜI chứ không phải số EVENT) — chỉ dựng lại session khi đổi khoảng thời
+// gian xem (7N/30N/tuỳ chọn...).
+var _procCache=null;
 
+function buildSessions(logs){
   /* ══ 1. SESSION BUILDING ══════════════════════════════════════════
      Key = event_id || rcpt. Collect topEvents[] per session, tính
      openCount sau khi sort ASC — tránh nhầm do Supabase fetch DESC. */
@@ -660,6 +669,21 @@ function process(logs){
   function uniq(attr,blank){var m={};arrAll.forEach(function(s){var v=s[attr];if(!v){if(blank)v=blank;else return;}m[v]=1;});return Object.keys(m).sort();}
   var opts={campaign:uniq('campaign'),dept:uniq('dept','(Chưa phân loại)'),role:uniq('role','(Chưa phân loại)'),initiative:uniq('initiative'),msg_type:uniq('msg_type'),
     device:(function(){var m={};arrAll.forEach(function(s){s.uas.forEach(function(ua){var d=deviceOf(ua);if(d)m[d]=1;});});return Object.keys(m).sort();})()};
+
+  return {arrAll:arrAll, opts:opts, eventsLen:logs.length};
+}
+
+function process(logs){
+  if(!logs||!logs.length)return null;
+  var _key=_days+'|'+(_from||'')+'|'+(_to||'');
+  var built;
+  if(_procCache&&_procCache.key===_key&&_procCache.eventsLen===logs.length){
+    built=_procCache.built;
+  } else {
+    built=buildSessions(logs);
+    _procCache={key:_key,eventsLen:logs.length,built:built};
+  }
+  var arrAll=built.arrAll, opts=built.opts;
 
   /* ══ 3. CROSS-FILTER ═══════════════════════════════════════════════ */
   var F=(_filter&&typeof _filter==='object')?_filter:{};
