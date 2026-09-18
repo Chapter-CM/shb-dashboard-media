@@ -111,6 +111,26 @@ db_cleanup_test:
     - npm install --no-save mysql2
     - node db/db_cleanup_test.js
 
+# Điều tra lượt "mở" email bất thường (vd 1 người hiện hàng chục lượt mở
+# trong đúng 1 ngày) — CHỈ ĐỌC, không sửa/xoá gì. Chạy TAY (when: manual):
+#   - Không điền gì: liệt kê TOP 20 người có nhiều lượt "top" (mở) nhất toàn
+#     DB (thêm biến CAMPAIGN để lọc theo 1 chiến dịch).
+#   - Điền RCPT = email cần soi (vd trung.lt@shb.com.vn): in TOÀN BỘ event
+#     thô (giờ, User-Agent) của người đó theo thứ tự thời gian, kèm khoảng
+#     cách giữa các lần mở — để xác định đây là mở thật hay do mail
+#     client/gateway tự tải lại ảnh (xem chi tiết cách đọc trong
+#     db/db_inspect_opens.js).
+#   (GitLab: Pipelines -> job -> nút ▶ -> Variables -> điền RCPT/CAMPAIGN.)
+db_inspect_opens:
+  stage: db_check
+  image: gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-alpine-amd
+  when: manual
+  allow_failure: true
+  dependencies: []
+  script:
+    - npm install --no-save mysql2
+    - node db/db_inspect_opens.js
+
 pages:
   stage: pages
   image: gitlab-nhs.shb.com.vn:5050/omnichannel/omni-devops/ci-template/node:20-alpine-amd
