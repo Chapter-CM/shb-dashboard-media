@@ -721,6 +721,14 @@ function process(logs){
       if(devOC>0){p.opened=true;p.openCount+=devOC;}
       else if(!(F.device&&F.device.length)){p.opened=true;} // không filter: opened luôn true
       if(s.openAt&&(!p.lastOpen||s.openAt>p.lastOpen))p.lastOpen=s.openAt;
+      // Theo dõi SỐ NGÀY KHÁC NHAU có lượt mở — dùng để gắn cờ ⚠️ "mở dồn dập"
+      // khi openCount cao nhưng dồn hết vào 1-2 ngày (khả năng cao là mail
+      // client/gateway tự tải lại ảnh khi email còn mở trong Reading Pane hoặc
+      // bị quét lặp lại, KHÔNG hẳn là người đọc mở lại thật — xem recRow()).
+      // CHỈ CẢNH BÁO, KHÔNG tự trừ khỏi openCount — chưa có bằng chứng UA/nhịp
+      // mở thật để đổi cách tính, tự trừ số liệu lúc này là suy đoán.
+      if(!p.openDays)p.openDays={};
+      (s.topEvents||[]).forEach(function(ev){if(ev.ts)p.openDays[ev.ts.slice(0,10)]=true;});
     }
     if(s.confirmed)p.confirmed=true;
     if(s.clicked)p.clicked=true;
@@ -730,6 +738,15 @@ function process(logs){
   });
 
   var persons=Object.values(personMap);
+  // Ngưỡng cảnh báo "mở dồn dập": ≥15 lượt mở nhưng dồn hết vào ≤2 ngày khác
+  // nhau — con số CHỌN THEO KINH NGHIỆM (chưa có dữ liệu UA/nhịp mở thật để
+  // hiệu chỉnh chính xác), mục đích chỉ để LỘ RA những trường hợp bất thường
+  // rõ rệt (vd 93 lượt/1 ngày) cho người xem tự đánh giá, không phải ngưỡng
+  // khoa học. Xem HANDOFF.md nếu sau này cần điều chỉnh.
+  persons.forEach(function(p){
+    p.openDaysCount=p.openDays?Object.keys(p.openDays).length:0;
+    p.burstSuspect=p.openCount>=15&&p.openDaysCount>0&&p.openDaysCount<=2;
+  });
   var hasSeg=persons.some(function(p){return p.dept||p.role||p.loc;});
 
   // Người được gửi: nếu có sent events → đếm người có sent event, cộng thêm người đã mở nhưng
@@ -1159,9 +1176,10 @@ var _recTab='all';
 function setRecTab(t){_recTab=t;resection('s-rec',recipientSection);}
 function recRow(p){
   var tier=!p.opened?'cold':p.clicked?'hot':'warm';
-  return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở':'Chưa mở email nào')+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
+  var burstTip=p.burstSuspect?(' · ⚠️ '+p.openCount+' lượt mở dồn vào '+p.openDaysCount+' ngày — khả năng cao do mail client/gateway tự tải lại ảnh (Reading Pane, quét bảo mật), không hẳn là mở lại thật. CHƯA trừ khỏi số liệu, cần kiểm tra UA thực tế.'):'';
+  return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở':'Chưa mở email nào')+burstTip+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
     +'<td>'+esc(fmtSeg(p.dept||p.role))+'</td>'
-    +'<td class="num">'+(p.opened?p.openCount:0)+'</td>'
+    +'<td class="num">'+(p.opened?p.openCount:0)+(p.burstSuspect?' <span style="color:var(--warn)" title="Mở dồn dập bất thường">⚠️</span>':'')+'</td>'
     +'<td class="num" style="font-size:11px">'+(p.lastOpen?fmtTime(p.lastOpen):'—')+'</td>'
     +'<td class="num">'+(p.clicked?p.clickCount:0)+'</td></tr>';
 }
