@@ -58,6 +58,37 @@ async function fetchAll(basePath) {
   return out;
 }
 
+// ts trong DB luu gio UTC (ghi bang new Date().toISOString() o api/email-track.js),
+// mysql2 dateStrings:true tra ve "YYYY-MM-DD HH:MM:SS" KHONG co hau to "Z" nen
+// new Date(chuoi do) se bi hieu NHAM la gio LOCAL cua may chay script (o day la
+// container CI, thuong la UTC) thay vi UTC that -> hien thi sai gio-trong-ngay
+// (BUG THAT DA XAY RA: mot dong "04:01" tuong bat thuong hoa ra la 11:01 gio VN
+// that, hoan toan binh thuong - xem HANDOFF.md, dashboard da tung gap dung loi
+// nay va sua bang ham fmtTime()/vnTime()). Ham nay lam dung cach do: ep "Z" vao
+// truoc khi parse Date, roi quy doi hien thi sang gio Viet Nam (UTC+7).
+// LUU Y: cac phep tinh KHOANG CACH (giay) giua 2 lan mo KHONG bi anh huong boi
+// loi nay - do la HIEU SO giua 2 moc UTC, lech mui gio nhu nhau o ca 2 dau nen
+// tu trieu tieu. Chi phan HIEN THI "may gio trong ngay" la sai, khong anh
+// huong ket luan ve do DEU/KHONG DEU cua nhip mo.
+function fmtVN(tsStr) {
+  if (!tsStr) return tsStr;
+  var iso = String(tsStr).replace(' ', 'T') + 'Z';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return tsStr;
+  return d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' (giờ VN)';
+}
+
+// Ngay theo LICH VIET NAM (yyyy-mm-dd, UTC+7) - dung de dem "so ngay khac
+// nhau" cho dung truc giac nguoi doc, tranh lech 1 ngay o cac moc gan nua dem
+// UTC (vd 23:30 UTC = 06:30 SANG NGAY HOM SAU gio VN).
+function vnDateKey(tsStr) {
+  var iso = String(tsStr).replace(' ', 'T') + 'Z';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return String(tsStr).slice(0, 10);
+  var parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  return parts; // en-CA format = yyyy-mm-dd
+}
+
 function matchesCampaign(row) {
   if (!CAMPAIGN) return true;
   return String(row.campaign || '').toLowerCase().indexOf(CAMPAIGN.toLowerCase()) > -1;
@@ -100,7 +131,7 @@ async function main() {
           lastTopTs = r.ts;
           uaCount[r.ua || '(rong)'] = (uaCount[r.ua || '(rong)'] || 0) + 1;
         }
-        console.log(r.ts + '  ' + String(r.pos).padEnd(6) + '  campaign=' + (r.campaign || '') + '  ua="' + (r.ua || '') + '"' + gapNote);
+        console.log(fmtVN(r.ts) + '  ' + String(r.pos).padEnd(6) + '  campaign=' + (r.campaign || '') + '  ua="' + (r.ua || '') + '"' + gapNote);
       });
       console.log('\n--- Tong hop User-Agent cua cac lan "top" (mo) ---');
       Object.keys(uaCount).sort((a, b) => uaCount[b] - uaCount[a]).forEach((ua) => {
@@ -129,7 +160,7 @@ async function main() {
         if (!byRcpt[r.rcpt]) byRcpt[r.rcpt] = { uaSet: new Set(), daySet: new Set(), tsList: [] };
         const g = byRcpt[r.rcpt];
         g.uaSet.add(r.ua || '');
-        g.daySet.add(String(r.ts).slice(0, 10));
+        g.daySet.add(vnDateKey(r.ts)); // ngay theo lich VN, khong phai ngay UTC (xem ham fmtVN)
         g.tsList.push(r.ts);
       });
 
@@ -178,7 +209,7 @@ async function main() {
         } else {
           verdict = burst ? 'NGHI NGO (qua it diem du lieu de do do deu, can xem raw event)' : 'CO THE MO THAT';
         }
-        console.log(r.rcpt + ' | ' + r.n + ' | ' + r.nUa + ' | ' + r.nDays + ' | ' + r.first + ' | ' + r.last + ' | ' + meanS + ' | ' + cv + ' | ' + verdict);
+        console.log(r.rcpt + ' | ' + r.n + ' | ' + r.nUa + ' | ' + r.nDays + ' | ' + fmtVN(r.first) + ' | ' + fmtVN(r.last) + ' | ' + meanS + ' | ' + cv + ' | ' + verdict);
       });
       console.log('\nKET LUAN chi la GOI Y tu heuristic (nguong/cong thuc chua qua kiem chung dai han) -');
       console.log('dong "NGHI NGO"/CO THE MO THAT van nen doi chieu them neu can chac chan tuyet doi.');
