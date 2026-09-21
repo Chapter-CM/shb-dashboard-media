@@ -45,7 +45,7 @@ const dbClient = require('../lib/db-client');
 const { RCPT, CAMPAIGN } = process.env;
 const PAGE = 1000;
 // Doi so nay MOI LAN sua file, de doi chieu ban dang chay tren GitLab.
-const TOOL_VERSION = 'v5 (21/09/2026) - Che do D chay tu dong cung Che do B, khong can bien OPENTIME';
+const TOOL_VERSION = 'v6 (21/09/2026) - them Che do E: kiem tra don cuc nhieu nguoi nhan trong 60 giay (gia thuyet Sent Items cua nguoi gui)';
 
 async function fetchAll(basePath) {
   let out = [];
@@ -270,7 +270,93 @@ async function runOpenTiming(opts) {
   console.log('Neu phan bo trai deu qua nhieu khung gio/ngay (giong hanh vi doc that, ai doc luc nao doc)');
   console.log('thi phan lon la nguoi that, khong phai tu dong.');
 
+  runBurstCheck(rows);
+
   if (!opts.keepConnection) await dbClient.end().catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CHE DO E — PHEP KIEM TRA QUYET DINH cho gia thuyet "mo gia do ban luu
+// trong Sent Items cua NGUOI GUI":
+//
+// Moi nguoi nhan co pixel rieng (eid rieng, xem tools/CampaignTracker.bas:
+// eid = eid0 & Format(i, "0000")). Ban mail gui cho tung nguoi duoc luu vao
+// Sent Items cua NGUOI GUI - KEM pixel mang eid cua CHINH nguoi nhan do.
+// Vi vay MOI LAN nguoi GUI cuon qua/xem lai thu muc Sent Items, Outlook ve
+// lai cac mail do -> pixel ban di -> he thong ghi nhan nham thanh "nguoi
+// nhan X vua mo email".
+//
+// DAU HIEU QUYET DINH: neu dung la nguoi gui cuon Sent Items, se thay NHIEU
+// NGUOI NHAN KHAC NHAU co luot mo DON CUC trong cung vai giay (cuon tu mail
+// nay sang mail kia). Nguoi nhan that mo email thi KHONG co ly do gi de 20
+// nguoi khac nhau cung mo trong vong 30 giay, lap di lap lai nhieu lan.
+//
+// Day la phep kiem tra NHANH NHAT: dung ngay du lieu da co, khong can gui
+// mail test, khong can recall, khong can doi.
+function runBurstCheck(rows) {
+  const tops = rows.filter((r) => r.pos === 'top' && r.rcpt && r.ts)
+    .map((r) => ({ rcpt: r.rcpt, ua: r.ua || '', ms: new Date(String(r.ts).replace(' ', 'T') + 'Z').getTime(), ts: r.ts }))
+    .filter((r) => !isNaN(r.ms))
+    .sort((a, b) => a.ms - b.ms);
+
+  if (tops.length < 2) return;
+
+  const WINDOW_MS = 60 * 1000; // cua so 60 giay
+  const clusters = [];
+  let lo = 0;
+  for (let hi = 0; hi < tops.length; hi++) {
+    while (tops[hi].ms - tops[lo].ms > WINDOW_MS) lo++;
+    const seen = new Set();
+    for (let k = lo; k <= hi; k++) seen.add(tops[k].rcpt);
+    if (seen.size >= 3) {
+      clusters.push({ startMs: tops[lo].ms, startTs: tops[lo].ts, nRcpt: seen.size, nEvent: hi - lo + 1 });
+    }
+  }
+
+  // Gom cac cua so chong lan nhau, chi giu dinh cao nhat cua tung dot
+  const peaks = [];
+  clusters.forEach((c) => {
+    const last = peaks[peaks.length - 1];
+    if (last && c.startMs - last.startMs <= WINDOW_MS * 2) {
+      if (c.nRcpt > last.nRcpt) peaks[peaks.length - 1] = c;
+    } else {
+      peaks.push(c);
+    }
+  });
+  peaks.sort((a, b) => b.nRcpt - a.nRcpt);
+
+  console.log('\n' + '='.repeat(70) + '\n');
+  console.log('=== CHE DO E: kiem tra "nhieu NGUOI NHAN KHAC NHAU cung mo trong 60 giay" ===\n');
+  console.log('Y nghia: neu mot may (Outlook cua NGUOI GUI) cuon qua thu muc Sent Items,');
+  console.log('pixel cua NHIEU NGUOI NHAN khac nhau se ban di don cuc trong vai giay.');
+  console.log('Nguoi nhan that mo mail thi khong the dong bo kieu do.\n');
+
+  if (!peaks.length) {
+    console.log('KHONG tim thay dot nao co tu 3 nguoi nhan khac nhau tro len trong cung 60 giay.');
+    console.log('=> KHONG ung ho gia thuyet "nguoi gui cuon Sent Items". Luot mo co ve phan tan tu nhien.');
+    return;
+  }
+
+  const top10 = peaks.slice(0, 10);
+  console.log('10 dot don cuc manh nhat (sap theo so NGUOI NHAN khac nhau trong 1 cua so 60 giay):');
+  console.log('thoi diem bat dau | so NGUOI NHAN khac nhau | tong so su kien');
+  top10.forEach((c) => {
+    console.log('  ' + fmtVN(c.startTs) + ' | ' + c.nRcpt + ' nguoi | ' + c.nEvent + ' su kien');
+  });
+
+  const maxRcpt = top10[0].nRcpt;
+  const bigClusters = peaks.filter((p) => p.nRcpt >= 10).length;
+  console.log('\nTong so dot co tu 10 nguoi nhan khac nhau tro len trong 60 giay: ' + bigClusters);
+  console.log('Dot manh nhat: ' + maxRcpt + ' nguoi nhan khac nhau trong vong 60 giay.');
+  if (maxRcpt >= 10) {
+    console.log('\n=> KET LUAN: gan nhu CHAC CHAN co mot may tu dong ve lai hang loat mail.');
+    console.log('   ' + maxRcpt + ' nguoi khac nhau khong the tu mo email trong cung 60 giay mot cach ngau nhien.');
+    console.log('   Khop voi gia thuyet: Outlook cua NGUOI GUI ve lai cac ban luu trong Sent Items.');
+    console.log('   Kiem chung cuoi cung: hoi nguoi gui campaign xem ho co mo/cuon thu muc Sent Items');
+    console.log('   vao dung cac thoi diem liet ke o tren khong.');
+  } else {
+    console.log('\n=> Chua du manh de ket luan. Cac dot chi gom vai nguoi, co the trung hop that.');
+  }
 }
 
 async function main() {
