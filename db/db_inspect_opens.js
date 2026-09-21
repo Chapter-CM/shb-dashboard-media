@@ -94,6 +94,75 @@ function matchesCampaign(row) {
   return String(row.campaign || '').toLowerCase().indexOf(CAMPAIGN.toLowerCase()) > -1;
 }
 
+// CHE DO C — kiem dinh gia thuyet "mo tu iPhone phan lon la gia (Apple Mail
+// Privacy Protection tu tai truoc anh, khong phai nguoi doc that)":
+// So sanh TY LE CLICK giua nhom nguoi CHI co bang chung mo tu iPhone, nhom
+// CHI mo tu may tinh (Outlook Desktop), va nhom ca 2. Neu gia thuyet MPP dung,
+// ty le click cua nhom "chi iPhone" phai THAP HON HAN nhom "chi may tinh" -
+// vi phan lon "mo" tren iPhone la Apple tu tai, khong di kem hanh vi doc/bam
+// link that. Day la phep kiem chung KHACH QUAN bang so lieu, khong phai suy
+// doan them.
+// Kich hoat: dat bien UACHECK=1 (bat ky gia tri gi), khong dien RCPT.
+function categorizeUA(ua) {
+  if (/iPhone|iPad/i.test(ua)) return 'iphone';
+  if (/ms-office|MSOffice|Trident|Microsoft Outlook/i.test(ua)) return 'desktop';
+  if (/Android|Mobile/i.test(ua)) return 'android';
+  return 'khac';
+}
+
+async function runUACheck() {
+  console.log('=== CHE DO C: doi chieu UA cua lan MO voi ty le CLICK ' +
+    (CAMPAIGN ? '(loc gan dung campaign chua "' + CAMPAIGN + '")' : '(toan bo DB)') + ' ===\n');
+  const path = '/rest/v1/events?select=rcpt,campaign,pos,ua&pos=in.(top,click)&order=ts.asc';
+  let rows = await fetchAll(path);
+  rows = rows.filter(matchesCampaign);
+
+  if (!rows.length) {
+    console.log('Khong co du lieu top/click nao khop dieu kien.');
+    await dbClient.end().catch(() => {});
+    return;
+  }
+
+  const byRcpt = {};
+  rows.forEach((r) => {
+    if (!byRcpt[r.rcpt]) byRcpt[r.rcpt] = { openCats: new Set(), clicked: false };
+    const g = byRcpt[r.rcpt];
+    if (r.pos === 'top') g.openCats.add(categorizeUA(r.ua || ''));
+    if (r.pos === 'click') g.clicked = true;
+  });
+
+  // Phan nhom: 'iphone' (CHI iphone/ipad, khong may tinh/android), 'desktop'
+  // (CHI may tinh), 'mixed' (ca 2 loai tro len), 'khac' (chi loai khong xac
+  // dinh duoc, vd android don le hoac UA la).
+  const groups = { iphone: { n: 0, clicked: 0 }, desktop: { n: 0, clicked: 0 }, mixed: { n: 0, clicked: 0 }, khac: { n: 0, clicked: 0 } };
+  Object.keys(byRcpt).forEach((rcpt) => {
+    const g = byRcpt[rcpt];
+    if (!g.openCats.size) return; // khong co lan "top" nao (chi co click ma khong co open - hiem, bo qua)
+    const cats = Array.from(g.openCats);
+    let key;
+    if (cats.length > 1) key = 'mixed';
+    else if (cats[0] === 'iphone') key = 'iphone';
+    else if (cats[0] === 'desktop') key = 'desktop';
+    else key = 'khac';
+    groups[key].n++;
+    if (g.clicked) groups[key].clicked++;
+  });
+
+  console.log('Nhom nguoi mo (theo loai thiet bi DUY NHAT tung thay o lan "top") | So nguoi | So nguoi co click | Ty le click');
+  ['desktop', 'iphone', 'mixed', 'khac'].forEach((key) => {
+    const g = groups[key];
+    const pct = g.n > 0 ? Math.round((g.clicked / g.n) * 100) : 0;
+    console.log(key.padEnd(10) + ' | ' + g.n + ' | ' + g.clicked + ' | ' + pct + '%');
+  });
+
+  console.log('\nDoc ket qua: neu ty le click nhom "iphone" THAP HON RO RET nhom "desktop"');
+  console.log('(vd desktop 15% nhung iphone chi 1-2%) -> ung ho manh gia thuyet Apple Mail');
+  console.log('Privacy Protection tu tai truoc anh tren iPhone, phan lon "mo" tren iPhone la GIA.');
+  console.log('Neu 2 ty le xap xi nhau -> gia thuyet MPP KHONG du de giai thich, can xem lai.');
+
+  await dbClient.end().catch(() => {});
+}
+
 async function main() {
   if (!process.env.INGEST_API_URL && !process.env.MYSQL_HOST) {
     console.error('Thieu INGEST_API_URL (+ INGEST_SECRET) hoac MYSQL_HOST trong CI/CD Variables.');
@@ -106,6 +175,10 @@ async function main() {
   }
 
   const sel = 'pos,campaign,ua,ts';
+
+  if (!RCPT && process.env.UACHECK) {
+    return runUACheck();
+  }
 
   if (RCPT) {
     console.log('=== CHE DO A: raw event cua "' + RCPT + '" ' +
