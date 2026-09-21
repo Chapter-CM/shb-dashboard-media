@@ -45,7 +45,7 @@ const dbClient = require('../lib/db-client');
 const { RCPT, CAMPAIGN } = process.env;
 const PAGE = 1000;
 // Doi so nay MOI LAN sua file, de doi chieu ban dang chay tren GitLab.
-const TOOL_VERSION = 'v7 (21/09/2026) - Che do E them kiem tra THU TU GUI (event_id lien tiep) de phan biet co che';
+const TOOL_VERSION = 'v8 (21/09/2026) - them Che do F: doi chieu log cac nguoi mo cao, tach luot GIA (trung khoanh khac) vs THAT (rieng le)';
 
 async function fetchAll(basePath) {
   let out = [];
@@ -274,8 +274,100 @@ async function runOpenTiming(opts) {
   console.log('thi phan lon la nguoi that, khong phai tu dong.');
 
   runBurstCheck(rows);
+  runCommonPatternCheck(rows);
 
   if (!opts.keepConnection) await dbClient.end().catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CHE DO F — DOI CHIEU TRUC TIEP LOG CUA NHUNG NGUOI MO CAO BAT THUONG:
+// tim xem cac luot mo cua ho co gi GIONG NHAU. Neu la may sinh hang loat
+// thi NHIEU NGUOI KHAC NHAU se co luot mo trung DUNG CUNG MOT KHOANH KHAC
+// (chenh nhau vai giay). Nguoi that mo mail khong the trung khoanh khac
+// voi hang chuc nguoi khac, lap di lap lai.
+//
+// Khac Che do E (dem so dot tren toan bo campaign), che do nay bam theo
+// TUNG NGUOI: dem duoc bao nhieu luot mo cua ho la "trung khoanh khac voi
+// nguoi khac" (= gan nhu chac chan do may) va bao nhieu la "rieng le"
+// (= co the la mo that) -> ra duoc SO LUOT MO THAT UOC TINH cho tung nguoi.
+function runCommonPatternCheck(rows) {
+  const tops = rows.filter((r) => r.pos === 'top' && r.rcpt && r.ts)
+    .map((r) => ({ rcpt: r.rcpt, ua: r.ua || '', ms: new Date(String(r.ts).replace(' ', 'T') + 'Z').getTime(), ts: r.ts }))
+    .filter((r) => !isNaN(r.ms))
+    .sort((a, b) => a.ms - b.ms);
+  if (tops.length < 10) return;
+
+  // Voi moi luot mo: dem so NGUOI NHAN KHAC NHAU co luot mo trong +/- 2 giay.
+  // Dung DUNG tieu chi da duoc kiem chung tren du lieu that o Che do E:
+  // tu 10 NGUOI NHAN KHAC NHAU tro len trong cung 60 giay. Muc nay da xac
+  // dinh la bat kha thi voi nguoi that (du lieu that co toi 246 dot nhu vay,
+  // dot manh nhat 90 nguoi/60 giay). Khong tu dat nguong moi.
+  const NEAR_MS = 30000;   // +/- 30 giay = cua so 60 giay
+  const MIN_SHARED = 10;
+  let lo = 0, hi = 0;
+  for (let i = 0; i < tops.length; i++) {
+    while (tops[lo].ms < tops[i].ms - NEAR_MS) lo++;
+    while (hi + 1 < tops.length && tops[hi + 1].ms <= tops[i].ms + NEAR_MS) hi++;
+    const seen = new Set();
+    for (let k = lo; k <= hi; k++) seen.add(tops[k].rcpt);
+    tops[i].sharedWith = seen.size;
+    tops[i].shared = seen.size >= MIN_SHARED;
+  }
+
+  const byRcpt = {};
+  tops.forEach((t) => {
+    if (!byRcpt[t.rcpt]) byRcpt[t.rcpt] = { total: 0, shared: 0, uas: new Set() };
+    const g = byRcpt[t.rcpt];
+    g.total++;
+    if (t.shared) g.shared++;
+    g.uas.add(t.ua);
+  });
+
+  const list = Object.keys(byRcpt).map((rcpt) => {
+    const g = byRcpt[rcpt];
+    return { rcpt, total: g.total, shared: g.shared, unique: g.total - g.shared, nUa: g.uas.size };
+  }).sort((a, b) => b.total - a.total).slice(0, 15);
+
+  console.log('\n' + '='.repeat(70) + '\n');
+  console.log('=== CHE DO F: doi chieu log cua nhung nguoi mo cao nhat - cai gi GIONG NHAU? ===\n');
+  console.log('Cach doc: "trung khoanh khac" = luot mo do nam trong 1 cua so 60 giay ma co TU 10');
+  console.log('NGUOI NHAN KHAC NHAU tro len cung co luot mo. Day la nguong da kiem chung o Che do E:');
+  console.log('nguoi that mo mail khong the dong bo kieu do, gan nhu chac chan do MAY sinh ra.\n');
+  console.log('rcpt | tong luot mo | trung khoanh khac (GIA) | rieng le (co the THAT) | % gia');
+  list.forEach((r) => {
+    const pct = r.total > 0 ? Math.round(r.shared / r.total * 100) : 0;
+    console.log('  ' + r.rcpt + ' | ' + r.total + ' | ' + r.shared + ' | ' + r.unique + ' | ' + pct + '%');
+  });
+
+  const totalAll = tops.length;
+  const sharedAll = tops.filter((t) => t.shared).length;
+  console.log('\nTOAN BO du lieu: ' + totalAll + ' luot mo, trong do ' + sharedAll +
+    ' luot trung khoanh khac (' + Math.round(sharedAll / totalAll * 100) + '%), ' +
+    (totalAll - sharedAll) + ' luot rieng le (' + Math.round((totalAll - sharedAll) / totalAll * 100) + '%).');
+
+  // In vai VI DU khoanh khac bi trung nhieu nguoi nhat, kem danh sach nguoi
+  // nhan - de nhin tan mat "cai gi giong nhau" giua cac log.
+  const examples = tops.filter((t) => t.sharedWith >= 10)
+    .sort((a, b) => b.sharedWith - a.sharedWith);
+  const shownTs = new Set();
+  let shown = 0;
+  console.log('\n--- Vi du cac khoanh khac bi TRUNG nhieu nguoi nhat ---');
+  for (const ex of examples) {
+    const key = Math.floor(ex.ms / 60000);
+    if (shownTs.has(key)) continue;
+    shownTs.add(key);
+    const names = tops.filter((t) => Math.abs(t.ms - ex.ms) <= NEAR_MS).map((t) => t.rcpt);
+    const uniqNames = Array.from(new Set(names));
+    console.log('\n  ' + fmtVN(ex.ts) + ' — ' + uniqNames.length + ' nguoi nhan khac nhau cung "mo" trong 60 giay:');
+    console.log('    ' + uniqNames.slice(0, 12).join(', ') + (uniqNames.length > 12 ? ' ... (+' + (uniqNames.length - 12) + ' nguoi nua)' : ''));
+    shown++;
+    if (shown >= 3) break;
+  }
+  if (!shown) console.log('  (khong co khoanh khac nao bi trung tu 10 nguoi tro len)');
+
+  console.log('\n=> Cot "rieng le" la uoc tinh SO LUOT MO THAT cua tung nguoi.');
+  console.log('   Neu cot "trung khoanh khac" chiem phan lon -> so "Da mo" tren dashboard dang');
+  console.log('   bi thoi phong dung bang so do, va co the tru ra de co so gan dung hon.');
 }
 
 // ─────────────────────────────────────────────────────────────────────────
