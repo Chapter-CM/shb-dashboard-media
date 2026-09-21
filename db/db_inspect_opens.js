@@ -45,7 +45,7 @@ const dbClient = require('../lib/db-client');
 const { RCPT, CAMPAIGN } = process.env;
 const PAGE = 1000;
 // Doi so nay MOI LAN sua file, de doi chieu ban dang chay tren GitLab.
-const TOOL_VERSION = 'v6 (21/09/2026) - them Che do E: kiem tra don cuc nhieu nguoi nhan trong 60 giay (gia thuyet Sent Items cua nguoi gui)';
+const TOOL_VERSION = 'v7 (21/09/2026) - Che do E them kiem tra THU TU GUI (event_id lien tiep) de phan biet co che';
 
 async function fetchAll(basePath) {
   let out = [];
@@ -222,7 +222,10 @@ async function runOpenTiming(opts) {
   opts = opts || {};
   console.log('=== CHE DO D: phan bo khoang cach tu SENT den LAN MO DAU TIEN ' +
     (CAMPAIGN ? '(loc gan dung campaign chua "' + CAMPAIGN + '")' : '(toan bo DB)') + ' ===\n');
-  const path = '/rest/v1/events?select=rcpt,campaign,pos,ts&pos=in.(sent,top)&order=ts.asc';
+  // Lay them event_id: eid ma hoa dung THU TU GUI (eid0 + 0001, 0002, ...,
+  // xem tools/CampaignTracker.bas), dung de kiem tra cac luot mo trong 1 dot
+  // co LIEN TIEP nhau theo thu tu gui khong - xem runBurstCheck().
+  const path = '/rest/v1/events?select=id:event_id,rcpt,campaign,pos,ts&pos=in.(sent,top)&order=ts.asc';
   let rows = await fetchAll(path);
   rows = rows.filter(matchesCampaign);
 
@@ -295,7 +298,7 @@ async function runOpenTiming(opts) {
 // mail test, khong can recall, khong can doi.
 function runBurstCheck(rows) {
   const tops = rows.filter((r) => r.pos === 'top' && r.rcpt && r.ts)
-    .map((r) => ({ rcpt: r.rcpt, ua: r.ua || '', ms: new Date(String(r.ts).replace(' ', 'T') + 'Z').getTime(), ts: r.ts }))
+    .map((r) => ({ rcpt: r.rcpt, id: r.id || '', ua: r.ua || '', ms: new Date(String(r.ts).replace(' ', 'T') + 'Z').getTime(), ts: r.ts }))
     .filter((r) => !isNaN(r.ms))
     .sort((a, b) => a.ms - b.ms);
 
@@ -309,7 +312,7 @@ function runBurstCheck(rows) {
     const seen = new Set();
     for (let k = lo; k <= hi; k++) seen.add(tops[k].rcpt);
     if (seen.size >= 3) {
-      clusters.push({ startMs: tops[lo].ms, startTs: tops[lo].ts, nRcpt: seen.size, nEvent: hi - lo + 1 });
+      clusters.push({ startMs: tops[lo].ms, startTs: tops[lo].ts, nRcpt: seen.size, nEvent: hi - lo + 1, lo: lo, hi: hi });
     }
   }
 
@@ -343,6 +346,34 @@ function runBurstCheck(rows) {
   top10.forEach((c) => {
     console.log('  ' + fmtVN(c.startTs) + ' | ' + c.nRcpt + ' nguoi | ' + c.nEvent + ' su kien');
   });
+
+  // PHAN BIET CO CHE: event_id ma hoa THU TU GUI (eid0 + so thu tu 4 chu so).
+  // Neu trong 1 dot, cac event_id LIEN TIEP nhau theo thu tu gui -> may dang
+  // di TUAN TU qua danh sach mail cua chien dich (Sent Items cua nguoi gui,
+  // hoac vong lap gui). Neu event_id RAI RAC ngau nhien -> khong phai di tuan
+  // tu, co the la co che khac (quet hang loat phia server...).
+  const probe = top10[0];
+  if (probe && probe.lo !== undefined) {
+    const ids = [];
+    for (let k = probe.lo; k <= probe.hi; k++) if (tops[k].id) ids.push(String(tops[k].id));
+    const suffixes = ids.map((s) => parseInt(s.slice(-4), 10)).filter((n) => !isNaN(n)).sort((a, b) => a - b);
+    if (suffixes.length >= 5) {
+      let consecutive = 0;
+      for (let k = 1; k < suffixes.length; k++) if (suffixes[k] - suffixes[k - 1] === 1) consecutive++;
+      const pctConsec = Math.round(consecutive / (suffixes.length - 1) * 100);
+      console.log('\n--- Kiem tra THU TU GUI trong dot manh nhat (' + fmtVN(probe.startTs) + ') ---');
+      console.log('So thu tu gui (4 chu so cuoi cua event_id), da sap xep:');
+      console.log('  ' + suffixes.slice(0, 40).join(', ') + (suffixes.length > 40 ? ' ... (+' + (suffixes.length - 40) + ' nua)' : ''));
+      console.log('Ty le cap LIEN TIEP nhau (chenh dung 1 don vi): ' + pctConsec + '%');
+      if (pctConsec >= 60) {
+        console.log('=> LIEN TIEP RO RET: may dang di TUAN TU qua danh sach mail cua chien dich.');
+        console.log('   Khop chinh xac voi gia thuyet Outlook cua NGUOI GUI ve lai cac ban luu Sent Items');
+        console.log('   (hoac vong lap gui tu render) - KHONG phai nguoi nhan tu mo.');
+      } else {
+        console.log('=> KHONG lien tiep ro ret: may co the quet theo cach khac (khong theo thu tu gui).');
+      }
+    }
+  }
 
   const maxRcpt = top10[0].nRcpt;
   const bigClusters = peaks.filter((p) => p.nRcpt >= 10).length;
