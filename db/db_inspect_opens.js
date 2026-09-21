@@ -120,28 +120,69 @@ async function main() {
     if (!rows.length) {
       console.log('Khong co du lieu pos=top nao khop dieu kien.');
     } else {
+      // Giu nguyen TOAN BO ts (khong chi min/max) cho tung rcpt de tinh luon do
+      // DEU DAN cua nhip mo trong CHINH lan chay nay - tranh phai chay rieng
+      // Che do A cho tung nguoi nghi ngo (cham + de sot). Vi rows da order=
+      // ts.asc nen list ts cua tung rcpt tu nhien da sap xep, khong can sort lai.
       const byRcpt = {};
       rows.forEach((r) => {
-        if (!byRcpt[r.rcpt]) byRcpt[r.rcpt] = { n: 0, uaSet: new Set(), daySet: new Set(), first: r.ts, last: r.ts };
+        if (!byRcpt[r.rcpt]) byRcpt[r.rcpt] = { uaSet: new Set(), daySet: new Set(), tsList: [] };
         const g = byRcpt[r.rcpt];
-        g.n++;
         g.uaSet.add(r.ua || '');
         g.daySet.add(String(r.ts).slice(0, 10));
-        if (r.ts < g.first) g.first = r.ts;
-        if (r.ts > g.last) g.last = r.ts;
+        g.tsList.push(r.ts);
       });
-      const list = Object.keys(byRcpt).map((rcpt) => ({
-        rcpt, n: byRcpt[rcpt].n, nUa: byRcpt[rcpt].uaSet.size, nDays: byRcpt[rcpt].daySet.size,
-        first: byRcpt[rcpt].first, last: byRcpt[rcpt].last,
-      })).sort((a, b) => b.n - a.n).slice(0, 20);
+
+      // Do DEU DAN nhip mo: he so bien thien (stddev/mean) cua khoang cach giua
+      // cac lan mo lien tiep. He so THAP (gan 0) = khoang cach GAN NHU BANG
+      // NHAU tuyet doi -> dac trung ro ret cua may/gateway tu dong (con nguoi
+      // khong doc lai email theo dung chu ky co dinh). He so CAO = khoang cach
+      // that thuong -> giong hanh vi nguoi that hon.
+      function gapStats(tsList) {
+        if (tsList.length < 3) return null; // can >=2 khoang cach de tinh do bien thien
+        const gaps = [];
+        for (let i = 1; i < tsList.length; i++) {
+          gaps.push((new Date(tsList[i]) - new Date(tsList[i - 1])) / 1000);
+        }
+        const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+        if (mean <= 0) return null;
+        const variance = gaps.reduce((a, b) => a + (b - mean) * (b - mean), 0) / gaps.length;
+        const cv = Math.sqrt(variance) / mean;
+        return { meanGapS: Math.round(mean), cv };
+      }
+
+      const list = Object.keys(byRcpt).map((rcpt) => {
+        const g = byRcpt[rcpt];
+        const gs = gapStats(g.tsList);
+        return {
+          rcpt, n: g.tsList.length, nUa: g.uaSet.size, nDays: g.daySet.size,
+          first: g.tsList[0], last: g.tsList[g.tsList.length - 1], gapStats: gs,
+        };
+      }).sort((a, b) => b.n - a.n).slice(0, 20);
 
       console.log('Tong so nguoi co it nhat 1 lan mo (khop dieu kien): ' + Object.keys(byRcpt).length + '\n');
-      console.log('rcpt | so_lan_top | so_UA_khac_nhau | so_ngay_khac_nhau | lan_dau | lan_cuoi');
+      console.log('rcpt | so_lan_top | so_UA_khac_nhau | so_ngay_khac_nhau | lan_dau | lan_cuoi | nhip_mo_TB(s) | do_deu(cv) | KET LUAN');
       list.forEach((r) => {
-        const flag = (r.n >= 15 && r.nDays <= 2) ? '  <-- nghi don dap' : '';
-        console.log(r.rcpt + ' | ' + r.n + ' | ' + r.nUa + ' | ' + r.nDays + ' | ' + r.first + ' | ' + r.last + flag);
+        const burst = r.n >= 15 && r.nDays <= 2;
+        let verdict, meanS = '-', cv = '-';
+        if (r.gapStats) {
+          meanS = r.gapStats.meanGapS;
+          cv = r.gapStats.cv.toFixed(2);
+          if (r.nUa <= 1 && r.gapStats.cv < 0.25) {
+            verdict = 'RAT CO THE TU DONG (1 UA, nhip deu - dac trung mail client/gateway tu tai lai)';
+          } else if (burst) {
+            verdict = 'NGHI NGO (don dap trong it ngay, nhip khong deu ro ret - can xem raw event)';
+          } else {
+            verdict = 'CO THE MO THAT (UA/nhip da dang, trai nhieu ngay)';
+          }
+        } else {
+          verdict = burst ? 'NGHI NGO (qua it diem du lieu de do do deu, can xem raw event)' : 'CO THE MO THAT';
+        }
+        console.log(r.rcpt + ' | ' + r.n + ' | ' + r.nUa + ' | ' + r.nDays + ' | ' + r.first + ' | ' + r.last + ' | ' + meanS + ' | ' + cv + ' | ' + verdict);
       });
-      console.log('\nChay lai job nay voi bien RCPT=<email o dong nghi ngo> de xem chi tiet raw event (che do A).');
+      console.log('\nKET LUAN chi la GOI Y tu heuristic (nguong/cong thuc chua qua kiem chung dai han) -');
+      console.log('dong "NGHI NGO"/CO THE MO THAT van nen doi chieu them neu can chac chan tuyet doi.');
+      console.log('Chi chay lai job nay voi bien RCPT=<email> (Che do A) khi can xem TUNG DONG raw event that.');
     }
   }
 
