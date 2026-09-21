@@ -113,7 +113,7 @@ function categorizeUA(ua) {
 async function runUACheck() {
   console.log('=== CHE DO C: doi chieu UA cua lan MO voi ty le CLICK ' +
     (CAMPAIGN ? '(loc gan dung campaign chua "' + CAMPAIGN + '")' : '(toan bo DB)') + ' ===\n');
-  const path = '/rest/v1/events?select=rcpt,campaign,pos,ua&pos=in.(top,click)&order=ts.asc';
+  const path = '/rest/v1/events?select=rcpt,campaign,pos,ua,ts&pos=in.(sent,top,click)&order=ts.asc';
   let rows = await fetchAll(path);
   rows = rows.filter(matchesCampaign);
 
@@ -125,11 +125,47 @@ async function runUACheck() {
 
   const byRcpt = {};
   rows.forEach((r) => {
-    if (!byRcpt[r.rcpt]) byRcpt[r.rcpt] = { openCats: new Set(), clicked: false };
+    if (!byRcpt[r.rcpt]) byRcpt[r.rcpt] = { openCats: new Set(), clicked: false, sentTs: null, firstTopTs: null, clickTs: [] };
     const g = byRcpt[r.rcpt];
-    if (r.pos === 'top') g.openCats.add(categorizeUA(r.ua || ''));
-    if (r.pos === 'click') g.clicked = true;
+    if (r.pos === 'sent' && !g.sentTs) g.sentTs = r.ts;
+    if (r.pos === 'top') {
+      g.openCats.add(categorizeUA(r.ua || ''));
+      if (!g.firstTopTs) g.firstTopTs = r.ts; // rows da order=ts.asc nen lan dau gap la som nhat
+    }
+    if (r.pos === 'click') { g.clicked = true; g.clickTs.push(r.ts); }
   });
+
+  // Kiem dinh gia thuyet "click gia do he thong quet link tu dong (Safe Links...)":
+  // may quet khong can DOC noi dung email, chi can THAY link trong than mail la
+  // bam thu - nen click cua no se xay ra RAT SOM sau "sent" (thuong vai giay den
+  // vai phut, luc quet mail luc gui/nhan) HOAC xay ra TRUOC CA lan "top" dau
+  // tien (nguoi that phai MO email moi thay duoc link de bam - khong the bam
+  // link truoc khi mo). Neu thay 1 trong 2 dau hieu do -> click do CHAC CHAN
+  // khong phai nguoi that bam (khong lien quan gi den UA/thiet bi, vi may quet
+  // co the gia UA giong trinh duyet that).
+  const clickers = Object.keys(byRcpt).filter((r) => byRcpt[r].clicked);
+  if (clickers.length) {
+    console.log('--- Chi tiet ' + clickers.length + ' nguoi co click: thu tu sent -> mo dau tien -> click ---');
+    console.log('(⚠️ = click TRUOC lan mo dau tien, hoac click trong vong 120s sau sent - dau hieu quet tu dong, KHONG phai nguoi bam that)\n');
+    clickers.forEach((rcpt) => {
+      const g = byRcpt[rcpt];
+      g.clickTs.forEach((ct) => {
+        const sentMs = g.sentTs ? new Date(g.sentTs).getTime() : null;
+        const topMs = g.firstTopTs ? new Date(g.firstTopTs).getTime() : null;
+        const clickMs = new Date(ct).getTime();
+        const clickBeforeOpen = topMs !== null && clickMs < topMs;
+        const gapFromSentS = sentMs !== null ? Math.round((clickMs - sentMs) / 1000) : null;
+        const suspicious = clickBeforeOpen || (gapFromSentS !== null && gapFromSentS >= 0 && gapFromSentS <= 120);
+        console.log((suspicious ? '⚠️ ' : '   ') + rcpt +
+          ' | sent=' + fmtVN(g.sentTs) +
+          ' | mo_dau_tien=' + (g.firstTopTs ? fmtVN(g.firstTopTs) : '(khong co lan mo nao)') +
+          ' | click=' + fmtVN(ct) +
+          (gapFromSentS !== null ? ' | cach sent ' + gapFromSentS + 's' : '') +
+          (clickBeforeOpen ? ' | CLICK TRUOC KHI MO' : ''));
+      });
+    });
+    console.log('');
+  }
 
   // Phan nhom: 'iphone' (CHI iphone/ipad, khong may tinh/android), 'desktop'
   // (CHI may tinh), 'mixed' (ca 2 loai tro len), 'khac' (chi loai khong xac
