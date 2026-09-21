@@ -199,6 +199,77 @@ async function runUACheck() {
   await dbClient.end().catch(() => {});
 }
 
+// CHE DO D — kiem dinh gia thuyet "co he thong tu dong tai anh pixel NGAY KHI
+// EMAIL VUA DEN hop thu, khong lien quan gi den click": neu dung, se thay RAT
+// NHIEU nguoi co "lan mo DAU TIEN" chi vai giay/phut sau "sent" - bat ke ho co
+// thuc su doc email hay khong. Day la phep kiem dinh CHO RIENG LUOT MO, khong
+// dung click - dung yeu cau cua user (tach hoan toan khoi Che do C/click).
+// Kich hoat: dat bien OPENTIME=1 (khong dien RCPT).
+function bucketize(gapS) {
+  if (gapS < 0) return 'am (top truoc sent - loi du lieu)';
+  if (gapS <= 60) return '0-60 giay';
+  if (gapS <= 300) return '1-5 phut';
+  if (gapS <= 3600) return '5 phut-1 gio';
+  if (gapS <= 86400) return '1 gio-1 ngay';
+  if (gapS <= 604800) return '1 ngay-1 tuan';
+  return 'tren 1 tuan';
+}
+const BUCKET_ORDER = ['0-60 giay', '1-5 phut', '5 phut-1 gio', '1 gio-1 ngay', '1 ngay-1 tuan', 'tren 1 tuan', 'am (top truoc sent - loi du lieu)'];
+
+async function runOpenTiming() {
+  console.log('=== CHE DO D: phan bo khoang cach tu SENT den LAN MO DAU TIEN ' +
+    (CAMPAIGN ? '(loc gan dung campaign chua "' + CAMPAIGN + '")' : '(toan bo DB)') + ' ===\n');
+  const path = '/rest/v1/events?select=rcpt,campaign,pos,ts&pos=in.(sent,top)&order=ts.asc';
+  let rows = await fetchAll(path);
+  rows = rows.filter(matchesCampaign);
+
+  if (!rows.length) {
+    console.log('Khong co du lieu sent/top nao khop dieu kien.');
+    await dbClient.end().catch(() => {});
+    return;
+  }
+
+  const byRcpt = {};
+  rows.forEach((r) => {
+    if (!byRcpt[r.rcpt]) byRcpt[r.rcpt] = { sentTs: null, firstTopTs: null };
+    const g = byRcpt[r.rcpt];
+    if (r.pos === 'sent' && !g.sentTs) g.sentTs = r.ts;
+    if (r.pos === 'top' && !g.firstTopTs) g.firstTopTs = r.ts;
+  });
+
+  const buckets = {};
+  BUCKET_ORDER.forEach((b) => { buckets[b] = 0; });
+  let nSent = 0, nSentAndOpened = 0, nSentNeverOpened = 0;
+  Object.keys(byRcpt).forEach((rcpt) => {
+    const g = byRcpt[rcpt];
+    if (!g.sentTs) return; // bo qua nguoi chi co "top" ma khong co "sent" (session tao boi click, hiem)
+    nSent++;
+    if (!g.firstTopTs) { nSentNeverOpened++; return; }
+    nSentAndOpened++;
+    const gapS = Math.round((new Date(g.firstTopTs) - new Date(g.sentTs)) / 1000);
+    buckets[bucketize(gapS)]++;
+  });
+
+  console.log('Tong nguoi co "sent": ' + nSent);
+  console.log('Trong do CHUA TUNG mo lan nao: ' + nSentNeverOpened + ' (' + Math.round(nSentNeverOpened / nSent * 100) + '%)');
+  console.log('Trong do DA mo it nhat 1 lan: ' + nSentAndOpened + ' (' + Math.round(nSentAndOpened / nSent * 100) + '%)\n');
+  console.log('Phan bo khoang cach sent -> lan mo DAU TIEN (trong so ' + nSentAndOpened + ' nguoi da mo):');
+  BUCKET_ORDER.forEach((b) => {
+    if (buckets[b] === 0 && b === 'am (top truoc sent - loi du lieu)') return;
+    const pct = nSentAndOpened > 0 ? Math.round(buckets[b] / nSentAndOpened * 100) : 0;
+    console.log('  ' + b.padEnd(32) + ' | ' + String(buckets[b]).padStart(6) + ' nguoi | ' + pct + '%');
+  });
+
+  console.log('\nDoc ket qua: neu cum "0-60 giay" hoac "1-5 phut" chiem TY LE RAT CAO');
+  console.log('(vd >30-40% tong so nguoi da mo) MOT CACH DONG DEU bat ke chien dich/thoi diem gui,');
+  console.log('day la dau hieu manh cua 1 co che tu dong tai anh NGAY KHI GUI (quet bao mat, gateway...),');
+  console.log('KHONG lien quan gi den viec nguoi nhan co thuc su doc email hay khong.');
+  console.log('Neu phan bo trai deu qua nhieu khung gio/ngay (giong hanh vi doc that, ai doc luc nao doc)');
+  console.log('thi phan lon la nguoi that, khong phai tu dong.');
+
+  await dbClient.end().catch(() => {});
+}
+
 async function main() {
   if (!process.env.INGEST_API_URL && !process.env.MYSQL_HOST) {
     console.error('Thieu INGEST_API_URL (+ INGEST_SECRET) hoac MYSQL_HOST trong CI/CD Variables.');
@@ -214,6 +285,9 @@ async function main() {
 
   if (!RCPT && process.env.UACHECK) {
     return runUACheck();
+  }
+  if (!RCPT && process.env.OPENTIME) {
+    return runOpenTiming();
   }
 
   if (RCPT) {
