@@ -30,6 +30,15 @@
 // hợp bằng JS (không phải SQL) — giống hệt cách api/email-dashboard.js đang
 // làm (đọc thô, tính toán ở tầng ứng dụng), và lọc CAMPAIGN cũng làm bằng JS
 // (substring, không phân biệt hoa/thường) thay vì SQL LIKE.
+//
+// BUG ĐÃ SỬA (chạy thật lần đầu phát hiện): lấy trang bằng limit/offset mà
+// KHÔNG có order= trên bảng `events` — bảng này đang được ghi liên tục
+// (nhận beacon real-time) nên MySQL KHÔNG đảm bảo thứ tự dòng ổn định giữa
+// các trang khi không có ORDER BY, có thể đọc trùng dòng cũ / bỏ sót dòng
+// khi phân trang → phồng số đếm và sai số ngày (bằng chứng thật: 1 dòng
+// kết quả báo 111 lượt mở nhưng chỉ "1 ngày khác nhau" trong khi lần đầu và
+// lần cuối cách nhau 2 tháng — không thể đúng). Đã thêm order=ts.asc vào
+// chế độ B (chế độ A đã có sẵn từ đầu).
 'use strict';
 const dbClient = require('../lib/db-client');
 
@@ -104,7 +113,7 @@ async function main() {
   } else {
     console.log('=== CHE DO B: TOP 20 nguoi co nhieu luot "top" nhat ' +
       (CAMPAIGN ? '(loc gan dung campaign chua "' + CAMPAIGN + '")' : '(toan bo DB)') + ' ===\n');
-    const path = '/rest/v1/events?select=rcpt,' + encodeURIComponent(sel) + '&pos=eq.top';
+    const path = '/rest/v1/events?select=rcpt,' + encodeURIComponent(sel) + '&pos=eq.top&order=ts.asc';
     let rows = await fetchAll(path);
     rows = rows.filter(matchesCampaign);
 
