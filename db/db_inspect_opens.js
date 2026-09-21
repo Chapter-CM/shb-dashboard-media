@@ -44,6 +44,8 @@ const dbClient = require('../lib/db-client');
 
 const { RCPT, CAMPAIGN } = process.env;
 const PAGE = 1000;
+// Doi so nay MOI LAN sua file, de doi chieu ban dang chay tren GitLab.
+const TOOL_VERSION = 'v5 (21/09/2026) - Che do D chay tu dong cung Che do B, khong can bien OPENTIME';
 
 async function fetchAll(basePath) {
   let out = [];
@@ -216,7 +218,8 @@ function bucketize(gapS) {
 }
 const BUCKET_ORDER = ['0-60 giay', '1-5 phut', '5 phut-1 gio', '1 gio-1 ngay', '1 ngay-1 tuan', 'tren 1 tuan', 'am (top truoc sent - loi du lieu)'];
 
-async function runOpenTiming() {
+async function runOpenTiming(opts) {
+  opts = opts || {};
   console.log('=== CHE DO D: phan bo khoang cach tu SENT den LAN MO DAU TIEN ' +
     (CAMPAIGN ? '(loc gan dung campaign chua "' + CAMPAIGN + '")' : '(toan bo DB)') + ' ===\n');
   const path = '/rest/v1/events?select=rcpt,campaign,pos,ts&pos=in.(sent,top)&order=ts.asc';
@@ -225,7 +228,7 @@ async function runOpenTiming() {
 
   if (!rows.length) {
     console.log('Khong co du lieu sent/top nao khop dieu kien.');
-    await dbClient.end().catch(() => {});
+    if (!opts.keepConnection) await dbClient.end().catch(() => {});
     return;
   }
 
@@ -267,7 +270,7 @@ async function runOpenTiming() {
   console.log('Neu phan bo trai deu qua nhieu khung gio/ngay (giong hanh vi doc that, ai doc luc nao doc)');
   console.log('thi phan lon la nguoi that, khong phai tu dong.');
 
-  await dbClient.end().catch(() => {});
+  if (!opts.keepConnection) await dbClient.end().catch(() => {});
 }
 
 async function main() {
@@ -281,13 +284,24 @@ async function main() {
     console.log('GitLab runner (ETIMEDOUT do Security Group chan, xem HANDOFF.md muc E).');
   }
 
+  // In SO PHIEN BAN ngay dau log: da nhieu lan chay that bai vi file tren
+  // GitLab con la ban cu (Replace nham file trong thu muc Downloads). Nhin
+  // dong nay la biet ngay dang chay ban nao, khong phai doan.
+  console.log('>>> db_inspect_opens ' + TOOL_VERSION + '\n');
+
   const sel = 'pos,campaign,ua,ts';
 
   if (!RCPT && process.env.UACHECK) {
     return runUACheck();
   }
-  if (!RCPT && process.env.OPENTIME) {
-    return runOpenTiming();
+
+  // Khong con doi bien OPENTIME: phan tich thoi diem mo (Che do D) chay TU
+  // DONG truoc bang TOP 20 (Che do B) trong CUNG 1 lan chay. Ly do: qua nhieu
+  // lan chay bi that bai chi vi bien CI khong duoc dien/khong duoc nhan - bo
+  // han phu thuoc vao bien la cach chac chan nhat.
+  if (!RCPT) {
+    await runOpenTiming({ keepConnection: true });
+    console.log('\n' + '='.repeat(70) + '\n');
   }
 
   if (RCPT) {
