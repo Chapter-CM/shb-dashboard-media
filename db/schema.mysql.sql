@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS events (
   ua          VARCHAR(200),
   ts          DATETIME,
   dwell_s     INT,
+  ip          VARCHAR(64), -- thêm 25/09/2026, xem migrate_06_email_ip.sql (lý do)
   INDEX events_ts (ts),
   INDEX events_event_id (event_id),
   INDEX events_pos (pos)

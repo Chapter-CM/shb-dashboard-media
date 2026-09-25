@@ -50,6 +50,23 @@ function clip(v, n) {
   return String(v).replace(/\u0000/g, '').slice(0, n);
 }
 
+// IP người gọi — thêm 25/09/2026 để phân biệt "1 người mở từ nhiều thiết bị"
+// (nhiều IP) với "1 hệ thống quét lặp lại" (1 IP) cho nhóm mở bất thường rải
+// nhiều ngày (scatterSuspect, xem api/email-dashboard.js). Request đi qua
+// AWS API Gateway/ALB (TRACK_URL trong tools/CampaignTracker.bas) rồi nginx
+// proxy_pass thẳng (nginx.conf không set proxy_set_header X-Forwarded-For nên
+// GIỮ NGUYÊN header gốc từ Gateway, không tự ghi đè) -> lấy IP ĐẦU TIÊN trong
+// chuỗi X-Forwarded-For là IP client gốc theo hành vi chuẩn của AWS Gateway/ALB.
+// CHƯA kiểm chứng trực tiếp trên production (không có đường vào mạng nội bộ SHB
+// từ môi trường này) — sau khi deploy, mở thử 1 email và query /dbquery xác
+// nhận cột ip ra địa chỉ public thật (không phải IP nội bộ cluster) trước khi
+// tin dữ liệu ip để phân tích.
+function clientIp(req) {
+  var xff = req.headers['x-forwarded-for'];
+  if (xff) return String(xff).split(',')[0].trim();
+  return (req.socket && req.socket.remoteAddress) || null;
+}
+
 
 
 // Fix VBA encoding bug: @ (hex 40) encoded as literal "40" instead of "%40"
@@ -173,6 +190,7 @@ module.exports = async (req, res) => {
     link:        clip(getParam('url', 'link'),        500),
     dest:        clip(getParam('dest'),               500),
     ua:          clip(req.headers['user-agent'],      200),
+    ip:          clip(clientIp(req),                   64),
     ts:          new Date().toISOString()
   };
 

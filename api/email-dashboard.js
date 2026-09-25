@@ -743,9 +743,24 @@ function process(logs){
   // hiệu chỉnh chính xác), mục đích chỉ để LỘ RA những trường hợp bất thường
   // rõ rệt (vd 93 lượt/1 ngày) cho người xem tự đánh giá, không phải ngưỡng
   // khoa học. Xem HANDOFF.md nếu sau này cần điều chỉnh.
+  //
+  // Ngưỡng cảnh báo "mở rải nhiều ngày" (scatterSuspect, thêm 25/09): điều tra
+  // thực tế trên dữ liệu production (đọc TRỰC TIẾP qua /dbquery, chạy CHÍNH
+  // buildSessions() này để đảm bảo khớp 100% con số dashboard hiển thị — xem
+  // trao đổi 21-25/09) phát hiện 1 nhóm KHÁC không bị burstSuspect bắt được:
+  // openCount rất cao (76-96 lượt) nhưng trải đều 5-9 ngày khác nhau, gap giữa
+  // các lần mở hàng trăm-hàng nghìn giây → KHÔNG bị dedup 5s ở trên xử lý được
+  // (gap luôn >5s nên mỗi lần đều tính +1 lượt mở mới), ví dụ thật: 1 người
+  // 96 lượt/9 ngày, 1 người 77 lượt/5 ngày. KHÔNG loại trừ được đây là người
+  // dùng thật mở từ nhiều thiết bị (điện thoại+máy tính+OWA web, mỗi thiết bị
+  // tự tải lại ảnh khi đồng bộ) hay hệ thống quét định kỳ (DLP/backup/AV) —
+  // CẦN dữ liệu IP (xem cột `ip` mới, api/email-track.js + migrate_06) mới
+  // phân biệt dứt điểm. Trong lúc chờ: CHỈ cảnh báo, KHÔNG trừ khỏi số liệu,
+  // giữ đúng nguyên tắc của burstSuspect ở trên.
   persons.forEach(function(p){
     p.openDaysCount=p.openDays?Object.keys(p.openDays).length:0;
     p.burstSuspect=p.openCount>=15&&p.openDaysCount>0&&p.openDaysCount<=2;
+    p.scatterSuspect=p.openCount>=30&&p.openDaysCount>2;
   });
   var hasSeg=persons.some(function(p){return p.dept||p.role||p.loc;});
 
@@ -1176,10 +1191,15 @@ var _recTab='all';
 function setRecTab(t){_recTab=t;resection('s-rec',recipientSection);}
 function recRow(p){
   var tier=!p.opened?'cold':p.clicked?'hot':'warm';
-  var burstTip=p.burstSuspect?(' · ⚠️ '+p.openCount+' lượt mở dồn vào '+p.openDaysCount+' ngày — khả năng cao do mail client/gateway tự tải lại ảnh (Reading Pane, quét bảo mật), không hẳn là mở lại thật. CHƯA trừ khỏi số liệu, cần kiểm tra UA thực tế.'):'';
-  return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở':'Chưa mở email nào')+burstTip+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
+  var suspectTip=p.burstSuspect
+    ?(' · ⚠️ '+p.openCount+' lượt mở dồn vào '+p.openDaysCount+' ngày — khả năng cao do mail client/gateway tự tải lại ảnh (Reading Pane, quét bảo mật), không hẳn là mở lại thật. CHƯA trừ khỏi số liệu, cần kiểm tra UA thực tế.')
+    :p.scatterSuspect
+    ?(' · ⚠️ '+p.openCount+' lượt mở rải suốt '+p.openDaysCount+' ngày — quá cao so với mức bình thường (~2-3 lượt/người), chưa xác định do nhiều thiết bị đồng bộ hay hệ thống quét định kỳ. CHƯA trừ khỏi số liệu, cần đối chiếu IP.')
+    :'';
+  var suspect=p.burstSuspect||p.scatterSuspect;
+  return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở':'Chưa mở email nào')+suspectTip+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
     +'<td>'+esc(fmtSeg(p.dept||p.role))+'</td>'
-    +'<td class="num">'+(p.opened?p.openCount:0)+(p.burstSuspect?' <span style="color:var(--warn)" title="Mở dồn dập bất thường">⚠️</span>':'')+'</td>'
+    +'<td class="num">'+(p.opened?p.openCount:0)+(suspect?' <span style="color:var(--warn)" title="Số lượt mở bất thường — xem chi tiết khi hover">⚠️</span>':'')+'</td>'
     +'<td class="num" style="font-size:11px">'+(p.lastOpen?fmtTime(p.lastOpen):'—')+'</td>'
     +'<td class="num">'+(p.clicked?p.clickCount:0)+'</td></tr>';
 }
@@ -1736,7 +1756,11 @@ function segView(attr,el){
   tblRender('seg');tblSortHeader('seg');
 }
 function exportFU(){var rows=window.__fu||[];if(!rows.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac,Chien Dich,Thoi Gian Mo\n';rows.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+fmtCamp(r.campaign)+'","'+fmtTime(r.first)+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mo-chua-click-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
-function exportRecipients(){var rows=window.__rec||[];if(!rows.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac,So Lan Mo,Mo Gan Nhat,So Lan Click\n';rows.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+(r.opened?r.openCount:0)+'","'+(r.lastOpen?fmtTime(r.lastOpen):'')+'","'+(r.clicked?r.clickCount:0)+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='nguoi-nhan-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
+function exportRecipients(){var rows=window.__rec||[];if(!rows.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac,So Lan Mo,Mo Gan Nhat,So Lan Click,Ghi Chu\n';rows.forEach(function(r){
+  // S\u1ED1 l\u01B0\u1EE3t m\u1EDF b\u1EA5t th\u01B0\u1EDDng (d\u1ED3n d\u1EADp ho\u1EB7c r\u1EA3i nhi\u1EC1u ng\u00E0y, xem recRow()) \u2014 mang ra
+  // CSV \u0111\u1EC3 kh\u00F4ng l\u1ECDt ra b\u00E1o c\u00E1o/Excel m\u00E0 m\u1EA5t lu\u00F4n c\u1EA3nh b\u00E1o ch\u1EC9 c\u00F3 tr\u00EAn dashboard.
+  var note=r.burstSuspect?'Nghi mo don dap ('+r.openDaysCount+' ngay)':r.scatterSuspect?'Nghi mo bat thuong, rai '+r.openDaysCount+' ngay':'';
+  csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+(r.opened?r.openCount:0)+'","'+(r.lastOpen?fmtTime(r.lastOpen):'')+'","'+(r.clicked?r.clickCount:0)+'","'+note+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='nguoi-nhan-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 function findMandatory(name){return(window.__mandatory||[]).filter(function(M){return M.name===name;})[0];}
 function exportMandatory(name){var M=findMandatory(name);if(!M||!M.notOpened.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac\n';M.notOpened.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='chua-mo-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 function copyMandatoryEmails(name){var M=findMandatory(name);if(!M||!M.notOpened.length)return;var text=M.notOpened.map(function(r){return r.rcpt;}).join('; ');(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(text):Promise.reject()).catch(function(){var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(ta);});}
