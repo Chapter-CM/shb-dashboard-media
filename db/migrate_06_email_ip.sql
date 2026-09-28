@@ -4,10 +4,18 @@
 -- TỰ ĐỘNG chạy đúng câu lệnh bên dưới mỗi khi pod khởi động (xem
 -- lib/db-client.js#ensureEventsColumns, gọi từ server/ingest-server.js) — vì
 -- người vận hành dashboard KHÔNG có quyền truy cập MySQL console trực tiếp.
--- File .sql này CHỈ dùng khi việc tự động đó thất bại (app DB user không có
--- quyền DDL/ALTER) — lúc đó insertEvent() vẫn hoạt động bình thường, chỉ là cột
--- `ip` sẽ để trống cho tới khi ai có quyền DDL (vd anh Nam/DBA hạ tầng) chạy hộ
--- ĐÚNG 1 DÒNG dưới đây 1 lần. Không cần hiểu code, chỉ cần chạy nguyên văn.
+-- File .sql này CHỈ dùng khi việc tự động đó thất bại — lúc đó insertEvent()
+-- vẫn hoạt động bình thường, chỉ là cột `ip` sẽ để trống cho tới khi ai có
+-- quyền DDL (vd anh Nam/DBA hạ tầng) chạy hộ ĐÚNG 1 DÒNG dưới đây 1 lần.
+-- Không cần hiểu code, chỉ cần chạy nguyên văn.
+--
+-- ⚠️ ĐÃ SỬA 28/09/2026: bản trước dùng "add column IF NOT EXISTS" — cú pháp
+-- này CHỈ MySQL >= 8.0.29 hiểu, bản cũ hơn báo lỗi cú pháp (ER_PARSE_ERROR)
+-- NGAY CẢ KHI có đủ quyền — đây chính là lỗi thật gặp trên production (tưởng
+-- nhầm là thiếu quyền, thật ra là bản MySQL cũ hơn). Dòng dưới đã bỏ
+-- "IF NOT EXISTS" để chạy được trên mọi bản 5.7 → 8.x. Nếu chạy 2 lần (cột đã
+-- có sẵn rồi), MySQL sẽ báo lỗi "Duplicate column name 'ip'" — đó là lỗi AN
+-- TOÀN, bỏ qua được, nghĩa là cột đã tồn tại từ trước, không cần làm gì thêm.
 -- Mục đích: phân biệt dứt điểm nhóm "mở rải nhiều ngày, số lượt bất thường"
 -- (vd 1 người 96 lượt/9 ngày, phát hiện qua điều tra thực tế trên production —
 -- xem ghi chú scatterSuspect trong api/email-dashboard.js) là do:
@@ -24,7 +32,7 @@
 -- mở/click/gửi cho tới khi cột được thêm. Luôn chạy .sql trước, sau đó mới
 -- đồng bộ .js sang GitLab.
 
-alter table events add column if not exists ip varchar(64);
+alter table events add column ip varchar(64);
 
 -- Không cần index riêng cho `ip` ở giai đoạn này — mục đích là XEM (đối chiếu
 -- thủ công qua /dbquery cho từng người nghi vấn), chưa cần lọc/group theo IP
