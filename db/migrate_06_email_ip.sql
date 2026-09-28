@@ -1,4 +1,13 @@
--- Migration 06 — thêm cột IP cho bảng events (25/09/2026)
+-- Migration 06 — thêm cột IP cho bảng events (25/09/2026, cập nhật 28/09/2026)
+--
+-- ⚠️ KHÔNG BẮT BUỘC PHẢI CHẠY FILE NÀY THỦ CÔNG. Từ 28/09/2026, ingest-server.js
+-- TỰ ĐỘNG chạy đúng câu lệnh bên dưới mỗi khi pod khởi động (xem
+-- lib/db-client.js#ensureEventsColumns, gọi từ server/ingest-server.js) — vì
+-- người vận hành dashboard KHÔNG có quyền truy cập MySQL console trực tiếp.
+-- File .sql này CHỈ dùng khi việc tự động đó thất bại (app DB user không có
+-- quyền DDL/ALTER) — lúc đó insertEvent() vẫn hoạt động bình thường, chỉ là cột
+-- `ip` sẽ để trống cho tới khi ai có quyền DDL (vd anh Nam/DBA hạ tầng) chạy hộ
+-- ĐÚNG 1 DÒNG dưới đây 1 lần. Không cần hiểu code, chỉ cần chạy nguyên văn.
 -- Mục đích: phân biệt dứt điểm nhóm "mở rải nhiều ngày, số lượt bất thường"
 -- (vd 1 người 96 lượt/9 ngày, phát hiện qua điều tra thực tế trên production —
 -- xem ghi chú scatterSuspect trong api/email-dashboard.js) là do:

@@ -103,3 +103,13 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`[ingest-server] listening on :${PORT}`);
 });
+
+// Tự đảm bảo schema bảng `events` có đủ cột "best-effort" (vd `ip`, thêm
+// 25/09/2026) mỗi lần pod khởi động — KHÔNG cần ai chạy SQL tay (xem trao đổi
+// "tôi làm gì có quyền chạy"). Chạy NỀN, không chặn server.listen ở trên: nếu
+// user DB thiếu quyền DDL, chỉ log lỗi (xem ensureEventsColumns trong
+// lib/db-client.js) — insert() đã tự bảo vệ (bỏ cột lạ) nên track/ingest vẫn
+// chạy bình thường, không đứng hình vì bước này.
+if (dbClient.isEnabled() && process.env.MYSQL_HOST) {
+  dbClient.ensureEventsColumns().catch((e) => console.error('[ingest-server] ensureEventsColumns loi:', e.message));
+}
