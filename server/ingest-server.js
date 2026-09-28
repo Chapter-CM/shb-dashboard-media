@@ -17,6 +17,12 @@ const fbIngest = require('../api/fb-ingest');
 
 const PORT = parseInt(process.env.SERVER_PORT || process.env.INGEST_PORT || '3001', 10);
 
+// Nhãn build — đổi mỗi lần deploy code liên quan tới track/schema, để xem qua
+// /healthz?debug=1 biết chắc pod ĐANG chạy bản nào, không cần đoán qua "pipeline
+// xanh" hay chờ thời gian (xem trao đổi "Có cách khác để kiểm tra vấn đề này
+// không", 28/09/2026).
+const BUILD_TAG = '2026-09-28-ip-column-autoheal';
+
 const trackHandler = wrap(emailTrack);
 const ingestHandler = wrap(fbIngest);
 
@@ -95,7 +101,27 @@ const server = http.createServer((req, res) => {
   if (path === '/api/ingest' || path === '/api/fb-ingest' || path.endsWith('/api/ingest')) return ingestHandler(req, res);
   if (path === '/dbquery') return dbQueryHandler(req, res);
   if (path === '/ingest-bridge' || path.endsWith('/ingest-bridge')) return bridgeHandler(req, res);
-  if (path === '/healthz') { res.writeHead(200); return res.end('ok'); }
+  if (path === '/healthz') {
+    // Mặc định: giữ NGUYÊN "ok" (k8s liveness/readiness probe có thể đang so
+    // khớp đúng chuỗi này) — chỉ trả JSON chẩn đoán khi có ?debug=1&secret=đúng
+    // INGEST_SECRET (không phải dữ liệu nghiệp vụ, nhưng vẫn khoá lại bằng secret
+    // sẵn có thay vì để công khai hoàn toàn, nhất quán với /dbquery).
+    var url = new URL(req.url, 'http://x');
+    if (url.searchParams.get('debug') === '1') {
+      var got = url.searchParams.get('secret') || req.headers['x-ingest-secret'];
+      if (!process.env.INGEST_SECRET || got !== process.env.INGEST_SECRET) {
+        return sendJson(res, 401, { error: 'unauthorized' });
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        buildTag: BUILD_TAG,
+        mysqlHostSet: !!process.env.MYSQL_HOST,
+        dbEnabled: dbClient.isEnabled(),
+        schemaCheck: dbClient.getSchemaStatus(),
+      });
+    }
+    res.writeHead(200); return res.end('ok');
+  }
   res.writeHead(404);
   res.end('not found');
 });
