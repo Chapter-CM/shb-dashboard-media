@@ -641,9 +641,17 @@ function buildSessions(logs){
      theo người không đổi), phần còn lại không tính vào lượt mở / Mở TB/người. */
   var SHARED_MIN_UA=10, SHARED_MIN_EVENTS=30;
 
-  /* Sort topEvents ASC rồi tính openCount với 5s dedup window:
-     ≤5s = Outlook tự reload (cùng 1 lần mở) → KHÔNG đếm thêm
-     >5s = người dùng đóng và mở lại               → +1 lượt     */
+  /* Sort topEvents ASC rồi tính openCount theo PHIÊN ĐỌC (thêm 29/09/2026):
+     Các lần tải pixel liên tiếp mà khoảng cách giữa 2 lần GẦN NHAU < 30 phút
+     = cùng 1 phiên đọc → chỉ tính 1 lượt. Quay lại sau ≥30 phút không hoạt động
+     = phiên mới → +1 lượt. Trước đây chỉ gộp khi cách nhau ≤5 giây VÀ so với lượt
+     ĐÃ TÍNH gần nhất (mốc không cập nhật theo từng lần tải), nên chuỗi tải lại liên
+     tục vẫn bị đếm nhiều lần. Dữ liệu thật (chiến dịch "Lịch phát sóng…", 6.760
+     người): các người mở nhiều (14-52 lượt, đều 1 UA = 1 người/1 thiết bị) có gap
+     TRUNG VỊ chỉ 15-36 giây — nhiều lần tải trong cùng 1 lần xem thư (Outlook tải
+     lại ảnh mỗi lần chọn thư vì pixel no-store), các cụm cách nhau hàng giờ/ngày.
+     30 phút = mốc phiên chuẩn của web analytics; chỉnh ở OPEN_SESSION_GAP_MS. */
+  var OPEN_SESSION_GAP_MS=30*60*1000;
   Object.keys(sess).forEach(function(k){
     var s=sess[k];
     s.topEvents.sort(function(a,b){return a.ts<b.ts?-1:a.ts>b.ts?1:0;});
@@ -674,12 +682,12 @@ function buildSessions(logs){
     s.openDevices=[s.topEvents[0].ua];
     var lastTs=new Date(s.topEvents[0].ts).getTime();
     for(var j=1;j<s.topEvents.length;j++){
-      var gap=new Date(s.topEvents[j].ts).getTime()-lastTs;
-      if(gap>5000){
+      var curTs=new Date(s.topEvents[j].ts).getTime();
+      if(curTs-lastTs>OPEN_SESSION_GAP_MS){
         s.openCount++;
         s.openDevices.push(s.topEvents[j].ua);
-        lastTs=new Date(s.topEvents[j].ts).getTime();
       }
+      lastTs=curTs; // mốc = lần tải GẦN NHẤT (không phải lượt đã tính) → đo đúng khoảng không hoạt động
     }
     // Thiết bị chính: ưu tiên mobile > desktop > proxy > unknown
     // (Outlook thường pre-load trước khi user mở trên phone → mobile wins)
@@ -1154,7 +1162,7 @@ function heroRow(d,cur,prev,ser){
   function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl">'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
   // 6 KPI chuẩn email: Lượt gửi · Đã mở (lượt) · Chưa mở · Lượt click · CTOR · Mở TB/người
   var k1=card('Lượt gửi',null,s.hasSent?nf(s.sentSessions):'—',(s.hasSent?deltaChip(cur.sent,prev.sent,true):'')+' · '+nf(s.sent)+' người',spark(sS,'var(--accent-2)'),'Tổng số email đã gửi (mỗi sự kiện pos=sent = 1 lượt). 1 người nhận nhiều lần = tính nhiều lượt. Số người nhận duy nhất: '+nf(s.sent)+'.');
-  var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' đã trừ mở lại &lt;5s',spark(oS,'var(--accent-2)'),'Tổng số lần email được mở, đã trừ mở-lại &lt;5s (Outlook tự reload). Đóng rồi mở lại (gap &gt;5s) = +1 lượt.');
+  var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' đã gộp mở lại &lt;30 phút',spark(oS,'var(--accent-2)'),'Tổng số lượt mở. Các lần tải lại liên tiếp cách nhau dưới 30 phút được gộp thành 1 lượt (Outlook tải lại ảnh mỗi lần bấm vào thư). Quay lại sau hơn 30 phút không xem = +1 lượt.');
   var k3=card('Chưa mở',null,s.hasSent?nf(s.notOpenCount||0):'—',(s.hasSent?deltaChip(cur.notOpen,prev.notOpen,false):'')+(s.notOpenRate!=null?' · '+s.notOpenRate+'% người gửi':''),spark(sS,'var(--risk)'),'Số người được gửi email nhưng chưa mở lần nào. Cần follow-up trực tiếp.');
   var k4=card('Lượt click',null,nf(d.clickStats.total||0),deltaChip(cur.clickTotal,prev.clickTotal,true)+' · '+nf(s.nClickers||0)+' người click',spark(cS,'var(--accent)'),'Tổng số lượt click (1 người click nhiều lần = tính nhiều lượt). Số người unique đã click: '+nf(s.nClickers||0)+'.');
   var k5=card('CTOR',null,(d.clickStats.ctor||0)+'%',deltaChip(cur.ctor,prev.ctor,true)+' click ÷ mở',spark(cS,'var(--accent-2)'),'Click-to-Open Rate = Người click ÷ Người mở.');
@@ -1268,7 +1276,7 @@ function devicePanel(d){
       +'<div class="fp">'+x.pct+'%</div>'
       +'<div class="fn">'+x.n+'</div></div>';
   });
-  return '<div class="panel"><div class="panel-h" data-tip="Số lượt mở (open events) theo thiết bị. Đóng rồi mở lại = +1 lượt. Outlook tự reload trong 5s = không tính. % = tỷ lệ lượt mở từ thiết bị này trên tổng lượt mở.">Thiết bị · <span style="font-size:12px;font-weight:500;color:var(--muted)">bấm để lọc</span>'+((F.device&&F.device.length)?'<button class="csv" onclick="clearFilter(\'device\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'')+'</div><div class="funnel">'+bars+'</div><div style="font-size:11px;color:var(--faint);margin-top:10px">% = tỷ lệ lượt mở từ thiết bị này / tổng lượt mở. Số = lượt (đóng+mở lại = +1). Proxy = load giả bởi security gateway.</div></div>';
+  return '<div class="panel"><div class="panel-h" data-tip="Số lượt mở (open events) theo thiết bị. Quay lại sau hơn 30 phút = +1 lượt. Các lần tải lại cách nhau dưới 30 phút = gộp thành 1 lượt. % = tỷ lệ lượt mở từ thiết bị này trên tổng lượt mở.">Thiết bị · <span style="font-size:12px;font-weight:500;color:var(--muted)">bấm để lọc</span>'+((F.device&&F.device.length)?'<button class="csv" onclick="clearFilter(\'device\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'')+'</div><div class="funnel">'+bars+'</div><div style="font-size:11px;color:var(--faint);margin-top:10px">% = tỷ lệ lượt mở từ thiết bị này / tổng lượt mở. Số = lượt (đóng+mở lại = +1). Proxy = load giả bởi security gateway.</div></div>';
 }
 
 /* Bảng phân khúc: trước đây chỉ hiển thị thanh bar + tỉ lệ mở, thiếu các chỉ số
@@ -1509,7 +1517,7 @@ function dataHealthSection(d){
   var pp=q.proxyPct,mp=q.missingDeptPct;
   function hz(tone,tt,sub,badge){return '<div class="hz-row"><span class="hz-dot hz-'+tone+'"></span><div><div class="hz-tt">'+tt+'</div><div class="hz-sub">'+sub+'</div></div><span class="hz-badge '+tone+'">'+badge+'</span></div>';}
   var hzRows=hz('ok','Pixel tracking mở email',(q.uniqCamp||0)+' chiến dịch · '+nf(s.opens||0)+' lượt mở đã ghi','Live')
-    +hz('ok','Lọc mở-lại &lt;5s','Đã trừ reload tự động của Outlook để không thổi phồng lượt mở','Đang áp dụng')
+    +hz('ok','Gộp lượt mở theo phiên đọc 30 phút','Các lần Outlook tải lại pixel liên tiếp (cách nhau dưới 30 phút) chỉ tính 1 lượt mở, không thổi phồng lượt mở','Đang áp dụng')
     +hz((q.sharedSessions||0)>0?'warn':'ok','Loại bản email được nhiều người cùng xem',(q.sharedSessions||0)>0?(q.sharedSessions+' bản có lượt mở từ ≥10 loại thiết bị khác nhau (nhiều người cùng xem 1 bản, không phải 1 người) — đã loại '+nf(q.sharedOpens||0)+' lượt khỏi tổng, chỉ giữ 1 lượt của người nhận'):'Không phát hiện bản nào được nhiều người cùng xem',(q.sharedSessions||0)>0?'Đã loại':'Không có')
     +hz(pp>10?'warn':'ok','Proxy mở ảnh (Apple MPP / Gmail)',pp+'% lượt mở đến từ proxy/gateway — có thể làm tỉ lệ mở cao hơn thực tế',pp>10?'Lưu ý':'Thấp')
     +hz(d.clickStats.has?'ok':'warn','Click-tracking per-link',d.clickStats.has?'Đã bật — '+nf(d.clickStats.total||0)+' lượt click ghi nhận':'Cần bật ENABLE_CLICK_TRACKING=True trong macro',d.clickStats.has?'OK':'Cần check');
