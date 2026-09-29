@@ -629,6 +629,17 @@ function buildSessions(logs){
      hơn) vẫn được giữ nguyên. */
   var SELF_PREVIEW_UA_RE=/ms-office/i;
   var SELF_PREVIEW_WINDOW_MS=5*60*1000;
+  /* Loại BẢN EMAIL ĐƯỢC NHIỀU NGƯỜI CÙNG XEM (thêm 29/09/2026). Điều tra thực tế
+     (xem trao đổi 21-29/09): 1 phiên (event_id×rcpt) có 14.653 lượt mở từ 79 loại
+     User-Agent khác nhau, 88,9% trong giờ hành chính T2-T6, 61 UA riêng trong 1
+     ngày — tức HÀNG NGHÌN người thật cùng mở 1 bản nội dung duy nhất (pixel gắn
+     rcpt của 1 người), không phải máy và không phải lỗi hệ thống. Tất cả người
+     mở nhiều khác (20-52 lượt) đều chỉ 1 UA = 1 người mở lại trên 1 thiết bị. 1
+     người thật không thể có ≥10 loại UA khác nhau trên cùng 1 email, nên dùng đúng
+     dấu hiệu này (KHÔNG dùng ngưỡng số lượt, không đặt cứng tên người). Phiên bị
+     nhận diện: chỉ GIỮ 1 lượt mở đầu (người nhận vẫn tính là "đã mở" nên tỉ lệ mở
+     theo người không đổi), phần còn lại không tính vào lượt mở / Mở TB/người. */
+  var SHARED_MIN_UA=10, SHARED_MIN_EVENTS=30;
 
   /* Sort topEvents ASC rồi tính openCount với 5s dedup window:
      ≤5s = Outlook tự reload (cùng 1 lần mở) → KHÔNG đếm thêm
@@ -641,6 +652,19 @@ function buildSessions(logs){
       while(s.topEvents.length&&SELF_PREVIEW_UA_RE.test(s.topEvents[0].ua)&&
             (new Date(s.topEvents[0].ts).getTime()-sentTs)<=SELF_PREVIEW_WINDOW_MS){
         s.topEvents.shift();
+      }
+    }
+    if(s.topEvents.length>=SHARED_MIN_EVENTS){
+      var _seenUa={},_nUa=0;
+      for(var _si=0;_si<s.topEvents.length&&_nUa<SHARED_MIN_UA;_si++){
+        var _u=s.topEvents[_si].ua;
+        if(!_seenUa[_u]){_seenUa[_u]=1;_nUa++;}
+      }
+      if(_nUa>=SHARED_MIN_UA){
+        s.shared=true;
+        s.sharedOpens=s.topEvents.length-1;
+        s.topEvents=[s.topEvents[0]];
+        s.uas=s.topEvents[0].ua?[s.topEvents[0].ua]:[];
       }
     }
     if(s.topEvents.length===0){s.opened=s.confirmed;s.openAt=null;s.ua='';s.openCount=0;return;}
@@ -670,7 +694,9 @@ function buildSessions(logs){
   var opts={campaign:uniq('campaign'),dept:uniq('dept','(Chưa phân loại)'),role:uniq('role','(Chưa phân loại)'),initiative:uniq('initiative'),msg_type:uniq('msg_type'),
     device:(function(){var m={};arrAll.forEach(function(s){s.uas.forEach(function(ua){var d=deviceOf(ua);if(d)m[d]=1;});});return Object.keys(m).sort();})()};
 
-  return {arrAll:arrAll, opts:opts, eventsLen:logs.length};
+  var sharedN=0,sharedOpens=0;
+  arrAll.forEach(function(s){if(s.shared){sharedN++;sharedOpens+=s.sharedOpens;}});
+  return {arrAll:arrAll, opts:opts, eventsLen:logs.length, sharedN:sharedN, sharedOpens:sharedOpens};
 }
 
 function process(logs){
@@ -727,6 +753,7 @@ function process(logs){
       // bị quét lặp lại, KHÔNG hẳn là người đọc mở lại thật — xem recRow()).
       // CHỈ CẢNH BÁO, KHÔNG tự trừ khỏi openCount — chưa có bằng chứng UA/nhịp
       // mở thật để đổi cách tính, tự trừ số liệu lúc này là suy đoán.
+      if(s.shared)p.sharedExcl=(p.sharedExcl||0)+s.sharedOpens;
       if(!p.openDays)p.openDays={};
       (s.topEvents||[]).forEach(function(ev){if(ev.ts)p.openDays[ev.ts.slice(0,10)]=true;});
     }
@@ -964,7 +991,8 @@ function process(logs){
     proxyOpens:nProxyOnly,humanOpens:nHuman,
     proxyPct:nOpened?Math.round(nProxyOnly/nOpened*100):0,
     missingDept:missingDept,missingDeptPct:nOpened?Math.round(missingDept/nOpened*100):0,
-    uniqRcpt:persons.length,uniqCamp:Object.keys(camp).length};
+    uniqRcpt:persons.length,uniqCamp:Object.keys(camp).length,
+    sharedSessions:built.sharedN||0,sharedOpens:built.sharedOpens||0};
 
   /* ══ 15. SUMMARY METRICS (person-level, không bao giờ > 100%) ═══════
      sent        = số người được gửi email (unique rcpt có sent event)
@@ -1196,6 +1224,7 @@ function recRow(p){
     :p.scatterSuspect
     ?(' · ⚠️ '+p.openCount+' lượt mở rải suốt '+p.openDaysCount+' ngày — quá cao so với mức bình thường (~2-3 lượt/người), chưa xác định do nhiều thiết bị đồng bộ hay hệ thống quét định kỳ. CHƯA trừ khỏi số liệu, cần đối chiếu IP.')
     :'';
+  if(p.sharedExcl)suspectTip+=' · ℹ️ Đã loại '+nf(p.sharedExcl)+' lượt mở từ bản được nhiều người cùng xem (nhiều thiết bị khác nhau), chỉ tính 1 lượt của người nhận.';
   var suspect=p.burstSuspect||p.scatterSuspect;
   return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở':'Chưa mở email nào')+suspectTip+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
     +'<td>'+esc(fmtSeg(p.dept||p.role))+'</td>'
@@ -1481,6 +1510,7 @@ function dataHealthSection(d){
   function hz(tone,tt,sub,badge){return '<div class="hz-row"><span class="hz-dot hz-'+tone+'"></span><div><div class="hz-tt">'+tt+'</div><div class="hz-sub">'+sub+'</div></div><span class="hz-badge '+tone+'">'+badge+'</span></div>';}
   var hzRows=hz('ok','Pixel tracking mở email',(q.uniqCamp||0)+' chiến dịch · '+nf(s.opens||0)+' lượt mở đã ghi','Live')
     +hz('ok','Lọc mở-lại &lt;5s','Đã trừ reload tự động của Outlook để không thổi phồng lượt mở','Đang áp dụng')
+    +hz((q.sharedSessions||0)>0?'warn':'ok','Loại bản email được nhiều người cùng xem',(q.sharedSessions||0)>0?(q.sharedSessions+' bản có lượt mở từ ≥10 loại thiết bị khác nhau (nhiều người cùng xem 1 bản, không phải 1 người) — đã loại '+nf(q.sharedOpens||0)+' lượt khỏi tổng, chỉ giữ 1 lượt của người nhận'):'Không phát hiện bản nào được nhiều người cùng xem',(q.sharedSessions||0)>0?'Đã loại':'Không có')
     +hz(pp>10?'warn':'ok','Proxy mở ảnh (Apple MPP / Gmail)',pp+'% lượt mở đến từ proxy/gateway — có thể làm tỉ lệ mở cao hơn thực tế',pp>10?'Lưu ý':'Thấp')
     +hz(d.clickStats.has?'ok':'warn','Click-tracking per-link',d.clickStats.has?'Đã bật — '+nf(d.clickStats.total||0)+' lượt click ghi nhận':'Cần bật ENABLE_CLICK_TRACKING=True trong macro',d.clickStats.has?'OK':'Cần check');
   return '<section id="s-health"><div class="eyebrow">Chất lượng dữ liệu · độ tin cậy đo lường '+qclearBtn()+'</div>'
@@ -1760,6 +1790,7 @@ function exportRecipients(){var rows=window.__rec||[];if(!rows.length)return;var
   // S\u1ED1 l\u01B0\u1EE3t m\u1EDF b\u1EA5t th\u01B0\u1EDDng (d\u1ED3n d\u1EADp ho\u1EB7c r\u1EA3i nhi\u1EC1u ng\u00E0y, xem recRow()) \u2014 mang ra
   // CSV \u0111\u1EC3 kh\u00F4ng l\u1ECDt ra b\u00E1o c\u00E1o/Excel m\u00E0 m\u1EA5t lu\u00F4n c\u1EA3nh b\u00E1o ch\u1EC9 c\u00F3 tr\u00EAn dashboard.
   var note=r.burstSuspect?'Nghi mo don dap ('+r.openDaysCount+' ngay)':r.scatterSuspect?'Nghi mo bat thuong, rai '+r.openDaysCount+' ngay':'';
+  if(r.sharedExcl)note+=(note?' | ':'')+'Da loai '+r.sharedExcl+' luot mo tu ban chia se (nhieu nguoi cung xem)';
   csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+(r.opened?r.openCount:0)+'","'+(r.lastOpen?fmtTime(r.lastOpen):'')+'","'+(r.clicked?r.clickCount:0)+'","'+note+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='nguoi-nhan-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 function findMandatory(name){return(window.__mandatory||[]).filter(function(M){return M.name===name;})[0];}
 function exportMandatory(name){var M=findMandatory(name);if(!M||!M.notOpened.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac\n';M.notOpened.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='chua-mo-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
