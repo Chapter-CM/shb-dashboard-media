@@ -530,7 +530,11 @@ function dailySeries(logs,days){
   var span=Math.max(1,Math.ceil((end-start)/864e5));
   var step=span>35?7:1;var nb=Math.ceil(span/step);if(nb>26){step=Math.ceil(span/26);nb=Math.ceil(span/step);}
   var buckets=[];for(var i=0;i<nb;i++){var bs=start+i*step*864e5;buckets.push({ms:bs,end:bs+step*864e5,o:0,r:0,s:0});}
-  logs.forEach(function(l){var t=+new Date(l.timestamp);var idx=Math.floor((t-start)/(step*864e5));if(idx<0||idx>=buckets.length)return;if(l.pos==='top')buckets[idx].o++;if(l.pos==='click')buckets[idx].r++;if(l.pos==='sent')buckets[idx].s++;});
+  // Lượt mở trên biểu đồ dùng CÙNG định nghĩa với KPI: mỗi phiên (event_id×người nhận)
+  // tối đa 1 lượt/ngày (giờ VN), bản được nhiều người cùng xem chỉ tính 1 lượt (xem
+  // buildSessions). Trước đây đếm từng sự kiện thô nên đường xu hướng lệch xa KPI.
+  var _sk=(_procCache&&_procCache.built&&_procCache.built.sharedKeys)||{},_daySeen={},_shSeen={};
+  logs.forEach(function(l){var t=+new Date(l.timestamp);var idx=Math.floor((t-start)/(step*864e5));if(idx<0||idx>=buckets.length)return;if(l.pos==='top'){var _k=l.id+'||'+l.rcpt;if(_sk[_k]){if(_shSeen[_k])return;_shSeen[_k]=1;}var _dk=_k+'|'+Math.floor((t+25200000)/864e5);if(_daySeen[_dk])return;_daySeen[_dk]=1;buckets[idx].o++;}if(l.pos==='click')buckets[idx].r++;if(l.pos==='sent')buckets[idx].s++;});
   return buckets;
 }
 function deltaChip(cur,prev,goodUp){
@@ -641,17 +645,15 @@ function buildSessions(logs){
      theo người không đổi), phần còn lại không tính vào lượt mở / Mở TB/người. */
   var SHARED_MIN_UA=10, SHARED_MIN_EVENTS=30;
 
-  /* Sort topEvents ASC rồi tính openCount theo PHIÊN ĐỌC (thêm 29/09/2026):
-     Các lần tải pixel liên tiếp mà khoảng cách giữa 2 lần GẦN NHAU < 30 phút
-     = cùng 1 phiên đọc → chỉ tính 1 lượt. Quay lại sau ≥30 phút không hoạt động
-     = phiên mới → +1 lượt. Trước đây chỉ gộp khi cách nhau ≤5 giây VÀ so với lượt
-     ĐÃ TÍNH gần nhất (mốc không cập nhật theo từng lần tải), nên chuỗi tải lại liên
-     tục vẫn bị đếm nhiều lần. Dữ liệu thật (chiến dịch "Lịch phát sóng…", 6.760
-     người): các người mở nhiều (14-52 lượt, đều 1 UA = 1 người/1 thiết bị) có gap
-     TRUNG VỊ chỉ 15-36 giây — nhiều lần tải trong cùng 1 lần xem thư (Outlook tải
-     lại ảnh mỗi lần chọn thư vì pixel no-store), các cụm cách nhau hàng giờ/ngày.
-     30 phút = mốc phiên chuẩn của web analytics; chỉnh ở OPEN_SESSION_GAP_MS. */
-  var OPEN_SESSION_GAP_MS=30*60*1000;
+  /* Sort topEvents ASC rồi tính openCount = SỐ NGÀY (giờ VN) người nhận có mở thư
+     (đổi 30/09/2026, mỗi người tối đa 1 lượt mở/ngày). Lý do: Outlook tải lại pixel
+     (no-store) MỖI LẦN chọn/xem thư, nên 1 lần đọc bị ghi thành nhiều lượt. Đã thử
+     gộp 5 giây rồi 30 phút nhưng người dùng thật vẫn quay lại xem thư nhiều lần trong
+     ngày cách nhau 30-60 phút (vd người mở 20 lần/6 ngày, gap trung vị ~32 phút), nên
+     mọi ngưỡng phút đều chỉ là đoán. Đơn vị "ngày có mở" không phụ thuộc ngưỡng, dễ
+     giải thích, và bị chặn trên bởi số ngày kể từ lúc gửi. s.openTimes = mốc của lần
+     mở ĐẦU TIÊN mỗi ngày (dùng cho heatmap, biểu đồ theo ngày cho khớp con số này). */
+  var VN_OFFSET_MS=7*3600000, DAY_MS=864e5;
   Object.keys(sess).forEach(function(k){
     var s=sess[k];
     s.topEvents.sort(function(a,b){return a.ts<b.ts?-1:a.ts>b.ts?1:0;});
@@ -680,14 +682,16 @@ function buildSessions(logs){
     s.ua=s.topEvents[0].ua;
     s.openCount=1;
     s.openDevices=[s.topEvents[0].ua];
-    var lastTs=new Date(s.topEvents[0].ts).getTime();
+    s.openTimes=[s.topEvents[0].ts];
+    var lastDay=Math.floor((new Date(s.topEvents[0].ts).getTime()+VN_OFFSET_MS)/DAY_MS);
     for(var j=1;j<s.topEvents.length;j++){
-      var curTs=new Date(s.topEvents[j].ts).getTime();
-      if(curTs-lastTs>OPEN_SESSION_GAP_MS){
+      var dayIdx=Math.floor((new Date(s.topEvents[j].ts).getTime()+VN_OFFSET_MS)/DAY_MS);
+      if(dayIdx!==lastDay){ // sang ngày mới (giờ VN) = +1 lượt
         s.openCount++;
+        s.openTimes.push(s.topEvents[j].ts);
         s.openDevices.push(s.topEvents[j].ua);
+        lastDay=dayIdx;
       }
-      lastTs=curTs; // mốc = lần tải GẦN NHẤT (không phải lượt đã tính) → đo đúng khoảng không hoạt động
     }
     // Thiết bị chính: ưu tiên mobile > desktop > proxy > unknown
     // (Outlook thường pre-load trước khi user mở trên phone → mobile wins)
@@ -702,9 +706,9 @@ function buildSessions(logs){
   var opts={campaign:uniq('campaign'),dept:uniq('dept','(Chưa phân loại)'),role:uniq('role','(Chưa phân loại)'),initiative:uniq('initiative'),msg_type:uniq('msg_type'),
     device:(function(){var m={};arrAll.forEach(function(s){s.uas.forEach(function(ua){var d=deviceOf(ua);if(d)m[d]=1;});});return Object.keys(m).sort();})()};
 
-  var sharedN=0,sharedOpens=0;
-  arrAll.forEach(function(s){if(s.shared){sharedN++;sharedOpens+=s.sharedOpens;}});
-  return {arrAll:arrAll, opts:opts, eventsLen:logs.length, sharedN:sharedN, sharedOpens:sharedOpens};
+  var sharedN=0,sharedOpens=0,sharedKeys={};
+  arrAll.forEach(function(s){if(s.shared){sharedN++;sharedOpens+=s.sharedOpens;sharedKeys[s.id+'||'+s.rcpt]=true;}});
+  return {arrAll:arrAll, opts:opts, eventsLen:logs.length, sharedN:sharedN, sharedOpens:sharedOpens, sharedKeys:sharedKeys};
 }
 
 function process(logs){
@@ -871,8 +875,8 @@ function process(logs){
 
   /* ══ 6b. HEATMAP GIỜ MỞ · THỨ×GIỜ (9c) — dựng từ timestamp lần mở, không field mới ══ */
   var heatDOW=[];for(var _hd=0;_hd<7;_hd++)heatDOW.push(new Array(24).fill(0));
-  arr.forEach(function(s){(s.topEvents||[]).forEach(function(ev){
-    try{var dt=vnTime(ev.ts);var jsDay=dt.getUTCDay();var dow=jsDay===0?6:jsDay-1;heatDOW[dow][dt.getUTCHours()]++;}catch(e){}
+  arr.forEach(function(s){(s.openTimes||[]).forEach(function(ts){
+    try{var dt=vnTime(ts);var jsDay=dt.getUTCDay();var dow=jsDay===0?6:jsDay-1;heatDOW[dow][dt.getUTCHours()]++;}catch(e){}
   });});
 
   /* ══ 7. CLICK STATS ════════════════════════════════════════════════ */
@@ -1162,7 +1166,7 @@ function heroRow(d,cur,prev,ser){
   function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl">'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
   // 6 KPI chuẩn email: Lượt gửi · Đã mở (lượt) · Chưa mở · Lượt click · CTOR · Mở TB/người
   var k1=card('Lượt gửi',null,s.hasSent?nf(s.sentSessions):'—',(s.hasSent?deltaChip(cur.sent,prev.sent,true):'')+' · '+nf(s.sent)+' người',spark(sS,'var(--accent-2)'),'Tổng số email đã gửi (mỗi sự kiện pos=sent = 1 lượt). 1 người nhận nhiều lần = tính nhiều lượt. Số người nhận duy nhất: '+nf(s.sent)+'.');
-  var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' đã gộp mở lại &lt;30 phút',spark(oS,'var(--accent-2)'),'Tổng số lượt mở. Các lần tải lại liên tiếp cách nhau dưới 30 phút được gộp thành 1 lượt (Outlook tải lại ảnh mỗi lần bấm vào thư). Quay lại sau hơn 30 phút không xem = +1 lượt.');
+  var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' mỗi người tối đa 1 lượt/ngày',spark(oS,'var(--accent-2)'),'Tổng số lượt mở = số ngày người nhận có mở thư (mỗi người tối đa 1 lượt mỗi ngày). Outlook tải lại ảnh mỗi lần bấm vào thư nên các lần xem trong cùng ngày chỉ tính 1 lượt.');
   var k3=card('Chưa mở',null,s.hasSent?nf(s.notOpenCount||0):'—',(s.hasSent?deltaChip(cur.notOpen,prev.notOpen,false):'')+(s.notOpenRate!=null?' · '+s.notOpenRate+'% người gửi':''),spark(sS,'var(--risk)'),'Số người được gửi email nhưng chưa mở lần nào. Cần follow-up trực tiếp.');
   var k4=card('Lượt click',null,nf(d.clickStats.total||0),deltaChip(cur.clickTotal,prev.clickTotal,true)+' · '+nf(s.nClickers||0)+' người click',spark(cS,'var(--accent)'),'Tổng số lượt click (1 người click nhiều lần = tính nhiều lượt). Số người unique đã click: '+nf(s.nClickers||0)+'.');
   var k5=card('CTOR',null,(d.clickStats.ctor||0)+'%',deltaChip(cur.ctor,prev.ctor,true)+' click ÷ mở',spark(cS,'var(--accent-2)'),'Click-to-Open Rate = Người click ÷ Người mở.');
@@ -1276,7 +1280,7 @@ function devicePanel(d){
       +'<div class="fp">'+x.pct+'%</div>'
       +'<div class="fn">'+x.n+'</div></div>';
   });
-  return '<div class="panel"><div class="panel-h" data-tip="Số lượt mở (open events) theo thiết bị. Quay lại sau hơn 30 phút = +1 lượt. Các lần tải lại cách nhau dưới 30 phút = gộp thành 1 lượt. % = tỷ lệ lượt mở từ thiết bị này trên tổng lượt mở.">Thiết bị · <span style="font-size:12px;font-weight:500;color:var(--muted)">bấm để lọc</span>'+((F.device&&F.device.length)?'<button class="csv" onclick="clearFilter(\'device\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'')+'</div><div class="funnel">'+bars+'</div><div style="font-size:11px;color:var(--faint);margin-top:10px">% = tỷ lệ lượt mở từ thiết bị này / tổng lượt mở. Số = lượt (đóng+mở lại = +1). Proxy = load giả bởi security gateway.</div></div>';
+  return '<div class="panel"><div class="panel-h" data-tip="Số lượt mở (open events) theo thiết bị. Mỗi người tối đa 1 lượt mỗi ngày (các lần xem trong cùng ngày gộp thành 1). % = tỷ lệ lượt mở từ thiết bị này trên tổng lượt mở.">Thiết bị · <span style="font-size:12px;font-weight:500;color:var(--muted)">bấm để lọc</span>'+((F.device&&F.device.length)?'<button class="csv" onclick="clearFilter(\'device\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'')+'</div><div class="funnel">'+bars+'</div><div style="font-size:11px;color:var(--faint);margin-top:10px">% = tỷ lệ lượt mở từ thiết bị này / tổng lượt mở. Số = lượt (đóng+mở lại = +1). Proxy = load giả bởi security gateway.</div></div>';
 }
 
 /* Bảng phân khúc: trước đây chỉ hiển thị thanh bar + tỉ lệ mở, thiếu các chỉ số
@@ -1517,7 +1521,7 @@ function dataHealthSection(d){
   var pp=q.proxyPct,mp=q.missingDeptPct;
   function hz(tone,tt,sub,badge){return '<div class="hz-row"><span class="hz-dot hz-'+tone+'"></span><div><div class="hz-tt">'+tt+'</div><div class="hz-sub">'+sub+'</div></div><span class="hz-badge '+tone+'">'+badge+'</span></div>';}
   var hzRows=hz('ok','Pixel tracking mở email',(q.uniqCamp||0)+' chiến dịch · '+nf(s.opens||0)+' lượt mở đã ghi','Live')
-    +hz('ok','Gộp lượt mở theo phiên đọc 30 phút','Các lần Outlook tải lại pixel liên tiếp (cách nhau dưới 30 phút) chỉ tính 1 lượt mở, không thổi phồng lượt mở','Đang áp dụng')
+    +hz('ok','Lượt mở = số ngày có mở (tối đa 1 lượt/người/ngày)','Outlook tải lại pixel mỗi lần xem thư nên các lần xem trong cùng ngày chỉ tính 1 lượt mở, không thổi phồng lượt mở','Đang áp dụng')
     +hz((q.sharedSessions||0)>0?'warn':'ok','Loại bản email được nhiều người cùng xem',(q.sharedSessions||0)>0?(q.sharedSessions+' bản có lượt mở từ ≥10 loại thiết bị khác nhau (nhiều người cùng xem 1 bản, không phải 1 người) — đã loại '+nf(q.sharedOpens||0)+' lượt khỏi tổng, chỉ giữ 1 lượt của người nhận'):'Không phát hiện bản nào được nhiều người cùng xem',(q.sharedSessions||0)>0?'Đã loại':'Không có')
     +hz(pp>10?'warn':'ok','Proxy mở ảnh (Apple MPP / Gmail)',pp+'% lượt mở đến từ proxy/gateway — có thể làm tỉ lệ mở cao hơn thực tế',pp>10?'Lưu ý':'Thấp')
     +hz(d.clickStats.has?'ok':'warn','Click-tracking per-link',d.clickStats.has?'Đã bật — '+nf(d.clickStats.total||0)+' lượt click ghi nhận':'Cần bật ENABLE_CLICK_TRACKING=True trong macro',d.clickStats.has?'OK':'Cần check');
@@ -1725,8 +1729,8 @@ function render(){
       return true;
     });
   }
-  var ser=dailySeries(_cl,_days);
   var d=process(cl),cur=quickMetrics(cl),prev=quickMetrics(pl);
+  var ser=dailySeries(_cl,_days); // gọi SAU process(cl): cần _procCache.built.sharedKeys
   if(!d){
     var isEmpty=!LOGS||!LOGS.length;
     var emptyMsg=isEmpty?'Chưa có sự kiện nào trong nguồn dữ liệu. Bản nội bộ: kiểm tra kết nối MySQL của job sync_data (MYSQL_*/INGEST_*). Bản Vercel: kiểm tra EMAIL_SUPABASE_URL + EMAIL_SUPABASE_SERVICE_KEY. Hoặc gửi email HTML đầu tiên từ Outlook.':'Gửi email HTML từ Outlook để bắt đầu đo lường.';
