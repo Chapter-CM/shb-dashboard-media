@@ -523,6 +523,9 @@ function windowLogs(days,offset){
   var end=Date.now()-offset*days*864e5,start=end-days*864e5;
   return LOGS.filter(function(l){var t=+new Date(l.timestamp);return t>=start&&t<end;});
 }
+var SELF_PREVIEW_UA_RE=/ms-office/i;
+var SELF_PREVIEW_WINDOW_MS=5*60*1000; // người gửi tự xem trước ngay sau khi gửi — không tính (xem buildSessions)
+var SESSION_GAP_MS=30*60000; // phiên đọc ngắt sau 30 phút không có lượt tải (xem buildSessions)
 function dailySeries(logs,days){
   if(!logs.length)return [];
   var ts=logs.map(function(l){return +new Date(l.timestamp);});
@@ -530,11 +533,31 @@ function dailySeries(logs,days){
   var span=Math.max(1,Math.ceil((end-start)/864e5));
   var step=span>35?7:1;var nb=Math.ceil(span/step);if(nb>26){step=Math.ceil(span/26);nb=Math.ceil(span/step);}
   var buckets=[];for(var i=0;i<nb;i++){var bs=start+i*step*864e5;buckets.push({ms:bs,end:bs+step*864e5,o:0,r:0,s:0});}
-  // Lượt mở trên biểu đồ dùng CÙNG định nghĩa với KPI: mỗi phiên (event_id×người nhận)
-  // tối đa 1 lượt/ngày (giờ VN), bản được nhiều người cùng xem chỉ tính 1 lượt (xem
-  // buildSessions). Trước đây đếm từng sự kiện thô nên đường xu hướng lệch xa KPI.
-  var _sk=(_procCache&&_procCache.built&&_procCache.built.sharedKeys)||{},_daySeen={},_shSeen={};
-  logs.forEach(function(l){var t=+new Date(l.timestamp);var idx=Math.floor((t-start)/(step*864e5));if(idx<0||idx>=buckets.length)return;if(l.pos==='top'){var _k=l.id+'||'+l.rcpt;if(_sk[_k]){if(_shSeen[_k])return;_shSeen[_k]=1;}var _dk=_k+'|'+Math.floor((t+25200000)/864e5);if(_daySeen[_dk])return;_daySeen[_dk]=1;buckets[idx].o++;}if(l.pos==='click')buckets[idx].r++;if(l.pos==='sent')buckets[idx].s++;});
+  // Lượt mở trên biểu đồ dùng CÙNG định nghĩa với KPI (xem buildSessions): đếm theo
+  // PHIÊN ĐỌC (ngắt sau 30 phút im lặng) của từng (event_id×người nhận), bản bị loại
+  // vì lượt tải bất thường chỉ tính 1 lượt. Trước đây đếm từng sự kiện thô nên đường
+  // xu hướng lệch xa KPI.
+  var _sk=(_procCache&&_procCache.built&&_procCache.built.sharedKeys)||{},_byKey={},_sentAt={};
+  logs.forEach(function(l){
+    var t=+new Date(l.timestamp);
+    if(l.pos==='top'){var _k=l.id+'||'+l.rcpt;(_byKey[_k]=_byKey[_k]||[]).push({t:t,ua:l.ua});return;}
+    if(l.pos==='sent')_sentAt[l.id+'||'+l.rcpt]=t;
+    var idx=Math.floor((t-start)/(step*864e5));if(idx<0||idx>=buckets.length)return;
+    if(l.pos==='click')buckets[idx].r++;if(l.pos==='sent')buckets[idx].s++;
+  });
+  Object.keys(_byKey).forEach(function(_k){
+    var ev=_byKey[_k].sort(function(x,y){return x.t-y.t;});
+    // bỏ lượt tự xem trước của người gửi (cùng quy tắc buildSessions) để khớp KPI
+    while(ev.length&&_sentAt[_k]!=null&&SELF_PREVIEW_UA_RE.test(ev[0].ua||'')&&(ev[0].t-_sentAt[_k])<=SELF_PREVIEW_WINDOW_MS)ev.shift();
+    var a=ev.map(function(e){return e.t;}),last=null;
+    for(var i=0;i<a.length;i++){
+      var isStart=last===null||a[i]-last>SESSION_GAP_MS;
+      last=a[i];
+      if(!isStart)continue;
+      var idx=Math.floor((a[i]-start)/(step*864e5));if(idx>=0&&idx<buckets.length)buckets[idx].o++;
+      if(_sk[_k])break; // bản bất thường: chỉ giữ 1 lượt đầu
+    }
+  });
   return buckets;
 }
 function deltaChip(cur,prev,goodUp){
@@ -631,8 +654,6 @@ function buildSessions(logs){
      phải người nhận mở. Loại các event top đứng ĐẦU (ngay sau sent) khớp UA
      này trong vòng 5 phút - các lần mở thật sau đó (kể cả cùng UA, cách xa
      hơn) vẫn được giữ nguyên. */
-  var SELF_PREVIEW_UA_RE=/ms-office/i;
-  var SELF_PREVIEW_WINDOW_MS=5*60*1000;
   /* Loại BẢN EMAIL ĐƯỢC NHIỀU NGƯỜI CÙNG XEM (thêm 29/09/2026). Điều tra thực tế
      (xem trao đổi 21-29/09): 1 phiên (event_id×rcpt) có 14.653 lượt mở từ 79 loại
      User-Agent khác nhau, 88,9% trong giờ hành chính T2-T6, 61 UA riêng trong 1
@@ -645,15 +666,15 @@ function buildSessions(logs){
      theo người không đổi), phần còn lại không tính vào lượt mở / Mở TB/người. */
   var SHARED_MIN_UA=10, SHARED_MIN_EVENTS=30;
 
-  /* Sort topEvents ASC rồi tính openCount = SỐ NGÀY (giờ VN) người nhận có mở thư
-     (đổi 30/09/2026, mỗi người tối đa 1 lượt mở/ngày). Lý do: Outlook tải lại pixel
-     (no-store) MỖI LẦN chọn/xem thư, nên 1 lần đọc bị ghi thành nhiều lượt. Đã thử
-     gộp 5 giây rồi 30 phút nhưng người dùng thật vẫn quay lại xem thư nhiều lần trong
-     ngày cách nhau 30-60 phút (vd người mở 20 lần/6 ngày, gap trung vị ~32 phút), nên
-     mọi ngưỡng phút đều chỉ là đoán. Đơn vị "ngày có mở" không phụ thuộc ngưỡng, dễ
-     giải thích, và bị chặn trên bởi số ngày kể từ lúc gửi. s.openTimes = mốc của lần
-     mở ĐẦU TIÊN mỗi ngày (dùng cho heatmap, biểu đồ theo ngày cho khớp con số này). */
-  var VN_OFFSET_MS=7*3600000, DAY_MS=864e5;
+  /* Sort topEvents ASC rồi tính openCount = SỐ PHIÊN ĐỌC (đổi 01/10/2026, theo quy
+     ước "session" của Google Analytics: phiên kết thúc sau 30 phút không hoạt động).
+     Lý do: Outlook tải lại pixel (no-store) MỖI LẦN hiển thị lại thư (chuyển thư, mở
+     lại, thao tác trong khung đọc — đã thử trực tiếp 01/10: bấm sang thư khác rồi bấm
+     lại sinh nhiều lượt cách nhau 8-20 giây), nên 1 lần đọc bị ghi thành nhiều lượt.
+     Dữ liệu thật KHÔNG có "thung lũng" nào tách tải lại kỹ thuật khỏi người thật mở
+     lại, nên 30 phút là QUY ƯỚC chuẩn ngành, không phải sự thật khách quan. Không đo
+     được lúc đóng thư (pixel không báo). s.openTimes = mốc BẮT ĐẦU mỗi phiên (heatmap,
+     biểu đồ theo ngày dùng cùng định nghĩa để khớp con số này). */
   Object.keys(sess).forEach(function(k){
     var s=sess[k];
     s.topEvents.sort(function(a,b){return a.ts<b.ts?-1:a.ts>b.ts?1:0;});
@@ -683,15 +704,15 @@ function buildSessions(logs){
     s.openCount=1;
     s.openDevices=[s.topEvents[0].ua];
     s.openTimes=[s.topEvents[0].ts];
-    var lastDay=Math.floor((new Date(s.topEvents[0].ts).getTime()+VN_OFFSET_MS)/DAY_MS);
+    var lastMs=new Date(s.topEvents[0].ts).getTime();
     for(var j=1;j<s.topEvents.length;j++){
-      var dayIdx=Math.floor((new Date(s.topEvents[j].ts).getTime()+VN_OFFSET_MS)/DAY_MS);
-      if(dayIdx!==lastDay){ // sang ngày mới (giờ VN) = +1 lượt
+      var curMs=new Date(s.topEvents[j].ts).getTime();
+      if(curMs-lastMs>SESSION_GAP_MS){ // im lặng > 30 phút rồi tải lại = phiên đọc mới
         s.openCount++;
         s.openTimes.push(s.topEvents[j].ts);
         s.openDevices.push(s.topEvents[j].ua);
-        lastDay=dayIdx;
       }
+      lastMs=curMs; // mốc "hoạt động cuối": mỗi lượt tải trong phiên kéo dài phiên thêm 30 phút
     }
     // Thiết bị chính: ưu tiên mobile > desktop > proxy > unknown
     // (Outlook thường pre-load trước khi user mở trên phone → mobile wins)
@@ -1232,13 +1253,13 @@ function setRecTab(t){_recTab=t;resection('s-rec',recipientSection);}
 function recRow(p){
   var tier=!p.opened?'cold':p.clicked?'hot':'warm';
   var suspectTip=p.burstSuspect
-    ?(' · ⚠️ '+p.openCount+' lượt mở dồn vào '+p.openDaysCount+' ngày — khả năng cao do mail client/gateway tự tải lại ảnh (Reading Pane, quét bảo mật), không hẳn là mở lại thật. CHƯA trừ khỏi số liệu, cần kiểm tra UA thực tế.')
+    ?(' · ⚠️ '+p.openCount+' phiên đọc dồn vào '+p.openDaysCount+' ngày — cao bất thường. Mỗi phiên = lần mở cách lần trước hơn 30 phút. CHƯA trừ khỏi số liệu.')
     :p.scatterSuspect
-    ?(' · ⚠️ '+p.openCount+' lượt mở rải suốt '+p.openDaysCount+' ngày — quá cao so với mức bình thường (~2-3 lượt/người), chưa xác định do nhiều thiết bị đồng bộ hay hệ thống quét định kỳ. CHƯA trừ khỏi số liệu, cần đối chiếu IP.')
+    ?(' · ⚠️ '+p.openCount+' phiên đọc rải suốt '+p.openDaysCount+' ngày — cao so với mức thường gặp. Mỗi phiên = lần mở cách lần trước hơn 30 phút. CHƯA trừ khỏi số liệu.')
     :'';
-  if(p.sharedExcl)suspectTip+=' · ℹ️ Đã loại '+nf(p.sharedExcl)+' lượt mở từ bản được nhiều người cùng xem (nhiều thiết bị khác nhau), chỉ tính 1 lượt của người nhận.';
+  if(p.sharedExcl)suspectTip+=' · ℹ️ Đã loại '+nf(p.sharedExcl)+' lượt tải bất thường từ bản email này (≥10 loại thiết bị khác nhau, chưa rõ cơ chế), chỉ tính 1 lượt của người nhận.';
   var suspect=p.burstSuspect||p.scatterSuspect;
-  return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở':'Chưa mở email nào')+suspectTip+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
+  return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở (phiên đọc, ngắt sau 30 phút)':'Chưa mở email nào')+suspectTip+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
     +'<td>'+esc(fmtSeg(p.dept||p.role))+'</td>'
     +'<td class="num">'+(p.opened?p.openCount:0)+(suspect?' <span style="color:var(--warn)" title="Số lượt mở bất thường — xem chi tiết khi hover">⚠️</span>':'')+'</td>'
     +'<td class="num" style="font-size:11px">'+(p.lastOpen?fmtTime(p.lastOpen):'—')+'</td>'
@@ -1522,7 +1543,7 @@ function dataHealthSection(d){
   function hz(tone,tt,sub,badge){return '<div class="hz-row"><span class="hz-dot hz-'+tone+'"></span><div><div class="hz-tt">'+tt+'</div><div class="hz-sub">'+sub+'</div></div><span class="hz-badge '+tone+'">'+badge+'</span></div>';}
   var hzRows=hz('ok','Pixel tracking mở email',(q.uniqCamp||0)+' chiến dịch · '+nf(s.opens||0)+' lượt mở đã ghi','Live')
     +hz('ok','Lượt mở = số ngày có mở (tối đa 1 lượt/người/ngày)','Outlook tải lại pixel mỗi lần xem thư nên các lần xem trong cùng ngày chỉ tính 1 lượt mở, không thổi phồng lượt mở','Đang áp dụng')
-    +hz((q.sharedSessions||0)>0?'warn':'ok','Loại bản email được nhiều người cùng xem',(q.sharedSessions||0)>0?(q.sharedSessions+' bản có lượt mở từ ≥10 loại thiết bị khác nhau (nhiều người cùng xem 1 bản, không phải 1 người) — đã loại '+nf(q.sharedOpens||0)+' lượt khỏi tổng, chỉ giữ 1 lượt của người nhận'):'Không phát hiện bản nào được nhiều người cùng xem',(q.sharedSessions||0)>0?'Đã loại':'Không có')
+    +hz((q.sharedSessions||0)>0?'warn':'ok','Bản email có lượt tải bất thường (nhiều loại thiết bị)',(q.sharedSessions||0)>0?(q.sharedSessions+' bản có lượt tải từ ≥10 loại thiết bị khác nhau (một người không thể có chừng đó; chưa rõ cơ chế) — đã loại '+nf(q.sharedOpens||0)+' lượt khỏi tổng, chỉ giữ 1 lượt của người nhận'):'Không phát hiện bản nào có lượt tải bất thường',(q.sharedSessions||0)>0?'Đã loại':'Không có')
     +hz(pp>10?'warn':'ok','Proxy mở ảnh (Apple MPP / Gmail)',pp+'% lượt mở đến từ proxy/gateway — có thể làm tỉ lệ mở cao hơn thực tế',pp>10?'Lưu ý':'Thấp')
     +hz(d.clickStats.has?'ok':'warn','Click-tracking per-link',d.clickStats.has?'Đã bật — '+nf(d.clickStats.total||0)+' lượt click ghi nhận':'Cần bật ENABLE_CLICK_TRACKING=True trong macro',d.clickStats.has?'OK':'Cần check');
   return '<section id="s-health"><div class="eyebrow">Chất lượng dữ liệu · độ tin cậy đo lường '+qclearBtn()+'</div>'
@@ -1802,7 +1823,7 @@ function exportRecipients(){var rows=window.__rec||[];if(!rows.length)return;var
   // S\u1ED1 l\u01B0\u1EE3t m\u1EDF b\u1EA5t th\u01B0\u1EDDng (d\u1ED3n d\u1EADp ho\u1EB7c r\u1EA3i nhi\u1EC1u ng\u00E0y, xem recRow()) \u2014 mang ra
   // CSV \u0111\u1EC3 kh\u00F4ng l\u1ECDt ra b\u00E1o c\u00E1o/Excel m\u00E0 m\u1EA5t lu\u00F4n c\u1EA3nh b\u00E1o ch\u1EC9 c\u00F3 tr\u00EAn dashboard.
   var note=r.burstSuspect?'Nghi mo don dap ('+r.openDaysCount+' ngay)':r.scatterSuspect?'Nghi mo bat thuong, rai '+r.openDaysCount+' ngay':'';
-  if(r.sharedExcl)note+=(note?' | ':'')+'Da loai '+r.sharedExcl+' luot mo tu ban chia se (nhieu nguoi cung xem)';
+  if(r.sharedExcl)note+=(note?' | ':'')+'Da loai '+r.sharedExcl+' luot tai bat thuong (>=10 loai thiet bi)';
   csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+(r.opened?r.openCount:0)+'","'+(r.lastOpen?fmtTime(r.lastOpen):'')+'","'+(r.clicked?r.clickCount:0)+'","'+note+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='nguoi-nhan-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 function findMandatory(name){return(window.__mandatory||[]).filter(function(M){return M.name===name;})[0];}
 function exportMandatory(name){var M=findMandatory(name);if(!M||!M.notOpened.length)return;var csv='Nguoi Nhan,Email,Phong Ban,Cap Bac\n';M.notOpened.forEach(function(r){csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='chua-mo-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
