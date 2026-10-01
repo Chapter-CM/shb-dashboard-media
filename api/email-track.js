@@ -117,7 +117,48 @@ function streamDwellPixel(req, res, row) {
   });
 }
 
+// ── Bộ chặn BẢN EMAIL BỊ NHIỀU NGƯỜI CÙNG XEM (thêm 02/10/2026) ──────────────────
+// Sự cố thật (chiến dịch "Lịch phát sóng…", 25/09): 1 bản email (1 event_id) bị hàng
+// nghìn người mở từ 79 loại User-Agent khác nhau → 14.653 dòng ghi vào DB, làm tràn dữ
+// liệu và làm dashboard chậm. 1 người nhận thật chỉ có vài thiết bị, nên nếu 1
+// event_id có ≥ GUARD_MAX_UA loại UA khác nhau, hoặc > GUARD_MAX_PER_HOUR lượt trong
+// 1 giờ, thì từ đó đến hết giờ đó BỎ QUA không ghi thêm (vẫn trả pixel bình thường,
+// người xem không bị ảnh hưởng gì). Đếm trong bộ nhớ từng pod (xấp xỉ khi có nhiều pod,
+// đủ cho mục đích chặn tràn). Luôn "fail-open": lỗi bất kỳ → ghi như bình thường, không
+// bao giờ làm mất lượt mở thật. Tắt bằng EMAIL_GUARD_OFF=1; chỉnh bằng EMAIL_GUARD_MAX_UA,
+// EMAIL_GUARD_MAX_PER_HOUR. Xem số liệu tại /healthz?debug=1 (trackGuard).
+const GUARD_OFF = process.env.EMAIL_GUARD_OFF === '1';
+const GUARD_MAX_UA = Math.max(2, parseInt(process.env.EMAIL_GUARD_MAX_UA || '10', 10) || 10);
+const GUARD_MAX_PER_HOUR = Math.max(10, parseInt(process.env.EMAIL_GUARD_MAX_PER_HOUR || '120', 10) || 120);
+const guardMap = new Map();
+const guardStatsData = { blockedEids: 0, droppedEvents: 0, lastBlocked: null };
+function guardBlocks(row) {
+  if (GUARD_OFF || !row.event_id || (row.pos !== 'top' && row.pos !== 'bottom')) return false;
+  try {
+    const hr = Math.floor(Date.now() / 3600000);
+    let g = guardMap.get(row.event_id);
+    if (!g || g.hr !== hr) {
+      if (guardMap.size > 20000) { for (const [k, v] of guardMap) if (v.hr !== hr) guardMap.delete(k); }
+      g = { hr: hr, n: 0, uas: new Set(), blocked: false };
+      guardMap.set(row.event_id, g);
+    }
+    g.n++;
+    if (row.ua && g.uas.size < GUARD_MAX_UA) g.uas.add(row.ua);
+    if (!g.blocked && (g.uas.size >= GUARD_MAX_UA || g.n > GUARD_MAX_PER_HOUR)) {
+      g.blocked = true;
+      guardStatsData.blockedEids++;
+      guardStatsData.lastBlocked = { event_id: row.event_id, at: new Date().toISOString(), uas: g.uas.size, n: g.n };
+      console.warn('[SHB Tracker] event_id ' + row.event_id + ' bi nhieu nguoi cung xem (' + g.uas.size + ' UA, ' + g.n +
+        ' luot/gio) - bo qua ghi them den het gio nay.');
+    }
+    if (g.blocked) { guardStatsData.droppedEvents++; return true; }
+    return false;
+  } catch (e) { return false; }
+}
+function guardStats() { return Object.assign({ off: GUARD_OFF, maxUa: GUARD_MAX_UA, maxPerHour: GUARD_MAX_PER_HOUR, tracked: guardMap.size }, guardStatsData); }
+
 function insertEvent(row) {
+  if (guardBlocks(row)) return Promise.resolve(null);
   // MySQL nội bộ (EKS) — bật bằng MYSQL_HOST; không set thì ghi Supabase như cũ.
   if (dbClient.isEnabled()) return dbClient.insert('events', row);
   return new Promise((resolve, reject) => {
@@ -277,3 +318,5 @@ module.exports = async (req, res) => {
   });
   res.end(GIF);
 };
+
+module.exports.guardStats = guardStats;

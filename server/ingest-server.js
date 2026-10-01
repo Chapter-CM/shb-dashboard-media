@@ -118,6 +118,7 @@ const server = http.createServer((req, res) => {
         mysqlHostSet: !!process.env.MYSQL_HOST,
         dbEnabled: dbClient.isEnabled(),
         schemaCheck: dbClient.getSchemaStatus(),
+        trackGuard: typeof emailTrack.guardStats === 'function' ? emailTrack.guardStats() : null,
       });
     }
     res.writeHead(200); return res.end('ok');
