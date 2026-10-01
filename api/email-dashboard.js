@@ -475,8 +475,10 @@ tbody tr:hover .pin{background:rgba(255,255,255,.028)}
 /* ── 6a: kpi-grid 3×2 (6 KPI person-level) ── */
 .kpi-grid{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:14px}
 .kpi-grid.six{grid-template-columns:repeat(3,1fr)}
+.kpi-grid.eight{grid-template-columns:repeat(4,1fr)}
+@media(max-width:1280px){.kpi-grid.eight{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:920px){.kpi-grid.six{grid-template-columns:1fr 1fr}}
-@media(max-width:560px){.kpi-grid.six{grid-template-columns:1fr}}
+@media(max-width:560px){.kpi-grid.six,.kpi-grid.eight{grid-template-columns:1fr}}
 `;
 
 /* ─── JS ──────────────────────────────────────────────────────────────────── */
@@ -541,12 +543,12 @@ function anomalyFilter(evs){
   return evs.filter(function(e){return (e.ua||'')===first;});
 }
 var OPEN_DEDUP_MS=5000;      // lượt mở: 2 lần tải cách ≤5s = Outlook tự tải lại (cùng 1 lần mở)
-var SESSION_GAP_MS=30*60000; // phiên đọc (chỉ số riêng, không thay lượt mở): ngắt sau 30 phút im lặng
+var SESSION_GAP_MS=15*60000; // phiên đọc (chỉ số riêng, không thay lượt mở): ngắt sau 15 phút im lặng
 // ts[] đã sort ASC (ms) → mốc của các LƯỢT MỞ. Mốc so sánh = lượt đã tính gần nhất (giữ đúng
 // định nghĩa cũ của dashboard), KHÔNG phải lần tải gần nhất.
 function openStarts(ts){var out=[],ref=null;for(var i=0;i<ts.length;i++){if(ref===null||ts[i]-ref>OPEN_DEDUP_MS){out.push(ts[i]);ref=ts[i];}}return out;}
-// ts[] đã sort ASC (ms) → số PHIÊN ĐỌC (mỗi lần tải kéo dài phiên thêm 30 phút).
-function countSessions(ts){var n=0,last=null;for(var i=0;i<ts.length;i++){if(last===null||ts[i]-last>SESSION_GAP_MS)n++;last=ts[i];}return n;} // phiên đọc ngắt sau 30 phút không có lượt tải (xem buildSessions)
+// ts[] đã sort ASC (ms) → số PHIÊN ĐỌC (mỗi lần tải kéo dài phiên thêm 15 phút).
+function countSessions(ts){var n=0,last=null;for(var i=0;i<ts.length;i++){if(last===null||ts[i]-last>SESSION_GAP_MS)n++;last=ts[i];}return n;} // phiên đọc ngắt sau 15 phút không có lượt tải (xem buildSessions)
 function dailySeries(logs,days){
   if(!logs.length)return [];
   var ts=logs.map(function(l){return +new Date(l.timestamp);});
@@ -682,8 +684,8 @@ function buildSessions(logs){
   /* Sort topEvents ASC rồi tính 2 chỉ số riêng (01/10/2026):
      - openCount (LƯỢT MỞ, như cũ): 2 lần tải cách ≤5s coi là Outlook tự tải lại, không
        đếm thêm; >5s kể từ lượt đã tính = +1 lượt. Người mở lại sau vài phút vẫn tính.
-     - sessionCount (PHIÊN ĐỌC, bổ sung, quy ước GA): lần tải mới cách lần tải liền trước
-       >30 phút = phiên mới. Chỉ để tham khảo, KHÔNG thay lượt mở. Không đo được lúc đóng
+     - sessionCount (PHIÊN ĐỌC, chỉ số riêng, quy ước GA nhưng ngưỡng 15 phút): lần tải
+       mới cách lần tải liền trước >15 phút = phiên mới. Chỉ để tham khảo, KHÔNG thay lượt mở. Không đo được lúc đóng
        thư (pixel không báo). Thí nghiệm 01/10: bấm sang thư khác rồi quay lại sinh nhiều
        lượt cách nhau 8-20s — hành vi thật của Outlook, không phải số giả.
      s.openTimes = mốc các lượt mở (heatmap, biểu đồ theo ngày dùng cùng định nghĩa). */
@@ -887,7 +889,7 @@ function process(logs){
     var c=camp[cm];
     if(s.sent||(!hasSent&&s.opened))c.rcptSent.add(s.rcpt);
     if(s.opened){
-      c.rcptOpen.add(s.rcpt);c.openEvents+=s.openCount;
+      c.rcptOpen.add(s.rcpt);c.openEvents+=s.openCount;c.sessions=(c.sessions||0)+(s.sessionCount||0);
       var isProxy=s.uas.length>0&&s.uas.every(function(ua){return deviceOf(ua)==='proxy';});
       if(isProxy)c.proxy++;else c.human++;
     }
@@ -929,7 +931,7 @@ function process(logs){
     var vReach=nS>0?Math.round(c.human/(nS||1)*100):null;
     var avgDl=c.delays.length?Math.round(c.delays.reduce(function(a,b){return a+b;},0)/c.delays.length/60000):null;
     return{name:c.name,subject:c.subject,initiative:c.initiative,msg_type:c.msg_type,target_size:c.target_size||null,
-      sent:nS,opens:nO,openEvents:c.openEvents,notOpen:nS-nO,notOpenRate:nS>0?Math.round((nS-nO)/nS*100):null,clicks:c.clicks,clickers:nC,confirmed:c.rcptConfirmed.size,
+      sent:nS,opens:nO,openEvents:c.openEvents,sessions:c.sessions||0,notOpen:nS-nO,notOpenRate:nS>0?Math.round((nS-nO)/nS*100):null,clicks:c.clicks,clickers:nC,confirmed:c.rcptConfirmed.size,
       reach:nS>0?Math.round(nO/nS*100):null,
       verifiedReach:nS>0?vReach:null,
       ctor:nO>0?Math.round(nC/nO*100):0,
@@ -1060,6 +1062,7 @@ function process(logs){
     clickRate:   nSent>0?Math.round(nClicked/nSent*100):null,
     ctor:        nOpened>0?Math.round(nClicked/nOpened*100):0,
     avgOpensPerReader: nOpened>0?Math.round(totalOpens/nOpened*10)/10:null,
+    avgSessionsPerReader: nOpened>0?Math.round(totalSessionsRead/nOpened*10)/10:null,
     nClickers:   nClicked,
     nConfirmed:  nConfirmed,
     confirmRate: nSent>0?Math.round(nConfirmed/nSent*100):null,
@@ -1196,12 +1199,14 @@ function heroRow(d,cur,prev,ser){
   function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl">'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
   // 6 KPI chuẩn email: Lượt gửi · Đã mở (lượt) · Chưa mở · Lượt click · CTOR · Mở TB/người
   var k1=card('Lượt gửi',null,s.hasSent?nf(s.sentSessions):'—',(s.hasSent?deltaChip(cur.sent,prev.sent,true):'')+' · '+nf(s.sent)+' người',spark(sS,'var(--accent-2)'),'Tổng số email đã gửi (mỗi sự kiện pos=sent = 1 lượt). 1 người nhận nhiều lần = tính nhiều lượt. Số người nhận duy nhất: '+nf(s.sent)+'.');
-  var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' · '+nf(s.readSessions||0)+' phiên đọc',spark(oS,'var(--accent-2)'),'Tổng số lượt mở. Các lần tải cách nhau ≤5 giây (Outlook tự tải lại) chỉ tính 1; người mở lại sau đó vẫn tính thêm. Phiên đọc = các lần mở cách nhau ≤30 phút gộp làm 1 (chỉ số tham khảo, không thay lượt mở).');
+  var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' gộp tải lại ≤5s',spark(oS,'var(--accent-2)'),'Tổng số lượt mở. Các lần tải cách nhau ≤5 giây (Outlook tự tải lại) chỉ tính 1; người mở lại sau đó vẫn tính thêm. ');
   var k3=card('Chưa mở',null,s.hasSent?nf(s.notOpenCount||0):'—',(s.hasSent?deltaChip(cur.notOpen,prev.notOpen,false):'')+(s.notOpenRate!=null?' · '+s.notOpenRate+'% người gửi':''),spark(sS,'var(--risk)'),'Số người được gửi email nhưng chưa mở lần nào. Cần follow-up trực tiếp.');
   var k4=card('Lượt click',null,nf(d.clickStats.total||0),deltaChip(cur.clickTotal,prev.clickTotal,true)+' · '+nf(s.nClickers||0)+' người click',spark(cS,'var(--accent)'),'Tổng số lượt click (1 người click nhiều lần = tính nhiều lượt). Số người unique đã click: '+nf(s.nClickers||0)+'.');
   var k5=card('CTOR',null,(d.clickStats.ctor||0)+'%',deltaChip(cur.ctor,prev.ctor,true)+' click ÷ mở',spark(cS,'var(--accent-2)'),'Click-to-Open Rate = Người click ÷ Người mở.');
   var k6=card('Mở TB/người',null,s.avgOpensPerReader!=null?s.avgOpensPerReader:'—',s.uniqOpeners+' người đã mở',spark(oS,'var(--accent-2)'),'Số lượt mở trung bình trên mỗi người đã mở ít nhất 1 lần = Tổng lượt mở ÷ Người mở.');
-  return '<div class="hero-row">'+gauge+'<div class="kpi-grid six">'+k1+k2+k3+k4+k5+k6+'</div></div>';
+  var k7=card('Phiên đọc',null,nf(s.readSessions||0),'ngắt sau 15 phút',spark(oS,'var(--accent-2)'),'Số phiên đọc = các lần mở của cùng 1 người cho cùng 1 email cách nhau ≤15 phút gộp làm 1 phiên; quay lại sau hơn 15 phút tính phiên mới. Gần với "Sessions" của Google Analytics. Không đo được lúc đóng thư.');
+  var k8=card('Phiên TB/người',null,s.avgSessionsPerReader!=null?s.avgSessionsPerReader:'—',nf(s.readSessions||0)+' phiên / '+nf(s.uniqOpeners)+' người',spark(oS,'var(--accent-2)'),'Số phiên đọc trung bình trên mỗi người đã mở ít nhất 1 lần = Tổng phiên ÷ Người mở.');
+  return '<div class="hero-row">'+gauge+'<div class="kpi-grid eight">'+k1+k2+k3+k4+k5+k6+k7+k8+'</div></div>';
 }
 
 function heroChart(d,ser){
@@ -1268,9 +1273,10 @@ function recRow(p){
     :'';
   if(p.sharedExcl)suspectTip+=' · ℹ️ Đã loại '+nf(p.sharedExcl)+' lượt tải của các thiết bị khác từ bản email này (≥5 loại thiết bị, chưa rõ cơ chế); chỉ đếm theo thiết bị đầu tiên.';
   var suspect=p.burstSuspect||p.scatterSuspect;
-  return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở · '+(p.sessionCount||0)+' phiên đọc (phiên = các lần mở cách nhau ≤30 phút)':'Chưa mở email nào')+suspectTip+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
+  return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở · '+(p.sessionCount||0)+' phiên đọc (phiên = các lần mở cách nhau ≤15 phút)':'Chưa mở email nào')+suspectTip+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
     +'<td>'+esc(fmtSeg(p.dept||p.role))+'</td>'
-    +'<td class="num">'+(p.opened?p.openCount:0)+(p.opened?' <span style="color:var(--faint);font-size:10px" title="Phiên đọc: các lần mở cách nhau ≤30 phút gộp làm 1">/ '+(p.sessionCount||0)+' phiên</span>':'')+(suspect?' <span style="color:var(--warn)" title="Số lượt mở bất thường — xem chi tiết khi hover">⚠️</span>':'')+'</td>'
+    +'<td class="num">'+(p.opened?p.openCount:0)+(suspect?' <span style="color:var(--warn)" title="Số lượt mở bất thường — xem chi tiết khi hover">⚠️</span>':'')+'</td>'
+    +'<td class="num">'+(p.opened?(p.sessionCount||0):0)+'</td>'
     +'<td class="num" style="font-size:11px">'+(p.lastOpen?fmtTime(p.lastOpen):'—')+'</td>'
     +'<td class="num">'+(p.clicked?p.clickCount:0)+'</td></tr>';
 }
@@ -1281,7 +1287,7 @@ function recipientSection(d){
   var notClickN=people.filter(function(p){return p.opened&&!p.clicked;}).length;
   var rows=_recTab==='no'?people.filter(function(p){return !p.opened;}):_recTab==='cl'?people.filter(function(p){return p.opened&&!p.clicked;}):people;
   window.__rec=rows;
-  regTable({id:'rec',rows:rows,render:recRow,pageSize:20,cols:5,placeholder:'Tìm người nhận / email…',search:function(p,q){return normMail(p.rcpt).indexOf(q.replace(/[-.]/g,''))>-1||norm(fmtRcpt(p.rcpt)).indexOf(q)>-1;},sortVal:function(p,k){return k==='name'?norm(fmtRcpt(p.rcpt)):k==='dept'?norm(fmtSeg(p.dept||p.role)||''):k==='open'?(p.opened?p.openCount:0):k==='last'?(p.lastOpen||0):k==='click'?(p.clicked?p.clickCount:0):0;}});
+  regTable({id:'rec',rows:rows,render:recRow,pageSize:20,cols:6,placeholder:'Tìm người nhận / email…',search:function(p,q){return normMail(p.rcpt).indexOf(q.replace(/[-.]/g,''))>-1||norm(fmtRcpt(p.rcpt)).indexOf(q)>-1;},sortVal:function(p,k){return k==='name'?norm(fmtRcpt(p.rcpt)):k==='dept'?norm(fmtSeg(p.dept||p.role)||''):k==='open'?(p.opened?p.openCount:0):k==='sess'?(p.opened?(p.sessionCount||0):0):k==='last'?(p.lastOpen||0):k==='click'?(p.clicked?p.clickCount:0):0;}});
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('rec','Tìm người nhận / email…')
     +'<div class="seg"><button class="'+(_recTab==='all'?'on':'')+'" onclick="setRecTab(\'all\')">Tất cả <span class="pill p-neutral" style="font-size:10px">'+people.length+'</span></button>'
@@ -1290,7 +1296,7 @@ function recipientSection(d){
   return '<section id="s-rec"><div class="eyebrow">Người nhận — trạng thái mở &amp; click '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h">Person-level <button class="csv" onclick="exportRecipients()">Xuất CSV</button></div>'
     +tabs
-    +'<div class="tw"><table><thead><tr>'+th('rec','name','Người nhận','pin','Tên/email người nhận')+th('rec','dept','Phòng ban','','Phòng ban / vai trò')+th('rec','open','Lần mở','num','Số lần người này mở email')+th('rec','last','Mở gần nhất','num','Thời điểm mở gần nhất')+th('rec','click','Click','num','Số lần click')+'</tr></thead><tbody id="tb-rec"></tbody></table></div>'
+    +'<div class="tw"><table><thead><tr>'+th('rec','name','Người nhận','pin','Tên/email người nhận')+th('rec','dept','Phòng ban','','Phòng ban / vai trò')+th('rec','open','Lần mở','num','Số lần người này mở email (gộp tải lại ≤5s)')+th('rec','sess','Phiên đọc','num','Số phiên đọc: các lần mở cách nhau ≤15 phút gộp làm 1')+th('rec','last','Mở gần nhất','num','Thời điểm mở gần nhất')+th('rec','click','Click','num','Số lần click')+'</tr></thead><tbody id="tb-rec"></tbody></table></div>'
     +'<div class="clegend"><span><span class="tdot hot"></span>Đã mở &amp; click</span><span><span class="tdot warm"></span>Đã mở, chưa click</span><span><span class="tdot cold"></span>Chưa mở</span></div>'
     +'<div class="pager" id="pg-rec"></div></div></section>';
 }
@@ -1395,6 +1401,7 @@ function campRow(c){
       +(c.target_size&&c.target_size>c.sent?'<span style="color:var(--muted);font-size:10px"> /'+nf(c.target_size)+'</span>':'')
       +'</td>'
     +'<td class="num" data-tip="'+nf(c.openEvents)+' lượt mở từ '+nf(c.opens)+' người"><b>'+nf(c.openEvents)+'</b></td>'
+    +'<td class="num" data-tip="'+nf(c.sessions||0)+' phiên đọc từ '+nf(c.opens)+' người (các lần mở cách nhau ≤15 phút gộp làm 1)"><b>'+nf(c.sessions||0)+'</b></td>'
     +'<td class="num" data-tip="'+(N(c.sent)?'Mẫu nhỏ N='+c.sent+' — % không đủ đại diện thống kê':(c.notOpen||0)+' người được gửi nhưng chưa mở')+'"><span class="erc"><b>'+(r!=null?r+'%':'—')+'</b><span class="erbar2"><i style="width:'+rw+'%"></i></span></span></td>'
     +'<td class="num">'+nf(c.clickers||0)+'</td>'
     +'<td class="num">'+(c.ctor>0?c.ctor+'%':'—')+'</td></tr>';
@@ -1407,7 +1414,7 @@ function campaignSection(d){
   var F=_filter||{};
   var goalN=d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}).length;
   var rows=_campTab==='goal'?d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}):d.campaigns;
-  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:7,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.openEvents||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):0;}});
+  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:8,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.openEvents||0):k==='sessions'?(c.sessions||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):0;}});
   var clearBtn=(F.campaign&&F.campaign.length)?'<button class="csv" onclick="clearFilter(\'campaign\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc chiến dịch</button>':'';
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('camp','Tìm chiến dịch…')
@@ -1422,6 +1429,7 @@ function campaignSection(d){
     +th('camp','last','Gửi lúc','num','Thời gian gửi/hoạt động gần nhất của chiến dịch')
     +th('camp','sent','Người nhận','num','Người nhận = số người nhận duy nhất có sự kiện gửi (1 người nhận nhiều đợt vẫn tính 1)')
     +th('camp','opens','Đã mở (lượt)','num','Tổng lượt mở, đã trừ mở-lại &lt;5s')
+    +th('camp','sessions','Phiên đọc','num','Số phiên đọc: các lần mở của 1 người cách nhau ≤15 phút gộp làm 1')
     +th('camp','reach','Tỉ lệ mở','num','Tỉ lệ mở = Người mở ÷ Người gửi (person-level, đã loại proxy)')
     +th('camp','clickers','Đã click','num','Số người unique đã click ≥1 link')
     +th('camp','ctor','CTOR','num','CTOR = Click-to-Open Rate = Người click ÷ Người mở')
