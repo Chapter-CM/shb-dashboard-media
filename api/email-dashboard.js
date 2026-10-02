@@ -52,6 +52,28 @@ function normCamp(s) {
   return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+/* ── Chỉ giữ 4 chiến dịch chính thức (02/10/2026) ───────────────────────────
+ * Các chiến dịch CŨ còn lại đều là test → ẩn cả dữ liệu (cùng chỗ lọc với test, nên không
+ * lọt vào KPI/bảng/biểu đồ/bộ lọc). Khớp theo TIỀN TỐ tên đã chuẩn hoá (normCamp).
+ * Chiến dịch MỚI (có sự kiện đầu tiên từ ngày LEGACY_CUTOFF trở đi) vẫn hiện bình thường,
+ * để không ẩn nhầm chiến dịch thật sau này.
+ * Chỉnh không cần sửa code: EMAIL_KEEP_CAMPAIGNS = các tiền tố ngăn cách bằng dấu phẩy;
+ * đặt EMAIL_KEEP_CAMPAIGNS='' để tắt (hiện lại tất cả); EMAIL_LEGACY_CUTOFF='YYYY-MM-DD'. */
+const KEEP_PREFIXES = (process.env.EMAIL_KEEP_CAMPAIGNS != null
+  ? process.env.EMAIL_KEEP_CAMPAIGNS.split(',')
+  : [
+      'Ban Tin Nhip Dap Chuyen Doi 14',
+      'Lich Phat Song Don Xem Livestream',
+      'Du An Chuan Hoa Thong Tin Khach Hang CDS',
+      'Transformation Talk 4',
+    ]
+).map(normCamp).filter(Boolean);
+const LEGACY_CUTOFF = process.env.EMAIL_LEGACY_CUTOFF || '2026-10-02';
+function isKeptCampaign(name) {
+  const n = normCamp(name);
+  return KEEP_PREFIXES.some((k) => n.indexOf(k) === 0);
+}
+
 function isHiddenCampaign(name) {
   const n = normCamp(name);
   if (!n) return false;
@@ -143,7 +165,15 @@ module.exports = async (req, res) => {
   var rawSentN = 0, rawOtherN = 0;
   raw.forEach(function(l) { if (l && l.pos === 'sent') rawSentN++; else rawOtherN++; });
   // Lọc bỏ dữ liệu test trước khi đưa vào trang (xem HIDDEN_EXACT ở đầu file)
-  const logs = raw.filter((l) => !isHiddenCampaign(l && l.campaign));
+  // Ngày xuất hiện đầu tiên của từng chiến dịch (chuỗi ts 'YYYY-MM-DD…' so sánh được) — để
+  // chỉ ẩn chiến dịch CŨ không thuộc danh sách giữ lại, không ẩn chiến dịch mới.
+  const firstSeen = {};
+  raw.forEach((l) => {
+    const c = l && l.campaign, t = String((l && l.timestamp) || '');
+    if (c && t && (!firstSeen[c] || t < firstSeen[c])) firstSeen[c] = t;
+  });
+  const isLegacyOther = (c) => KEEP_PREFIXES.length > 0 && !isKeptCampaign(c) && (firstSeen[c] || '') < LEGACY_CUTOFF;
+  const logs = raw.filter((l) => !isHiddenCampaign(l && l.campaign) && !isLegacyOther(l && l.campaign));
   // ts tu DB la UTC that (ghi bang new Date().toISOString() o api/email-track.js),
   // nhung mysql2 dateStrings:true tra ve "YYYY-MM-DD HH:MM:SS" khong co "Z" - moi
   // xu ly (process()/dailySeries()/fmtTime()...) chay CLIENT-SIDE trong trinh duyet
