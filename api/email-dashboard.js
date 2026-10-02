@@ -958,7 +958,7 @@ function process(logs){
     persons.forEach(function(p){
       var g=bucket(p[attr]||'(Chưa phân loại)');
       if(p.sent||(!hasSent&&p.opened))g.sent++;
-      if(p.opened){g.open++;g.openEvents+=p.openCount;}
+      if(p.opened){g.open++;g.openEvents+=p.openCount;g.sessions=(g.sessions||0)+(p.sessionCount||0);}
       if(p.clicked)g.clickers++;
     });
     // Session-level: Lượt gửi (mỗi sự kiện pos=sent = 1 lượt). Quy về đơn vị của
@@ -971,7 +971,7 @@ function process(logs){
     });
     return Object.values(m).map(function(g){
       return{name:g.name,sentSessions:g.sentSessions,sent:g.sent,open:g.open,
-        openEvents:g.openEvents,clickers:g.clickers,
+        openEvents:g.openEvents,sessions:g.sessions||0,clickers:g.clickers,
         reach:g.sent>0?Math.round(g.open/g.sent*100):0,
         ctor:g.open>0?Math.round(g.clickers/g.open*100):0,
         avgOpen:g.open>0?Math.round(g.openEvents/g.open*10)/10:null};
@@ -1007,11 +1007,11 @@ function process(logs){
     I.camps.add(s.campaign);
     I.totalSessions++; // 1 session = 1 email = 1 lượt gửi
     if(s.sent||(!hasSent&&s.opened))I.rcptSent.add(s.rcpt);
-    if(s.opened){I.rcptOpen.add(s.rcpt);I.openEvents+=s.openCount;}
+    if(s.opened){I.rcptOpen.add(s.rcpt);I.openEvents+=s.openCount;I.sessions=(I.sessions||0)+(s.sessionCount||0);}
     if(s.first>I.last)I.last=s.first;
   });
   var initiatives=Object.values(iniMap).map(function(I){
-    return{name:I.name,camps:I.camps.size,sent:I.rcptSent.size,sentSessions:I.totalSessions,opens:I.rcptOpen.size,openEvents:I.openEvents,
+    return{name:I.name,camps:I.camps.size,sent:I.rcptSent.size,sentSessions:I.totalSessions,opens:I.rcptOpen.size,openEvents:I.openEvents,sessions:I.sessions||0,
       reach:I.rcptSent.size>0?Math.round(I.rcptOpen.size/I.rcptSent.size*100):null,
       last:I.last};
   }).sort(function(a,b){return b.last.localeCompare(a.last);});
@@ -1287,7 +1287,7 @@ function recipientSection(d){
   return '<section id="s-rec"><div class="eyebrow">Người nhận — trạng thái mở &amp; click '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h">Person-level <button class="csv" onclick="exportRecipients()">Xuất CSV</button></div>'
     +tabs
-    +'<div class="tw"><table><thead><tr>'+th('rec','name','Người nhận','pin','Tên/email người nhận')+th('rec','dept','Phòng ban','','Phòng ban / vai trò')+th('rec','open','Lần mở','num','Số lần người này mở email (gộp tải lại ≤5s)')+th('rec','sess','Phiên đọc','num','Số phiên đọc: các lần mở cách nhau ≤15 phút gộp làm 1')+th('rec','last','Mở gần nhất','num','Thời điểm mở gần nhất')+th('rec','click','Click','num','Số lần click')+'</tr></thead><tbody id="tb-rec"></tbody></table></div>'
+    +'<div class="tw"><table><thead><tr>'+th('rec','name','Người nhận','pin','Tên/email người nhận')+th('rec','dept','Phòng ban','l','Phòng ban / vai trò')+th('rec','open','Lần mở','num','Số lần người này mở email (gộp tải lại ≤5s)')+th('rec','sess','Phiên đọc','num','Số phiên đọc: các lần mở cách nhau ≤15 phút gộp làm 1')+th('rec','last','Mở gần nhất','num','Thời điểm mở gần nhất')+th('rec','click','Click','num','Số lần click')+'</tr></thead><tbody id="tb-rec"></tbody></table></div>'
     +'<div class="clegend"><span><span class="tdot hot"></span>Đã mở &amp; click</span><span><span class="tdot warm"></span>Đã mở, chưa click</span><span><span class="tdot cold"></span>Chưa mở</span></div>'
     +'<div class="pager" id="pg-rec"></div></div></section>';
 }
@@ -1333,6 +1333,7 @@ function segRow(g){
     +'<td class="num">'+nf(g.sentSessions)+'</td>'
     +'<td class="num">'+nf(g.sent)+'</td>'
     +'<td class="num"><b>'+nf(g.openEvents)+'</b></td>'
+    +'<td class="num">'+nf(g.sessions||0)+'</td>'
     +'<td class="num"><span class="erc"><b>'+g.reach+'%'+(low?'<span style="color:var(--muted);font-size:10px"> N'+g.sent+'</span>':'')+'</b><span class="erbar2"><i style="width:'+rw+'%"></i></span></span></td>'
     +'<td class="num">'+nf(g.clickers)+'</td>'
     +'<td class="num">'+(g.ctor>0?g.ctor+'%':'—')+'</td>'
@@ -1340,10 +1341,10 @@ function segRow(g){
 }
 
 function segRegister(list){
-  regTable({id:'seg',rows:list||[],render:segRow,pageSize:10,cols:8,placeholder:'Tìm đơn vị…',
+  regTable({id:'seg',rows:list||[],render:segRow,pageSize:10,cols:9,placeholder:'Tìm đơn vị…',
     search:function(g,q){return norm(fmtSeg(g.name)).indexOf(q)>-1||norm(g.name).indexOf(q)>-1;},
     sortVal:function(g,k){return k==='name'?norm(fmtSeg(g.name)):k==='sess'?(g.sentSessions||0):k==='sent'?(g.sent||0)
-      :k==='opens'?(g.openEvents||0):k==='reach'?(g.reach||0):k==='clickers'?(g.clickers||0)
+      :k==='opens'?(g.openEvents||0):k==='sessions'?(g.sessions||0):k==='reach'?(g.reach||0):k==='clickers'?(g.clickers||0)
       :k==='ctor'?(g.ctor||0):k==='avg'?(g.avgOpen||0):0;}});
 }
 
@@ -1366,6 +1367,7 @@ function segmentSection(d){
     +th('seg','sess','Lượt gửi','num','Tổng số email đã gửi cho đơn vị này (mỗi sự kiện pos=sent = 1 lượt; 1 người nhận 3 đợt = 3 lượt)')
     +th('seg','sent','Người nhận','num','Số người nhận duy nhất trong đơn vị (1 người nhận nhiều đợt vẫn tính 1)')
     +th('seg','opens','Đã mở (lượt)','num','Tổng số lần mở email, đã trừ mở lại dưới 10 giây, bản phình đã gộp')
+    +th('seg','sessions','Phiên đọc','num','Số phiên đọc: các lần mở của 1 người cách nhau ≤15 phút gộp làm 1')
     +th('seg','reach','Tỉ lệ mở','num','Tỉ lệ mở = Người mở ÷ Người nhận (person-level, đã loại open giả từ proxy)')
     +th('seg','clickers','Đã click','num','Số người đã click ít nhất 1 link')
     +th('seg','ctor','CTOR','num','CTOR = Người click ÷ Người mở')
@@ -1517,13 +1519,14 @@ function iniRow(I){
     +'<td class="num" data-tip="Người nhận unique = '+I.sent+' người">'+(I.sent>0?I.sent:'—')+'</td>'
     +'<td class="num" data-tip="Người mở unique"><b>'+I.opens+'</b></td>'
     +'<td class="num" data-tip="Tổng lượt mở">'+I.openEvents+'</td>'
+    +'<td class="num" data-tip="Tổng phiên đọc">'+(I.sessions||0)+'</td>'
     +'<td class="num">'+pill(I.reach,I.sent)+'</td>'
     +'<td class="num" style="font-size:11px;color:var(--faint);font-weight:400">'+fmtTime(I.last)+'</td></tr>';
 }
 function initiativeSection(d){
   if(!d.hasInitiative)return '';
   var F=_filter||{};
-  regTable({id:'ini',rows:d.initiatives,render:iniRow,pageSize:15,cols:8,placeholder:'Tìm Squad/Dự án…',search:function(I,q){return norm(fmtCamp(I.name)).indexOf(q)>-1||norm(I.name).indexOf(q)>-1;}});
+  regTable({id:'ini',rows:d.initiatives,render:iniRow,pageSize:15,cols:9,placeholder:'Tìm Squad/Dự án…',search:function(I,q){return norm(fmtCamp(I.name)).indexOf(q)>-1||norm(I.name).indexOf(q)>-1;}});
   var clearBtn=(F.initiative&&F.initiative.length)?'<button class="csv" onclick="clearFilter(\'initiative\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'';
   return '<section id="s-ini"><div class="eyebrow">Squad/Dự án · awareness tích luỹ '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h">Theo dõi theo sáng kiến '+clearBtn+'</div>'
@@ -1534,7 +1537,8 @@ function initiativeSection(d){
     +'<th class="num" data-tip="Lượt gửi = tổng số email đã gửi (1 người × 3 đợt = 3 lượt)">Lượt gửi</th>'
     +'<th class="num" data-tip="Người nhận = số người duy nhất nhận ≥1 email (unique rcpt)">Người nhận</th>'
     +'<th class="num" data-tip="Người mở = số người duy nhất đã mở (cộng dồn các đợt). 1 người nhận nhiều đợt được tính nhiều lần.">Người mở</th>'
-    +'<th class="num" data-tip="Lượt mở = tổng số lần email được mở, kể cả mở lại nhiều lần">Lượt mở</th>'
+    +'<th class="num" data-tip="Lượt mở = tổng số lần email được mở, đã gộp tải lại ≤10s, bản phình đã gộp">Lượt mở</th>'
+    +'<th class="num" data-tip="Phiên đọc: các lần mở của 1 người cách nhau ≤15 phút gộp làm 1">Phiên đọc</th>'
     +'<th class="num" data-tip="Reach = Người mở ÷ Người gửi">Reach</th>'
     +'<th data-tip="Thời gian gửi đợt gần nhất">Thời gian gửi</th></tr></thead><tbody id="tb-ini"></tbody></table></div>'
     +'<div class="pager" id="pg-ini"></div></div>'
@@ -1680,6 +1684,7 @@ function executive(d,cur,prev){
       +'<td><span class="nm">'+esc(fmtCamp(c.name))+'</span>'+(c.msg_type==='mandatory'?' <span class="pill p-warn" style="font-size:9px;padding:1px 6px">BẮT BUỘC</span>':'')+'</td>'
       +'<td class="num">'+(c.sentSessions||c.sent||'—')+'</td>'
       +'<td class="num"><b>'+c.opens+'</b></td>'
+      +'<td class="num">'+nf(c.sessions||0)+'</td>'
       +'<td class="num">'+pill(c.verifiedReach!=null?c.verifiedReach:c.reach,c.sent)+'</td>'
       +'<td class="num">'+(c.avgOpenCount!=null?c.avgOpenCount+'x':'—')+'</td>'
       +'<td class="num">'+(c.clickRate!=null?c.clickRate+'%':'—')+'</td>'
@@ -1692,6 +1697,7 @@ function executive(d,cur,prev){
         +'<th>Chiến dịch</th>'
         +'<th class="num" data-tip="Lượt gửi = số email đã gửi">Lượt gửi</th>'
         +'<th class="num" data-tip="Người mở = unique openers">Người mở</th>'
+        +'<th class="num" data-tip="Phiên đọc: các lần mở cách nhau ≤15 phút gộp làm 1">Phiên đọc</th>'
         +'<th class="num" data-tip="Reach = Người mở ÷ Người nhận">Reach</th>'
         +'<th class="num" data-tip="Avg mở/người = Lượt mở ÷ Người mở">Avg mở</th>'
         +'<th class="num" data-tip="Click Rate = Người click ÷ Lượt gửi">Click Rate</th>'
