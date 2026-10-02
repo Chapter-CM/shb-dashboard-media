@@ -547,6 +547,12 @@ function anomalyFilter(evs){
   });
   return out;
 }
+/* Lượt mở bị phình (02/10/2026): 1 người × 1 email có ≥15 lượt mở (sau gộp ≤5s) là do
+   Outlook tải lại pixel khi bấm qua lại / thiết bị tự tải, không phải đọc thật nhiều lần
+   (thí nghiệm 01/10; dữ liệu: nhóm 15-118 lượt/người). Phần phình KHÔNG tính vào lượt
+   mở: bản đó chỉ giữ 1 lượt (người nhận vẫn tính "đã mở"), phần bị bỏ ghi ở p.inflatedExcl
+   để hiện ⚠️ + CSV. Phiên đọc vẫn tính từ toàn bộ lượt tải. */
+var INFLATED_MIN_OPENS=15;
 var OPEN_DEDUP_MS=5000;      // lượt mở: 2 lần tải cách ≤5s = Outlook tự tải lại (cùng 1 lần mở)
 var SESSION_GAP_MS=15*60000; // phiên đọc (chỉ số riêng, không thay lượt mở): ngắt sau 15 phút im lặng
 // ts[] đã sort ASC (ms) → mốc của các LƯỢT MỞ. Mốc so sánh = lượt đã tính gần nhất (giữ đúng
@@ -578,7 +584,9 @@ function dailySeries(logs,days){
     // bỏ lượt tự xem trước của người gửi (cùng quy tắc buildSessions) để khớp KPI
     while(ev.length&&_sentAt[_k]!=null&&SELF_PREVIEW_UA_RE.test(ev[0].ua||'')&&(ev[0].t-_sentAt[_k])<=SELF_PREVIEW_WINDOW_MS)ev.shift();
     var _kp=anomalyFilter(ev);if(_kp)ev=_kp; // bản bất thường: 1 lượt/phiên (cùng buildSessions)
-    openStarts(ev.map(function(e){return e.t;})).forEach(function(t){
+    var _os=openStarts(ev.map(function(e){return e.t;}));
+    if(_os.length>=INFLATED_MIN_OPENS)_os=[_os[0]]; // lượt mở phình: chỉ giữ 1 (cùng buildSessions)
+    _os.forEach(function(t){
       var idx=Math.floor((t-start)/(step*864e5));if(idx>=0&&idx<buckets.length)buckets[idx].o++;
     });
   });
@@ -728,6 +736,10 @@ function buildSessions(logs){
       }
     }
     s.sessionCount=countSessions(_tms); // phiên đọc: chỉ số bổ sung
+    if(s.openCount>=INFLATED_MIN_OPENS){ // lượt mở phình: chỉ giữ 1, phần còn lại không tính
+      s.inflatedOpens=s.openCount-1;
+      s.openCount=1;s.openDevices=[s.openDevices[0]];s.openTimes=[s.openTimes[0]];
+    }
     // Thiết bị chính: ưu tiên mobile > desktop > proxy > unknown
     // (Outlook thường pre-load trước khi user mở trên phone → mobile wins)
     var _devSet={};
@@ -801,6 +813,7 @@ function process(logs){
       // CHỈ CẢNH BÁO, KHÔNG tự trừ khỏi openCount — chưa có bằng chứng UA/nhịp
       // mở thật để đổi cách tính, tự trừ số liệu lúc này là suy đoán.
       if(s.shared)p.sharedExcl=(p.sharedExcl||0)+s.sharedOpens;
+      if(s.inflatedOpens)p.inflatedExcl=(p.inflatedExcl||0)+s.inflatedOpens;
       if(!p.openDays)p.openDays={};
       (s.topEvents||[]).forEach(function(ev){if(ev.ts)p.openDays[ev.ts.slice(0,10)]=true;});
     }
@@ -1275,7 +1288,8 @@ function recRow(p){
     ?(' · ⚠️ '+p.openCount+' lượt mở rải suốt '+p.openDaysCount+' ngày ('+(p.sessionCount||0)+' phiên đọc) — cao so với mức thường gặp. CHƯA trừ khỏi số liệu.')
     :'';
   if(p.sharedExcl)suspectTip+=' · ℹ️ Đã loại '+nf(p.sharedExcl)+' lượt tải lặp từ bản email này (≥5 loại thiết bị, chưa rõ cơ chế); mỗi phiên 15 phút chỉ đếm 1 lượt.';
-  var suspect=p.burstSuspect||p.scatterSuspect;
+  if(p.inflatedExcl)suspectTip+=' · ⚠️ Đã bỏ '+nf(p.inflatedExcl)+' lượt mở phình (≥'+INFLATED_MIN_OPENS+' lượt/email, do Outlook tải lại ảnh khi bấm qua lại); chỉ tính 1 lượt, còn '+(p.sessionCount||0)+' phiên đọc.';
+  var suspect=p.burstSuspect||p.scatterSuspect||p.inflatedExcl>0;
   return '<tr data-tip="'+(p.opened?p.openCount+' lượt mở · '+(p.sessionCount||0)+' phiên đọc (phiên = các lần mở cách nhau ≤15 phút)':'Chưa mở email nào')+suspectTip+'"><td class="pin"><div class="ptitle"><span class="tdot '+tier+'"></span><div><div class="pt-main">'+esc(fmtRcpt(p.rcpt))+'</div><div class="pt-sub">'+esc(fmtRcpt(p.rcpt))+'</div></div></div></td>'
     +'<td>'+esc(fmtSeg(p.dept||p.role))+'</td>'
     +'<td class="num">'+(p.opened?p.openCount:0)+(suspect?' <span style="color:var(--warn)" title="Số lượt mở bất thường — xem chi tiết khi hover">⚠️</span>':'')+'</td>'
@@ -1843,6 +1857,7 @@ function exportRecipients(){var rows=window.__rec||[];if(!rows.length)return;var
   // S\u1ED1 l\u01B0\u1EE3t m\u1EDF b\u1EA5t th\u01B0\u1EDDng (d\u1ED3n d\u1EADp ho\u1EB7c r\u1EA3i nhi\u1EC1u ng\u00E0y, xem recRow()) \u2014 mang ra
   // CSV \u0111\u1EC3 kh\u00F4ng l\u1ECDt ra b\u00E1o c\u00E1o/Excel m\u00E0 m\u1EA5t lu\u00F4n c\u1EA3nh b\u00E1o ch\u1EC9 c\u00F3 tr\u00EAn dashboard.
   var note=r.burstSuspect?'Nghi mo don dap ('+r.openDaysCount+' ngay)':r.scatterSuspect?'Nghi mo bat thuong, rai '+r.openDaysCount+' ngay':'';
+  if(r.inflatedExcl)note+=(note?' | ':'')+'Da bo '+r.inflatedExcl+' luot mo phinh (>=15 luot/email), chi tinh 1';
   if(r.sharedExcl)note+=(note?' | ':'')+'Da loai '+r.sharedExcl+' luot tai lap (>=5 loai thiet bi, moi phien 15p dem 1 luot)';
   csv+='"'+fmtRcpt(r.rcpt)+'","'+esc(r.rcpt)+'","'+(r.dept||'')+'","'+(r.role||'')+'","'+(r.opened?r.openCount:0)+'","'+(r.opened?(r.sessionCount||0):0)+'","'+(r.lastOpen?fmtTime(r.lastOpen):'')+'","'+(r.clicked?r.clickCount:0)+'","'+note+'"\n';});var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='nguoi-nhan-'+new Date().toISOString().slice(0,10)+'.csv';a.click();}
 function findMandatory(name){return(window.__mandatory||[]).filter(function(M){return M.name===name;})[0];}
