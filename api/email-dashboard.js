@@ -462,6 +462,14 @@ td .nm{color:var(--text);font-weight:600}
 .fclear:hover{color:var(--risk)}
 /* ── ini-row ── */
 .ini-row{cursor:pointer}.ini-row.filt-on td{background:var(--accent-bg)!important}
+/* Dòng đang chọn nổi bật, dòng không chọn mờ đi (khi bảng có ≥1 dòng được chọn) — 02/10/2026 */
+tbody tr.filt-on td{background:color-mix(in srgb,var(--accent) 24%,transparent)!important;font-weight:700}
+tbody tr.filt-on td:first-child{box-shadow:inset 4px 0 0 var(--accent)}
+tbody:has(tr.filt-on) tr:not(.filt-on){opacity:.4;transition:opacity .15s}
+tbody:has(tr.filt-on) tr:not(.filt-on):hover{opacity:.85}
+.frow.filt-on{background:color-mix(in srgb,var(--accent) 24%,transparent)!important;box-shadow:inset 4px 0 0 var(--accent);font-weight:700}
+.panel:has(.frow.filt-on) .frow.clickable:not(.filt-on){opacity:.4}
+.panel:has(.frow.filt-on) .frow.clickable:not(.filt-on):hover{opacity:.85}
 /* ── density ── */
 [data-density="compact"] td{padding:9px 10px}[data-density="compact"] .kpi{padding:13px 15px}[data-density="compact"] .kpi .kv{font-size:25px}[data-density="compact"] section{padding-top:20px}[data-density="compact"] .panel{padding:15px 17px}
 /* ── responsive ── */
@@ -807,6 +815,7 @@ function process(logs){
   if((f=facet('dept')))d.segments.dept=f.segments.dept;
   if((f=facet('role')))d.segments.role=f.segments.role;
   if((f=facet('initiative')))d.initiatives=f.initiatives;
+  if((f=facet('device')))d.deviceSplit=f.deviceSplit; // biểu đồ thiết bị: vẫn hiện đủ các loại để chọn thêm
   return d;
 }
 function processCore(logs){
@@ -1230,7 +1239,10 @@ var _TBL={},_tblState={};
 function regTable(cfg){_TBL[cfg.id]=cfg;return cfg;}
 function searchBox(id,ph){return '<div class="tbl-tools"><div class="tbl-search"><span class="si">⌕</span><input type="text" placeholder="'+esc(ph)+'" oninput="tblSearch(\''+id+'\',this.value)" autocomplete="off" spellcheck="false"></div></div>';}
 function tblFilter(cfg){var st=_tblState[cfg.id]||{q:'',page:0};var q=norm(st.q);var rows=q?cfg.rows.filter(function(r){return cfg.search(r,q);}):cfg.rows.slice();
-  if(st.sortKey&&cfg.sortVal){rows.sort(function(a,b){var x=cfg.sortVal(a,st.sortKey),y=cfg.sortVal(b,st.sortKey);return (x<y?-1:x>y?1:0)*st.sortDir;});}return rows;}
+  if(st.sortKey&&cfg.sortVal){rows.sort(function(a,b){var x=cfg.sortVal(a,st.sortKey),y=cfg.sortVal(b,st.sortKey);return (x<y?-1:x>y?1:0)*st.sortDir;});}
+  // Dòng đang được chọn lọc nổi lên đầu bảng (giữ nguyên thứ tự còn lại) để luôn thấy, không bị đẩy sang trang sau
+  if(cfg.sel){var _on=[],_off=[];rows.forEach(function(r){(cfg.sel(r)?_on:_off).push(r);});if(_on.length)rows=_on.concat(_off);}
+  return rows;}
 function th(id,key,label,cls,tip){var st=_tblState[id]||{};var ar=st.sortKey===key?'<span class="sar">'+(st.sortDir<0?'▼':'▲')+'</span>':'';return '<th class="'+(cls||'num')+' sortable" data-tip="'+esc(tip||'Bấm để sắp xếp')+'" onclick="tblSort(\''+id+'\',\''+key+'\')">'+label+ar+'</th>';}
 function tblSort(id,key){var st=_tblState[id]||(_tblState[id]={q:'',page:0});if(st.sortKey===key)st.sortDir=(st.sortDir<0?1:-1);else{st.sortKey=key;st.sortDir=-1;}st.page=0;tblRender(id);tblSortHeader(id);}
 function tblSortHeader(id){
@@ -1420,7 +1432,7 @@ function segRow(g){
 }
 
 function segRegister(list){
-  regTable({id:'seg',rows:list||[],render:segRow,pageSize:10,cols:9,placeholder:'Tìm đơn vị…',
+  regTable({id:'seg',rows:list||[],render:segRow,pageSize:10,cols:9,sel:function(g){return isSel(_segAttr,g.name);},placeholder:'Tìm đơn vị…',
     search:function(g,q){return norm(fmtSeg(g.name)).indexOf(q)>-1||norm(g.name).indexOf(q)>-1;},
     sortVal:function(g,k){return k==='name'?norm(fmtSeg(g.name)):k==='sess'?(g.sentSessions||0):k==='sent'?(g.sent||0)
       :k==='opens'?(g.openEvents||0):k==='sessions'?(g.sessions||0):k==='reach'?(g.reach||0):k==='clickers'?(g.clickers||0)
@@ -1486,7 +1498,7 @@ function campaignSection(d){
   var F=_filter||{};
   var goalN=d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}).length;
   var _cAll=d.campaignsTable||d.campaigns;var rows=_campTab==='goal'?_cAll.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}):_cAll;
-  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:8,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.openEvents||0):k==='sessions'?(c.sessions||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):0;}});
+  regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:8,sel:function(c){return isSel('campaign',c.name);},placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.openEvents||0):k==='sessions'?(c.sessions||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):0;}});
   var clearBtn=(F.campaign&&F.campaign.length)?'<button class="csv" onclick="clearFilter(\'campaign\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc chiến dịch</button>':'';
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +searchBox('camp','Tìm chiến dịch…')
@@ -1605,7 +1617,7 @@ function iniRow(I){
 function initiativeSection(d){
   if(!d.hasInitiative)return '';
   var F=_filter||{};
-  regTable({id:'ini',rows:d.initiatives,render:iniRow,pageSize:15,cols:9,placeholder:'Tìm Squad/Dự án…',search:function(I,q){return norm(fmtCamp(I.name)).indexOf(q)>-1||norm(I.name).indexOf(q)>-1;}});
+  regTable({id:'ini',rows:d.initiatives,render:iniRow,pageSize:15,cols:9,sel:function(I){return isSel('initiative',I.name);},placeholder:'Tìm Squad/Dự án…',search:function(I,q){return norm(fmtCamp(I.name)).indexOf(q)>-1||norm(I.name).indexOf(q)>-1;}});
   var clearBtn=(F.initiative&&F.initiative.length)?'<button class="csv" onclick="clearFilter(\'initiative\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc</button>':'';
   return '<section id="s-ini"><div class="eyebrow">Squad/Dự án · awareness tích luỹ '+qclearBtn()+'</div>'
     +'<div class="panel"><div class="panel-h">Theo dõi theo sáng kiến '+clearBtn+'</div>'
