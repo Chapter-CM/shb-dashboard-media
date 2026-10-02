@@ -26,9 +26,10 @@ const SERVICE_KEY  = process.env.EMAIL_SUPABASE_SERVICE_KEY || process.env.SUPAB
  * không có quyền vào DB) — nhưng bị lọc bỏ NGAY SAU KHI ĐỌC nên không lọt vào
  * bất kỳ chỉ số nào: thẻ KPI, phễu, phân khúc, biểu đồ, bộ lọc chiến dịch.
  *
- * 2 quy tắc ẩn:
+ * 3 quy tắc ẩn:
  *   1. Tên chiến dịch bắt đầu bằng "test" (sau khi bỏ dấu cách/gạch nối) —
  *      quy ước đặt tên: campaign thật ĐỪNG bắt đầu bằng chữ "Test".
+ *   1b. Tên có chữ "test" đứng riêng ở bất kỳ vị trí nào (vd "...-test-...").
  *   2. Có tên trong danh sách HIDDEN_EXACT bên dưới (cho các bản test lỡ đặt
  *      tên không theo quy ước 1).
  *
@@ -55,6 +56,10 @@ function isHiddenCampaign(name) {
   const n = normCamp(name);
   if (!n) return false;
   if (HIDE_TEST_PREFIX && n.indexOf('test') === 0) return true;
+  // Chữ "test" đứng riêng ở BẤT KỲ vị trí nào trong tên (vd "Thông báo test vui lòng bỏ qua",
+  // "du-an-test-v2") — yêu cầu 02/10/2026. Chỉ khớp từ "test" đứng riêng (trước/sau là
+  // dấu cách, gạch, số hoặc đầu/cuối tên) nên KHÔNG ẩn nhầm "latest", "contest", "attestation".
+  if (HIDE_TEST_PREFIX && /(^|[^a-z])test([^a-z]|$)/i.test(String(name))) return true;
   return HIDDEN_EXACT.indexOf(n) > -1;
 }
 
