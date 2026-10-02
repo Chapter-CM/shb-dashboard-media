@@ -580,7 +580,8 @@ function countSessions(ts){var n=0,last=null;for(var i=0;i<ts.length;i++){if(las
 function dailySeries(logs,days){
   if(!logs.length)return [];
   var ts=logs.map(function(l){return +new Date(l.timestamp);});
-  var start=days>0?Date.now()-days*864e5:Math.min.apply(null,ts),end=Date.now();
+  var _mn=Infinity;for(var _i=0;_i<ts.length;_i++)if(ts[_i]<_mn)_mn=ts[_i]; // không dùng Math.min.apply: mảng >~125k phần tử gây RangeError
+  var start=days>0?Date.now()-days*864e5:_mn,end=Date.now();
   var span=Math.max(1,Math.ceil((end-start)/864e5));
   var step=span>35?7:1;var nb=Math.ceil(span/step);if(nb>26){step=Math.ceil(span/26);nb=Math.ceil(span/step);}
   var buckets=[];for(var i=0;i<nb;i++){var bs=start+i*step*864e5;buckets.push({ms:bs,end:bs+step*864e5,o:0,r:0,s:0});}
@@ -994,9 +995,16 @@ function process(logs){
   var segments={dept:segAgg('dept'),role:segAgg('role'),loc:segAgg('loc')};
 
   /* ══ 10. TIERS (person-level) ════════════════════════════════════== */
+  // Đếm 1 lần theo người nhận (trước đây mỗi người lọc lại toàn bộ arr → O(người×phiên), ~12 giây
+  // với 6.800 người × 27.000 phiên, mọi cú bấm đều bị chậm theo; xem trao đổi 02/10/2026).
+  var _cntSent={},_cntOpen={};
+  arr.forEach(function(s){
+    if(s.sent||(!hasSent&&s.opened))_cntSent[s.rcpt]=(_cntSent[s.rcpt]||0)+1;
+    if(s.opened)_cntOpen[s.rcpt]=(_cntOpen[s.rcpt]||0)+1;
+  });
   var rcpts=persons.map(function(p){
-    var sessSent=arr.filter(function(s){return s.rcpt===p.rcpt&&(s.sent||(!hasSent&&s.opened));}).length;
-    var sessOpen=arr.filter(function(s){return s.rcpt===p.rcpt&&s.opened;}).length;
+    var sessSent=_cntSent[p.rcpt]||0;
+    var sessOpen=_cntOpen[p.rcpt]||0;
     var rate=sessSent>0?sessOpen/sessSent:0;
     var tier=(hasSent&&!p.sent)||(!hasSent&&!p.opened)?'never':rate>=0.7?'hot':rate>=0.3?'warm':'cold';
     return{rcpt:p.rcpt,dept:p.dept,role:p.role,sent:sessSent,open:sessOpen,reach:Math.round(rate*100),tier:tier};
