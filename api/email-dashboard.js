@@ -196,7 +196,9 @@ html{scroll-behavior:smooth}
 body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh}
 body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(58% 48% at 12% 6%,var(--orb1),transparent 62%),radial-gradient(52% 44% at 88% 12%,var(--orb2),transparent 62%),radial-gradient(56% 50% at 82% 92%,var(--orb3),transparent 62%),radial-gradient(50% 50% at 8% 96%,var(--orb4),transparent 62%);}
 .mono,.num{font-family:var(--num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-.wrap{max-width:1200px;margin:0 auto;padding:0 26px}
+:root{--rail:clamp(190px,calc((100vw - 1200px)/2 - 16px),340px)}
+.wrap{max-width:min(1200px,calc(100vw - 2*(var(--rail) + 16px)));margin:0 auto;padding:0 26px}
+@media(max-width:1399px){.wrap{max-width:1200px}} /* <1400px: không có chỗ cho 2 cột thẻ ghim → dùng thanh chip trên cùng */
 @keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
 /* ── Floating tooltip ── */
@@ -479,6 +481,18 @@ tbody tr:hover .pin{background:rgba(255,255,255,.028)}
 @media(max-width:1280px){.kpi-grid.eight{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:920px){.kpi-grid.six{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.kpi-grid.six,.kpi-grid.eight{grid-template-columns:1fr}}
+/* ── thẻ tổng quan ghim khi cuộn ── */
+.pin-rail{position:fixed;z-index:18;flex-direction:column;gap:10px;pointer-events:none}
+.pin-rail>*{will-change:transform,opacity}
+.pin-rail .gauge-card{padding:14px 16px}
+.pin-rail .gauge-wrap svg{width:150px;height:auto}
+.pin-rail .gc-sub{display:none}
+.pin-rail .kpi{flex:none;backdrop-filter:blur(18px)}
+#pin-t{left:0;right:0;flex-direction:row;gap:8px;overflow-x:auto;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--stroke);scrollbar-width:none;will-change:transform,opacity}
+#pin-t::-webkit-scrollbar{display:none}
+.pin-chip{flex:none;display:flex;flex-direction:column;gap:1px;padding:6px 12px;border-radius:10px;background:var(--glass);border:1px solid var(--stroke)}
+.pin-chip .pc-l{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+.pin-chip .pc-v{font-size:16px;font-weight:700;white-space:nowrap}
 `;
 
 /* ─── JS ──────────────────────────────────────────────────────────────────── */
@@ -1781,7 +1795,7 @@ function render(){
 function resection(id,fn){
   var d=window.__d;var el=document.getElementById(id);
   if(!d||!el){paint();return;}
-  el.outerHTML=fn(d);
+  el.outerHTML=fn(d);revealCards();
   mountAllTables();wireNav();initTooltip();
 }
 function paint(){
@@ -1789,7 +1803,7 @@ function paint(){
   try{
     applyTheme();applyDensity();
     document.getElementById('app').innerHTML=render();
-    mountAllTables();wireNav();wireChart();countUp();init();initTooltip();
+    mountAllTables();wireNav();wireChart();countUp();init();initTooltip();revealCards();
     window.scrollTo(0,_sy);
   }catch(err){
     var app=document.getElementById('app');
@@ -1865,6 +1879,73 @@ function initTooltip(){
   });
 }
 
+var _rails=null,_railBound=false,_railRaf=0,_rp=0,_rmode='';
+function ease(t){return t*t*(3-2*t);}
+function railUpdate(){
+  _railRaf=0;if(!_rails)return;
+  var hero=document.querySelector('#s-ov .hero-row'),wrap=document.querySelector('.wrap');
+  var L=_rails.l,R=_rails.r,T=_rails.t,O=_rails.o;
+  function off(){L.style.display=R.style.display=T.style.display='none';O.forEach(function(o){o.style.opacity='';});}
+  if(!hero||!wrap){off();return;}
+  var vw=document.documentElement.clientWidth,vh=window.innerHeight,wr=wrap.getBoundingClientRect(),sy=window.pageYOffset;
+  var side=Math.floor((vw-wr.width)/2),wide=vw>=1400,rw=Math.max(150,Math.min(340,side-16));
+  var sub=document.querySelector('.subnav'),hb=0;
+  if(sub){var sr=sub.getBoundingClientRect(),st=parseFloat(getComputedStyle(sub).top)||0;hb=Math.min(sr.bottom,st+sr.height);}
+  else{var m=document.querySelector('.mast');if(m){var mr=m.getBoundingClientRect();hb=Math.min(mr.bottom,mr.height);}}
+  var hr=hero.getBoundingClientRect(),dock=hb+16;
+  var D=Math.max(220,hr.top+sy-dock);
+  var target=Math.max(0,Math.min(1,sy/D));
+  _rp+=(target-_rp)*.2;
+  var moving=Math.abs(target-_rp)>.002;if(!moving)_rp=target;
+  var p=_rp;
+  if(!wide){
+    L.style.display=R.style.display='none';O.forEach(function(o){o.style.opacity='';});
+    var tp=ease(Math.max(0,Math.min(1,(hb+260-hr.bottom)/260)));
+    T.style.display='flex';T.style.top=hb+'px';T.style.opacity=tp;T.style.transform='translateY('+((1-tp)*-100)+'%)';
+  }else{
+    T.style.display='none';
+    var gap=Math.max(8,Math.floor((side-rw)/2));
+    [[L,-1,0],[R,1,4]].forEach(function(x){
+      var e=x[0],kids=e.children,n=kids.length;
+      e.style.display='flex';e.style.width=rw+'px';e.style.top=dock+'px';e.style.maxHeight=(vh-dock-16)+'px';
+      e.style.left=x[1]<0?gap+'px':'auto';e.style.right=x[1]>0?gap+'px':'auto';
+      var er=e.getBoundingClientRect();
+      for(var i=0;i<n;i++){
+        var k=kids[i],o=O[x[2]+i],orc=o.getBoundingClientRect();
+        var q=ease(Math.max(0,Math.min(1,p*(1+.1*n)-i*.1)));
+        var tx=er.left+k.offsetLeft,ty=er.top+k.offsetTop,sc=orc.width/(k.offsetWidth||1);
+        var a=q>0?Math.min(1,q*5):0;
+        k.style.transformOrigin='0 0';
+        k.style.transform='translate('+((1-q)*(orc.left-tx))+'px,'+((1-q)*(orc.top-ty))+'px) scale('+(1+(1-q)*(sc-1))+')';
+        k.style.opacity=a;o.style.opacity=a>0?1-a:'';
+      }
+      e.style.pointerEvents=p>.6?'auto':'none';
+    });
+  }
+  if(moving)railSchedule();
+}
+function railSchedule(){if(!_railRaf)_railRaf=requestAnimationFrame(railUpdate);}
+function revealCards(){
+  try{
+    ['pin-l','pin-r','pin-t'].forEach(function(id){var o=document.getElementById(id);if(o)o.remove();});
+    _rails=null;
+    var g=document.querySelector('#s-ov .gauge-card'),ks=document.querySelectorAll('#s-ov .kpi-grid .kpi');
+    if(!g||!ks.length)return;
+    function mk(id){var e=document.createElement('div');e.id=id;e.className='pin-rail';e.style.display='none';document.body.appendChild(e);return e;}
+    var l=mk('pin-l'),r=mk('pin-r'),t=mk('pin-t');
+    var gc=g.cloneNode(true);gc.removeAttribute('data-tip');l.appendChild(gc);
+    var gt=g.querySelector('text'),gh=g.querySelector('.gc-h');
+    function chip(lb,v){var e=document.createElement('div');e.className='pin-chip';e.innerHTML='<span class="pc-l"></span><b class="pc-v"></b>';e.firstChild.textContent=lb;e.lastChild.textContent=v;t.appendChild(e);}
+    chip(gh?gh.textContent.split('·')[0].trim():'Tỉ lệ mở',gt?gt.textContent:'');
+    ks.forEach(function(k,i){
+      var n=k.cloneNode(true);var tp=n.querySelector('.kpi-tip');if(tp)tp.remove();(i<3?l:r).appendChild(n);
+      var kl=k.querySelector('.kl'),kv=k.querySelector('.kv');chip(kl?kl.textContent:'',kv?kv.textContent:'');
+    });
+    _rails={l:l,r:r,t:t,o:[g].concat(Array.prototype.slice.call(ks))};
+    if(!_railBound){_railBound=true;window.addEventListener('scroll',railSchedule,{passive:true});window.addEventListener('resize',railSchedule);}
+    railUpdate();
+  }catch(e){}
+}
 function countUp(){
   try{if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)return;
     document.querySelectorAll('.kv,.tier .tv,.exec-kp .v,.dh-v').forEach(function(el){
