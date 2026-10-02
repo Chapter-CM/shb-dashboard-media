@@ -787,7 +787,29 @@ function buildSessions(logs){
   return {arrAll:arrAll, opts:opts, eventsLen:logs.length, sharedN:sharedN, sharedOpens:sharedOpens, sharedKeys:sharedKeys};
 }
 
+/* Bảng chiến dịch / phân khúc (phòng ban, cấp bậc) / Squad lọc theo kiểu "facet" (02/10/2026):
+   danh sách của 1 bảng áp mọi bộ lọc TRỪ bộ lọc của chính nó, nếu không khi chọn 1 chiến dịch
+   thì bảng chỉ còn đúng dòng đó và không thể chọn thêm dòng thứ 2 (lỗi "chỉ bấm được 1").
+   Dòng đang chọn vẫn được tô sáng (isSel). KPI/biểu đồ vẫn theo ĐẦY ĐỦ bộ lọc. */
+var _inFacet=false;
 function process(logs){
+  var d=processCore(logs);
+  if(_inFacet||!d||d.empty)return d;
+  var F=(_filter&&typeof _filter==='object')?_filter:{};
+  function without(k){var o={};Object.keys(F).forEach(function(x){if(x!==k)o[x]=F[x];});return o;}
+  function facet(k){
+    if(!(F[k]&&F[k].length))return null;
+    var save=_filter;_inFacet=true;_filter=without(k);
+    try{var d2=processCore(logs);return (d2&&!d2.empty)?d2:null;}finally{_filter=save;_inFacet=false;}
+  }
+  var f;
+  if((f=facet('campaign')))d.campaignsTable=f.campaigns;
+  if((f=facet('dept')))d.segments.dept=f.segments.dept;
+  if((f=facet('role')))d.segments.role=f.segments.role;
+  if((f=facet('initiative')))d.initiatives=f.initiatives;
+  return d;
+}
+function processCore(logs){
   if(!logs||!logs.length)return null;
   var _key=_days+'|'+(_from||'')+'|'+(_to||'');
   var built;
@@ -1463,7 +1485,7 @@ function campaignSection(d){
   if(!d.campaigns.length)return '';
   var F=_filter||{};
   var goalN=d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}).length;
-  var rows=_campTab==='goal'?d.campaigns.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}):d.campaigns;
+  var _cAll=d.campaignsTable||d.campaigns;var rows=_campTab==='goal'?_cAll.filter(function(c){return (c.verifiedReach!=null?c.verifiedReach:c.reach)>=REACH_TARGET;}):_cAll;
   regTable({id:'camp',rows:rows,render:campRow,pageSize:15,cols:8,placeholder:'Tìm chiến dịch…',search:function(c,q){return norm(fmtCamp(c.name)).indexOf(q)>-1||norm(c.name).indexOf(q)>-1||norm(c.subject||'').indexOf(q)>-1;},sortVal:function(c,k){return k==='name'?norm(fmtCamp(c.name)):k==='last'?(c.last||0):k==='sent'?(c.sent||0):k==='opens'?(c.openEvents||0):k==='sessions'?(c.sessions||0):k==='reach'?(c.verifiedReach!=null?c.verifiedReach:(c.reach||0)):k==='clickers'?(c.clickers||0):k==='ctor'?(c.ctor||0):0;}});
   var clearBtn=(F.campaign&&F.campaign.length)?'<button class="csv" onclick="clearFilter(\'campaign\')" style="font-size:11px;padding:4px 9px">× Bỏ lọc chiến dịch</button>':'';
   var tabs='<div class="ctools" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
@@ -1935,6 +1957,10 @@ function railUpdate(){
   var sub=document.querySelector('.subnav'),hb=0;
   if(sub){var sr=sub.getBoundingClientRect(),st=parseFloat(getComputedStyle(sub).top)||0;hb=Math.min(sr.bottom,st+sr.height);}
   else{var m=document.querySelector('.mast');if(m){var mr=m.getBoundingClientRect();hb=Math.min(mr.bottom,mr.height);}}
+  // Thanh "ĐANG LỌC" (sticky ngay dưới subnav) cũng chiếm chỗ → đẩy mốc ghim xuống dưới nó,
+  // nếu không nó che mất 2 thẻ trên cùng của cột ghim (02/10/2026).
+  var fsb=document.querySelector('.filter-status');
+  if(fsb){var fr=fsb.getBoundingClientRect(),ft=parseFloat(getComputedStyle(fsb).top)||0;hb=Math.max(hb,Math.min(fr.bottom,ft+fr.height));}
   var hr=hero.getBoundingClientRect(),dock=hb+16;
   var D=Math.max(220,hr.top+sy-dock);
   var target=Math.max(0,Math.min(1,sy/D));
