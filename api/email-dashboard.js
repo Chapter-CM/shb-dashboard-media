@@ -1197,16 +1197,14 @@ function heroRow(d,cur,prev,ser){
   var rDelta=deltaChip(cur.reach,prev.reach,true);
   var gauge='<div class="gauge-card" data-tip="Tỉ lệ mở = Người mở ÷ Người gửi (person-level), cùng công thức với thẻ Tỉ lệ mở bên cạnh. Mục tiêu '+REACH_TARGET+'%."><div class="gc-h">'+gHead+'</div><div class="gauge-wrap">'+radialGauge(gVal,REACH_TARGET)+'</div><div class="gc-sub">'+(rDelta?rDelta+' so kỳ trước · ':'')+gSub+' · '+(remain>0?'còn '+remain+'% tới mục tiêu':'đạt mục tiêu')+' · '+nCamp+' chiến dịch</div></div>';
   function card(label,ic,value,dH,spH,tip){return '<div class="kpi">'+(tip?'<div class="kpi-tip">'+tip+'</div>':'')+'<div class="kl">'+label+'</div><div class="kmid"><div class="kv">'+value+'</div>'+(spH||'')+'</div><div class="ksub">'+(dH||'')+'</div></div>';}
-  // 6 KPI chuẩn email: Lượt gửi · Đã mở (lượt) · Chưa mở · Lượt click · CTOR · Mở TB/người
+  // 6 KPI: Lượt gửi · Đã mở (lượt) · Lượt click · Mở TB/người · Phiên đọc · Phiên TB/người (đã bỏ Chưa mở + CTOR 02/10/2026; vẫn có ở bảng chiến dịch)
   var k1=card('Lượt gửi',null,s.hasSent?nf(s.sentSessions):'—',(s.hasSent?deltaChip(cur.sent,prev.sent,true):'')+' · '+nf(s.sent)+' người',spark(sS,'var(--accent-2)'),'Tổng số email đã gửi (mỗi sự kiện pos=sent = 1 lượt). 1 người nhận nhiều lần = tính nhiều lượt. Số người nhận duy nhất: '+nf(s.sent)+'.');
   var k2=card('Đã mở (lượt)',null,nf(s.opens),deltaChip(cur.opens,prev.opens,true)+' gộp tải lại ≤5s',spark(oS,'var(--accent-2)'),'Tổng số lượt mở. Các lần tải cách nhau ≤5 giây (Outlook tự tải lại) chỉ tính 1; người mở lại sau đó vẫn tính thêm. ');
-  var k3=card('Chưa mở',null,s.hasSent?nf(s.notOpenCount||0):'—',(s.hasSent?deltaChip(cur.notOpen,prev.notOpen,false):'')+(s.notOpenRate!=null?' · '+s.notOpenRate+'% người gửi':''),spark(sS,'var(--risk)'),'Số người được gửi email nhưng chưa mở lần nào. Cần follow-up trực tiếp.');
   var k4=card('Lượt click',null,nf(d.clickStats.total||0),deltaChip(cur.clickTotal,prev.clickTotal,true)+' · '+nf(s.nClickers||0)+' người click',spark(cS,'var(--accent)'),'Tổng số lượt click (1 người click nhiều lần = tính nhiều lượt). Số người unique đã click: '+nf(s.nClickers||0)+'.');
-  var k5=card('CTOR',null,(d.clickStats.ctor||0)+'%',deltaChip(cur.ctor,prev.ctor,true)+' click ÷ mở',spark(cS,'var(--accent-2)'),'Click-to-Open Rate = Người click ÷ Người mở.');
   var k6=card('Mở TB/người',null,s.avgOpensPerReader!=null?s.avgOpensPerReader:'—',s.uniqOpeners+' người đã mở',spark(oS,'var(--accent-2)'),'Số lượt mở trung bình trên mỗi người đã mở ít nhất 1 lần = Tổng lượt mở ÷ Người mở.');
   var k7=card('Phiên đọc',null,nf(s.readSessions||0),'ngắt sau 15 phút',spark(oS,'var(--accent-2)'),'Số phiên đọc = các lần mở của cùng 1 người cho cùng 1 email cách nhau ≤15 phút gộp làm 1 phiên; quay lại sau hơn 15 phút tính phiên mới. Gần với "Sessions" của Google Analytics. Không đo được lúc đóng thư.');
   var k8=card('Phiên TB/người',null,s.avgSessionsPerReader!=null?s.avgSessionsPerReader:'—',nf(s.readSessions||0)+' phiên / '+nf(s.uniqOpeners)+' người',spark(oS,'var(--accent-2)'),'Số phiên đọc trung bình trên mỗi người đã mở ít nhất 1 lần = Tổng phiên ÷ Người mở.');
-  return '<div class="hero-row">'+gauge+'<div class="kpi-grid eight">'+k1+k2+k3+k4+k5+k6+k7+k8+'</div></div>';
+  return '<div class="hero-row">'+gauge+'<div class="kpi-grid six">'+k1+k2+k4+k6+k7+k8+'</div></div>';
 }
 
 function heroChart(d,ser){
