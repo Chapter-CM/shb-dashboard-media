@@ -648,6 +648,8 @@ function projectOf(p){
       var k=ks[j];
       if(tagsInText.indexOf(k)>-1)return PROJECTS[i][0];
       if(k==='shbtransformationtalktap'&&full.indexOf(k)>-1)return PROJECTS[i][0];
+      // Transformation Talk: #transformationtalk, #SHBTransformationTalkTap5 (số tập thay đổi), kể cả gõ sai "Tak"
+      if(k==='shbtransformationtalktap'&&tagsInText.some(function(t){return /^(shb)?transformationta[lk]k?(tap\d*)?$/.test(t)||/^shbtransformationta[lk]k?tap/.test(t);}))return PROJECTS[i][0];
     }
   }
   return 'Khác';
