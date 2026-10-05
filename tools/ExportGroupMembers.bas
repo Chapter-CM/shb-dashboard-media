@@ -11,10 +11,15 @@ Option Explicit
 ' LUU Y: chay LAU (65 group, hon 6000 nguoi: co the 10-30 phut).
 ' Cu de Outlook chay, khong dong cua so. Tien do in o cua so Immediate (Ctrl+G).
 ' File group_mail_members.csv tren Desktop duoc ghi lai SAU MOI GROUP (mo xem duoc ngay).
+' Outlook se hien "Not Responding" trong luc chay - BINH THUONG. De biet macro con chay
+' hay khong: mo Desktop\group_mail_progress.txt bang Notepad (cap nhat lien tuc).
+' Muon dung giua chung: bam vao cua so Outlook roi nhan Ctrl+Break.
 ' ================================================================
 Private Const PR_SMTP As String = "http://schemas.microsoft.com/mapi/proptag/0x39FE001E"
 Private mLines As Collection
 Private mSeen As Object
+Private mTick As Long
+Private mCurLabel As String
 
 Public Sub ExportGroupMailMembers()
     Dim entries() As String, i As Long, n As Long
@@ -37,6 +42,7 @@ Public Sub ExportGroupMailMembers()
             If InStr(addr, "@") > 0 Then label = Left(addr, InStr(addr, "@") - 1) Else label = addr
 
             Debug.Print Format(Now, "hh:nn:ss") & "  " & (i + 1) & "/" & n & "  " & label
+            WriteProgress "Group " & (i + 1) & "/" & n & ": " & label & " ... (tong da lay " & (mLines.Count - 1) & " dong)"
             DoEvents
 
             Set rcp = Application.Session.CreateRecipient(addr)
@@ -44,6 +50,8 @@ Public Sub ExportGroupMailMembers()
             If rcp.Resolved Then
                 before = mLines.Count
                 Set mSeen = CreateObject("Scripting.Dictionary")
+                mCurLabel = "Group " & (i + 1) & "/" & n & ": " & label
+                mTick = 0
                 ExpandGroup rcp.AddressEntry, label, 0
                 Debug.Print "   -> " & label & ": " & (mLines.Count - before) & " thanh vien"
                 okList = okList & label & ": " & (mLines.Count - before) & vbCrLf
@@ -65,8 +73,23 @@ Fin:
 
     Dim path As String
     path = SaveCsv()
+    WriteProgress "XONG. " & (mLines.Count - 1) & " dong -> " & path
     MsgBox "Da xuat xong: " & path & vbCrLf & "Tong " & (mLines.Count - 1) & " dong (group x thanh vien)." & vbCrLf & vbCrLf & _
            IIf(Len(bad) > 0, "KHONG tim thay: " & vbCrLf & bad & vbCrLf, "") & okList, vbInformation, "Xuat group mail"
+End Sub
+
+' Ghi tien do ra Desktop\group_mail_progress.txt - MO BANG NOTEPAD de biet macro con
+' chay hay khong, KE CA khi Outlook dang "Not Responding".
+Private Sub WriteProgress(ByVal msg As String)
+    On Error Resume Next
+    Dim st As Object
+    Set st = CreateObject("ADODB.Stream")
+    st.Type = 2
+    st.Charset = "utf-8"
+    st.Open
+    st.WriteText Format(Now, "hh:nn:ss") & "  " & msg
+    st.SaveToFile CreateObject("WScript.Shell").SpecialFolders("Desktop") & "\group_mail_progress.txt", 2
+    st.Close
 End Sub
 
 Private Function SaveCsv() As String
@@ -122,6 +145,11 @@ Private Sub ExpandGroup(ae As AddressEntry, grp As String, depth As Long)
         If Not mems Is Nothing Then
             For Each m In mems
                 ExpandGroup m, grp, depth + 1
+                mTick = mTick + 1
+                If mTick Mod 20 = 0 Then
+                    DoEvents
+                    WriteProgress mCurLabel & " ... da xu ly " & mTick & " thanh vien, tong " & (mLines.Count - 1) & " dong"
+                End If
             Next m
         End If
     Else
