@@ -439,6 +439,12 @@ tbody tr.filt-on+tr.drill{opacity:1!important}
 .rbar{flex:1;height:9px;background:var(--hair);border-radius:99px;overflow:hidden}.rbar span{display:block;height:100%;border-radius:99px;transition:width .8s cubic-bezier(.16,1,.3,1)}
 .rval{width:64px;text-align:right;font-size:12px;color:var(--text-2);font-family:var(--num)}
 /* Dự án / Sáng kiến */
+.ini-head{display:flex;align-items:center;gap:var(--s3);padding:0 10px 6px;font-size:10.5px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
+.ini-bar-sp{flex:1}
+.ini-num{width:72px;flex:none;white-space:nowrap;text-align:right;font-size:12px;font-weight:600;color:var(--text-2);font-variant-numeric:tabular-nums}
+.ini-head .ini-num{cursor:pointer;color:var(--faint)}.ini-head .ini-num:hover,.ini-head .ini-num.on{color:var(--accent)}
+.ini-scroll{overflow-x:auto}.ini-scroll>.ini-head,.ini-scroll>.ini-list{min-width:560px}
+@media(max-width:1180px){.ini-num.hide-sm{display:none}}
 .ini-list{display:flex;flex-direction:column;gap:var(--s1)}
 .ini-row{display:flex;align-items:center;gap:var(--s3);padding:9px 10px;border-radius:var(--r-xs);transition:background .15s}
 .ini-row:hover{background:var(--glass)}.ini-row.on{background:var(--accent-bg)}
@@ -802,7 +808,7 @@ function processCore(posts){
   arr.forEach(function(p){var d=new Date(p.ts);heat[(d.getDay()+6)%7][d.getHours()]+=(p.mediaViewers||0);});  // best time theo NGƯỜI XEM
   var bestV=0,bestH=0,bestD=0;for(var dd=0;dd<7;dd++)for(var hh=0;hh<24;hh++){if(heat[dd][hh]>bestV){bestV=heat[dd][hh];bestH=hh;bestD=dd;}}
   // by type / topic / project (key có thể là tên field hoặc hàm)
-  function agg(key){var fn=typeof key==='function'?key:function(p){return p[key];};var m={};arr.forEach(function(p){var k=fn(p);if(!m[k])m[k]={name:k,n:0,views:0,eng:0,reactSum:0};m[k].n++;m[k].views+=p.views;m[k].eng+=engOf(p);m[k].reactSum+=reactSumOf(p);});return Object.keys(m).map(function(k){var o=m[k];o.er=o.views?pc(o.reactSum/o.views*100):0;return o;}).sort(function(a,b){return b.eng-a.eng;});}
+  function agg(key){var fn=typeof key==='function'?key:function(p){return p[key];};var m={};arr.forEach(function(p){var k=fn(p);if(!m[k])m[k]={name:k,n:0,views:0,eng:0,reactSum:0,imp:0,cx:0,cmt:0};m[k].n++;m[k].views+=p.views;m[k].eng+=engOf(p);m[k].reactSum+=reactSumOf(p);m[k].imp+=(pmv(p,'impression')||0);m[k].cx+=reactCountOf(p);m[k].cmt+=(pmv(p,'comment')||p.comments||0);});return Object.keys(m).map(function(k){var o=m[k];o.er=o.views?pc(o.reactSum/o.views*100):0;return o;}).sort(function(a,b){return b.eng-a.eng;});}
   var avgEr=sum.erRate;
   var rows=arr.map(function(p){var e=engOf(p),er=erOf(p);return {p:p,eng:e,er:pc(er),vsAvg:pc(er-avgEr)};}).sort(function(a,b){return b.eng-a.eng;});
   // tiers by ER
@@ -1239,19 +1245,41 @@ function monetizationSection(){
 // 20/07/2026: bỏ pill ER theo Dự án — nguồn Group không tách được Cảm xúc/Chia sẻ riêng
 // theo từng dự án nên không tính đúng ER theo định nghĩa mới. Đổi pill sang tổng Lượt
 // tương tác (trung tính, không tô màu theo mục tiêu ER nữa).
+var _projKey='views';
+var PROJ_COLS=[['n','Bài','Số bài thuộc dự án'],['views','Lượt xem','Tổng Lượt xem của các bài'],['avg','Xem TB/bài','Lượt xem ÷ số bài — so sánh dự án nhiều/ít bài'],['imp','Hiển thị','Tổng lượt hiển thị'],['eng','Tương tác','Tổng tương tác Facebook báo cho các bài'],['cx','Cảm xúc','Tổng cảm xúc (cần quét chi tiết mới đủ số)'],['cmt','Bình luận','Tổng bình luận'],['er','ER','(Cảm xúc + Chia sẻ) ÷ Lượt xem']];
+function projVal(t,k){return k==='avg'?(t.n?t.views/t.n:0):(t[k]||0);}
+function projSort(k){
+  _projKey=k;var list=document.querySelector('#s-goal .ini-list');if(!list)return;
+  var rows=Array.prototype.slice.call(list.querySelectorAll('.ini-row'));
+  rows.sort(function(a,b){return (+b.getAttribute('data-'+k))-(+a.getAttribute('data-'+k));});
+  var mx=Math.max.apply(null,rows.map(function(r){return +r.getAttribute('data-'+k);}).concat([1e-9]));
+  rows.forEach(function(r){list.appendChild(r);var sp=r.querySelector('.ini-bar span');if(sp)sp.style.width=((+r.getAttribute('data-'+k))/mx*100).toFixed(1)+'%';});
+  Array.prototype.forEach.call(document.querySelectorAll('#s-goal .ini-head [data-pk]'),function(h){h.classList.toggle('on',h.getAttribute('data-pk')===k);});
+  var t=document.querySelector('#s-goal .panel-h .pk-lbl');if(t){for(var i=0;i<PROJ_COLS.length;i++)if(PROJ_COLS[i][0]===k)t.textContent=PROJ_COLS[i][1];}
+}
 function goalSection(d){
-  var projs=(d.byProjectTable||d.byProject||[]).filter(function(t){return t.name;}).slice().sort(function(a,b){return b.views-a.views;});
-  var maxV=Math.max.apply(null,projs.map(function(t){return t.views;}).concat([1]));
+  var K=_projKey;
+  var projs=(d.byProjectTable||d.byProject||[]).filter(function(t){return t.name;}).slice().sort(function(a,b){return projVal(b,K)-projVal(a,K);});
+  var maxV=Math.max.apply(null,projs.map(function(t){return projVal(t,K);}).concat([1e-9]));
+  var fmtV={n:nf,views:nf,avg:nf,imp:nf,eng:nf,cx:nf,cmt:nf};
+  var head='<div class="ini-head"><div class="ini-name">Dự án</div><div class="ini-bar-sp"></div>'
+    +PROJ_COLS.map(function(c,i){return '<span class="ini-num sortable'+(c[0]===K?' on':'')+(i>0&&i<7&&c[0]!=='views'&&c[0]!=='eng'?' hide-sm':'')+'" data-pk="'+c[0]+'" onclick="projSort(\''+c[0]+'\')" data-tip="'+esc(c[2])+' — bấm để xếp hạng theo cột này">'+c[1]+'</span>';}).join('')+'</div>';
   var rows=projs.map(function(t){
     var on=isSel("project",t.name)?' on':'';
     var cls=t.er>=TARGET_ER?'good':t.er>=TARGET_ER*.7?'warn':'risk';
-    return '<div class="ini-row'+on+'" style="cursor:pointer" onclick="setFilter(\'project\',\''+jsq(t.name)+'\')" data-tip="Bấm để lọc TOÀN dashboard theo dự án này (bấm lại để bỏ)">'
+    var attrs=PROJ_COLS.map(function(c){return ' data-'+c[0]+'="'+projVal(t,c[0])+'"';}).join('');
+    var nums=PROJ_COLS.map(function(c,i){
+      if(c[0]==='er')return '<span class="ini-num"><span class="pill p-'+cls+'">'+t.er+'%</span></span>';
+      return '<span class="ini-num'+(i>0&&i<7&&c[0]!=='views'&&c[0]!=='eng'?' hide-sm':'')+'">'+nf(projVal(t,c[0]))+'</span>';}).join('');
+    return '<div class="ini-row'+on+'"'+attrs+' style="cursor:pointer" onclick="setFilter(\'project\',\''+jsq(t.name)+'\')" data-tip="Bấm để lọc TOÀN dashboard theo dự án này (bấm lại để bỏ)">'
       +'<div class="ini-name">'+esc(t.name)+'<span class="ini-meta">'+t.n+' bài · '+tnum(t.views)+' lượt xem</span></div>'
-      +'<div class="ini-bar"><span style="width:'+(t.views/maxV*100).toFixed(1)+'%;background:var(--grad)"></span></div>'
-      +'<span class="pill p-'+cls+'">ER '+t.er+'%</span></div>';
+      +'<div class="ini-bar"><span style="width:'+(projVal(t,K)/maxV*100).toFixed(1)+'%;background:var(--grad)"></span></div>'
+      +nums+'</div>';
   }).join('')||'<div class="nd">Chưa có dữ liệu dự án.</div>';
+  var lbl='Lượt xem';for(var i=0;i<PROJ_COLS.length;i++)if(PROJ_COLS[i][0]===K)lbl=PROJ_COLS[i][1];
   return '<section id="s-goal"><div class="eyebrow">Dự án / Squad — bấm để lọc chéo</div>'
-    +'<div class="panel"><div class="panel-h" data-tip="Nhóm bài theo Dự án/Squad (nhận diện tự động từ nội dung bài). Thanh = tỉ trọng Lượt xem; pill = ER (đạt mục tiêu '+TARGET_ER+'% thì xanh). Bài không khớp dự án nào gom vào ‘Khác’. Bấm để lọc.">Xếp hạng theo Lượt xem <span style="font-weight:600;color:var(--muted);font-size:11px">· '+projs.length+' dự án</span></div><div class="ini-list">'+rows+'</div></div>'
+    +'<div class="panel"><div class="panel-h" data-tip="Nhóm bài theo Dự án/Squad (nhận diện tự động từ hashtag hoặc tên dự án trong nội dung). Thanh = tỉ trọng theo cột đang chọn (bấm tiêu đề cột để đổi); ER xanh khi đạt mục tiêu '+TARGET_ER+'%. Bài không khớp dự án nào gom vào ‘Khác’. Bấm dòng để lọc."><span>Xếp hạng theo <span class="pk-lbl">'+esc(lbl)+'</span></span> <span style="font-weight:600;color:var(--muted);font-size:11px">· '+projs.length+' dự án</span></div>'
+    +'<div class="ini-scroll">'+head+'<div class="ini-list">'+rows+'</div></div></div>'
     +'</section>';
 }
 function dateCtrl(){
