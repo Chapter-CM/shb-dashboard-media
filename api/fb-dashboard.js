@@ -623,9 +623,9 @@ function jsq(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 // Không khớp -> 'Khác'.
 var PROJECTS=[
   ['Squad 1',['sq1']],['Squad 2',['sq2']],['Squad 3',['sq3']],['Squad 4',['sq4']],
-  ['Squad 5',['sq5']],['Squad 6',['sq6']],['Squad 7',['baolanhonline']],['Squad 8',['sq8']],['Squad 9',['sq9']],
-  ['CDS',['cds']],['QRC',['qrc']],['SLTD',['sltd']],['SShield',['sshield']],['CTQT',['ctqt']],
-  ['OpenAPI',['openapi']],['Rewards',['newrewards']],['Sale Apps KHDN',['heroappcorp']],
+  ['Squad 5',['sq5']],['Squad 6',['sq6','squad6']],['Squad 7',['baolanhonline']],['Squad 8',['sq8']],['Squad 9',['sq9']],['Squad 10',['sq10','squad10']],
+  ['CDS',['cds']],['QRC',['qrc']],['SLTD',['sltd','sinhloinhantenh']],['SShield',['sshield']],['CTQT',['ctqt']],
+  ['OpenAPI',['openapi']],['Rewards',['newrewards']],['Sale Apps KHDN',['heroappcorp','heroappkhdn']],
   ['Transformation Talk',['shbtransformationtalktap']],['EDoc',['edoc']],['Saha Branch',['sahabranch']],
   ['eGP',['egp']],['MDP',['mdp']],['SAHA SHOP',['sahashop']]
 ];
