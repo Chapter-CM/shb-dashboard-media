@@ -531,7 +531,7 @@ tbody tr[onclick]{cursor:pointer}td.num,th.num{text-align:right;font-family:var(
 .msel-opt.on .msel-ck{background:var(--accent);border-color:var(--accent)}
 .fclear{background:none;border:none;color:var(--muted);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;text-decoration:underline}.fclear:hover{color:var(--risk)}
 [data-density="compact"] td{padding:9px 10px}[data-density="compact"] .kpi{padding:13px 15px}[data-density="compact"] .kpi .kv{font-size:24px}[data-density="compact"] section{padding-top:20px}[data-density="compact"] .panel{padding:15px 17px}
-#tip{position:fixed;z-index:9999;display:none;background:color-mix(in srgb,var(--bg) 90%,transparent);border:1px solid var(--stroke-2);color:var(--text-2);font-size:12px;padding:9px 13px;border-radius:12px;max-width:260px;pointer-events:none;backdrop-filter:blur(18px)}
+#tip{position:fixed;z-index:9999;display:none;background:color-mix(in srgb,var(--bg) 90%,transparent);border:1px solid var(--stroke-2);color:var(--text-2);font-size:12px;padding:9px 13px;border-radius:12px;max-width:340px;line-height:1.45;pointer-events:none;backdrop-filter:blur(18px)}
 [data-tip]{cursor:help}
 @media(max-width:920px){.hero-row{grid-template-columns:1fr}.row2{grid-template-columns:1fr}.tiers{grid-template-columns:repeat(2,1fr)}.dh-grid{grid-template-columns:1fr}.exec-k{grid-template-columns:1fr 1fr}.drill-in{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.kpi-col{grid-template-columns:1fr}}
@@ -1038,7 +1038,12 @@ function mixSection(d){
 }
 function setCtab(t){_ctab=t;paint();}
 function isVideoPost(p){return /Reel|Video|Live/i.test(p.type||'')||pmv(p,'video_view_time')>0||pmv(p,'video_view_three_second')>0;}
-function postLink(p,txt){var l=p.permalink&&p.permalink!=='#'?p.permalink:'';return l?'<a href="'+esc(l)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="nm" style="color:var(--text);text-decoration:underline solid var(--stroke-2)" data-tip="Mở bài trên Facebook ↗">'+esc(txt)+'</a>':'<span class="nm">'+esc(txt)+'</span>';}
+// Tooltip xem trước nội dung (caption) khi rê chuột vào tiêu đề bài. data-tip được gán vào innerHTML nên PHẢI thoát HTML
+// 2 lần (+ thoát dấu ") để nội dung bài chứa < > & " không phá giao diện.
+function capTip(p,hint){var t=String(p.msg||p.title||'').replace(/\s+$/,'');if(t.length>600)t=t.slice(0,600)+'…';
+  var body=esc(esc(t)).replace(/"/g,'&quot;').replace(/\r?\n/g,'<br>');
+  return '<b style=\'color:var(--text)\'>Nội dung bài</b><br>'+body+(hint?'<br><i style=\'opacity:.7\'>'+hint+'</i>':'');}
+function postLink(p,txt){var l=p.permalink&&p.permalink!=='#'?p.permalink:'';var tip=capTip(p,l?'Bấm tiêu đề để mở bài trên Facebook ↗':'');return l?'<a href="'+esc(l)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="nm" style="color:var(--text);text-decoration:underline solid var(--stroke-2)" data-tip="'+tip+'">'+esc(txt)+'</a>':'<span class="nm" data-tip="'+tip+'">'+esc(txt)+'</span>';}
 function contentSection(d){
   var F=_filter||{};
   var allRows=d.rowsTable||d.rows||[];
@@ -1058,7 +1063,7 @@ function contentSection(d){
       // xem không còn đáng tin → ẩn ER/Tỉ lệ tiếp cận (số bịa ra, không mang ý nghĩa gì).
       var erCell=p.staleViews?'<span class="erc" data-tip="Video đã bị Facebook xoá (Livestream >60 ngày) — Lượt xem không còn đáng tin nên không tính ER"><b>—</b></span>':'<span class="erc"><b>'+er+'%</b><span class="erbar2"><i style="width:'+erBarW+'%"></i></span></span>';
       var vrateCell=p.staleViews?'—':(vw?pc(pmv(p,'viewers')/vw*100)+'%':'—');
-      return '<tr class="'+(isSel("post",p.id)?'filt-on':'')+'" onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer" data-tip="Bấm để lọc TOÀN dashboard theo bài này (bấm lại để bỏ)"><td class="pin"><div class="ptitle"><button class="drill-toggle" onclick="event.stopPropagation();toggleDrill(\''+p.id+'\',this)" data-tip="Xem chi tiết bài viết">▾</button><span class="tdot '+tier+'"></span><div><div class="pt-main">'+postLink(p,p.msg.slice(0,50))+'</div><div class="pt-sub">'+esc(p.topic||p.type)+(p.staleViews?' · <span style="color:var(--warn)">⚠ video đã bị xoá</span>':'')+'</div></div></div></td>'
+      return '<tr class="'+(isSel("post",p.id)?'filt-on':'')+'" onclick="setFilter(\'post\',\''+p.id+'\')" style="cursor:pointer" data-tip="Bấm để lọc TOÀN dashboard theo bài này (bấm lại để bỏ)"><td class="pin"><div class="ptitle" data-tip="'+capTip(p,'Bấm hàng để lọc toàn dashboard theo bài này')+'"><button class="drill-toggle" onclick="event.stopPropagation();toggleDrill(\''+p.id+'\',this)" data-tip="Xem chi tiết bài viết">▾</button><span class="tdot '+tier+'"></span><div><div class="pt-main">'+postLink(p,p.msg.slice(0,50))+'</div><div class="pt-sub">'+esc(p.topic||p.type)+(p.staleViews?' · <span style="color:var(--warn)">⚠ video đã bị xoá</span>':'')+'</div></div></div></td>'
         +'<td class="num">'+(p.ts?fmtDay(p.ts):'—')+'</td>'
         +'<td onclick="event.stopPropagation();setFilter(\'type\',\''+jsq(p.type)+'\')" style="cursor:pointer" data-tip="Bấm để lọc chéo theo loại này"><span class="pill '+(isSel("type",p.type)?'p-good':'p-neutral')+'">'+esc(p.type)+'</span></td>'
         +'<td class="num">'+nf(vw)+'</td><td class="num">'+nf(pmv(p,'viewers'))+'</td>'
