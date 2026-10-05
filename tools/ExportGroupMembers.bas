@@ -8,8 +8,8 @@ Option Explicit
 ' chi nhanh + shbho + TrungTamKinhDoanh). Muon dung danh sach khac: tao file
 ' group_mail_list.txt tren Desktop (moi dong 1 group, ghi email hoac ten group) -
 ' co file nay thi macro dung file, bo qua danh sach co san.
-' LUU Y: chay LAU (65 group, hon 6000 nguoi: co the 10-30 phut). Thanh trang thai
-' goc duoi cua Outlook hien tien do. Cu de Outlook chay, dung dong cua so.
+' LUU Y: chay LAU (65 group, hon 6000 nguoi: co the 10-30 phut).
+' Cu de Outlook chay, khong dong cua so. Tien do in o cua so Immediate (Ctrl+G).
 ' ================================================================
 Private Const PR_SMTP As String = "http://schemas.microsoft.com/mapi/proptag/0x39FE001E"
 Private mLines As Collection
@@ -22,6 +22,7 @@ Public Sub ExportGroupMailMembers()
 
     entries = Split(LoadGroupList(), ";")
     n = UBound(entries) + 1
+    If MsgBox("Se xuat " & n & " group mail. Co the mat 10-30 phut, trong luc do Outlook co the dung hinh (binh thuong). Bam OK de bat dau, khong dong Outlook cho den khi hien thong bao 'Da xuat xong'.", vbOKCancel + vbInformation, "Xuat group mail") = vbCancel Then Exit Sub
 
     Set mLines = New Collection
     mLines.Add "group,ten,email"
@@ -34,7 +35,7 @@ Public Sub ExportGroupMailMembers()
             If p1 > 0 And p2 > p1 Then addr = Trim(Mid(e, p1 + 1, p2 - p1 - 1)) Else addr = e
             If InStr(addr, "@") > 0 Then label = Left(addr, InStr(addr, "@") - 1) Else label = addr
 
-            Application.StatusBar = "Xuat group mail " & (i + 1) & "/" & n & ": " & label & " ..."
+            Debug.Print Format(Now, "hh:nn:ss") & "  " & (i + 1) & "/" & n & "  " & label
             DoEvents
 
             Set rcp = Application.Session.CreateRecipient(addr)
@@ -51,7 +52,6 @@ Public Sub ExportGroupMailMembers()
     Next i
 
 Fin:
-    Application.StatusBar = False
     If Err.Number <> 0 Then MsgBox "Dung giua chung do loi: " & Err.Description & vbCrLf & "Se luu phan da lay duoc.", vbExclamation
     On Error GoTo 0
 
