@@ -169,6 +169,17 @@ function parseCsvLine(line) {
   }
   out.push(cur); return out;
 }
+// Gộp tên Squad/Dự án viết khác nhau/nhầm về 1 tên chuẩn (dữ liệu gốc trong DB không đổi). So khớp trên tên đã bỏ dấu,
+// bỏ số/dấu gạch/khoảng trắng. Thêm dòng mới vào đây khi cần gộp thêm.
+const INITIATIVE_ALIASES = [
+  { to: 'Transformation-Talk', re: /^transfor?mationtalk$/ }, // Transfomation Talk (gõ nhầm) + Transformation Talk 4
+];
+function canonInitiative(v) {
+  if (!v) return v;
+  const n = String(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
+  for (const a of INITIATIVE_ALIASES) if (a.re.test(n)) return a.to;
+  return v;
+}
 function loadGroupMap() {
   try {
     const txt = fs.readFileSync(path.join(__dirname, '..', 'data', 'group_mail_members.csv'), 'utf8').replace(/^\uFEFF/, '');
@@ -215,6 +226,7 @@ module.exports = async (req, res) => {
       l.timestamp = l.timestamp.replace(' ', 'T') + 'Z';
     }
   });
+  logs.forEach(function(l) { if (l.initiative) l.initiative = canonInitiative(l.initiative); });
   const safe = JSON.stringify(logs).replace(/<\/script>/gi, '<\\/script>');
   res.send('<!DOCTYPE html><html lang="vi"><head>'
     + '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
