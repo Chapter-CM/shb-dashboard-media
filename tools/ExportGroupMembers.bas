@@ -10,6 +10,7 @@ Option Explicit
 ' co file nay thi macro dung file, bo qua danh sach co san.
 ' LUU Y: chay LAU (65 group, hon 6000 nguoi: co the 10-30 phut).
 ' Cu de Outlook chay, khong dong cua so. Tien do in o cua so Immediate (Ctrl+G).
+' File group_mail_members.csv tren Desktop duoc ghi lai SAU MOI GROUP (mo xem duoc ngay).
 ' ================================================================
 Private Const PR_SMTP As String = "http://schemas.microsoft.com/mapi/proptag/0x39FE001E"
 Private mLines As Collection
@@ -44,7 +45,9 @@ Public Sub ExportGroupMailMembers()
                 before = mLines.Count
                 Set mSeen = CreateObject("Scripting.Dictionary")
                 ExpandGroup rcp.AddressEntry, label, 0
+                Debug.Print "   -> " & label & ": " & (mLines.Count - before) & " thanh vien"
                 okList = okList & label & ": " & (mLines.Count - before) & vbCrLf
+                SaveCsv
             Else
                 bad = bad & label & vbCrLf
             End If
@@ -123,9 +126,11 @@ Private Sub ExpandGroup(ae As AddressEntry, grp As String, depth As Long)
         End If
     Else
         smtp = ""
-        Set xu = ae.GetExchangeUser()
-        If Not xu Is Nothing Then smtp = xu.PrimarySmtpAddress
-        If InStr(smtp, "@") = 0 Then smtp = ae.PropertyAccessor.GetProperty(PR_SMTP)
+        smtp = ae.PropertyAccessor.GetProperty(PR_SMTP)
+        If InStr(smtp, "@") = 0 Then
+            Set xu = ae.GetExchangeUser()
+            If Not xu Is Nothing Then smtp = xu.PrimarySmtpAddress
+        End If
         If InStr(smtp, "@") = 0 Then
             If InStr(ae.Address, "@") > 0 Then smtp = ae.Address
         End If
