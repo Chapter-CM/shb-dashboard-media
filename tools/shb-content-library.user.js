@@ -95,10 +95,35 @@
 
   var sent = {}; // chống gửi trùng trong cùng phiên
 
+  // ---- Chẩn đoán: tìm trường chứa NỘI DUNG ĐẦY ĐỦ của bài (để lấy hashtag cuối bài) ----
+  var RAW_NODES = [];
+  function keepRaw(node) { if (node && RAW_NODES.length < 60) RAW_NODES.push(node); }
+  W.SHBCL_findText = function () {
+    var out = [];
+    RAW_NODES.slice(0, 8).forEach(function (n, i) {
+      var found = [];
+      (function walk(o, path, depth) {
+        if (depth > 7 || o == null) return;
+        if (typeof o === 'string') {
+          if (o.length >= 120 || o.indexOf('#') >= 0) found.push({ path: path, len: o.length, hashtags: (o.match(/#[^\s#]+/g) || []).slice(0, 8).join(' '), tail: o.slice(-60) });
+          return;
+        }
+        if (typeof o !== 'object') return;
+        Object.keys(o).forEach(function (k) { walk(o[k], path ? path + '.' + k : k, depth + 1); });
+      })(n, '', 0);
+      found.forEach(function (f) { f.node = i; out.push(f); });
+    });
+    console.table(out);
+    console.log('Gui anh bang tren. Cot len lon nhat + co hashtags la truong chua noi dung day du.');
+    return out;
+  };
+  W.SHBCL_rawNode = function (i) { return RAW_NODES[i || 0]; };
+
   function handleLibrary(lib) {
     if (!lib || !lib.edges || !lib.edges.length) return;
     var rows = [];
     lib.edges.forEach(function (e) {
+      keepRaw(e && e.node);
       var row = mapNode(e && e.node);
       if (!row) return;
       var key = row.post_id + ':' + row.reach + ':' + row.engagement;
