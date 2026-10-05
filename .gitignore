@@ -4,3 +4,6 @@ public/
 .env.*
 !.env.example
 .DS_Store
+
+# Danh sach thanh vien group mail (email nhan su) - copy thu cong vao GitLab, khong commit
+data/group_mail_members.csv
