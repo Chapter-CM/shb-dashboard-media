@@ -1,4 +1,3 @@
-Attribute VB_Name = "ExportGroupMembers"
 Option Explicit
 ' ================================================================
 ' XUAT THANH VIEN GROUP MAIL -> CSV (CHI DOC, khong gui mail, khong sua gi)
