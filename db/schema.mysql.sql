@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS fb_page_snapshots (
 CREATE TABLE IF NOT EXISTS fb_group_posts (
   post_id      VARCHAR(64) PRIMARY KEY,
   group_id     VARCHAR(64),
-  title        VARCHAR(500),
+  title        MEDIUMTEXT,
   permalink    VARCHAR(500),
   created_time DATETIME,
   post_type    VARCHAR(40),
