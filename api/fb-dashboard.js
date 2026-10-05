@@ -629,6 +629,16 @@ var PROJECTS=[
   ['Transformation Talk',['shbtransformationtalktap']],['EDoc',['edoc']],['Saha Branch',['sahabranch']],
   ['eGP',['egp']],['MDP',['mdp']],['SAHA SHOP',['sahashop']]
 ];
+// Từ khoá theo TÊN dự án (dự phòng khi bài không gắn hashtag). Từ chung chung (vd "rewards") KHÔNG dùng, chỉ dùng cụm đủ đặc trưng.
+var PROJECT_NAMES=[
+  ['Squad 1',['squad 1','sq1']],['Squad 2',['squad 2','sq2']],['Squad 3',['squad 3','sq3']],['Squad 4',['squad 4','sq4']],
+  ['Squad 5',['squad 5','sq5']],['Squad 6',['squad 6','sq6']],['Squad 7',['squad 7','sq7','bao lanh online']],
+  ['Squad 8',['squad 8','sq8']],['Squad 9',['squad 9','sq9']],['Squad 10',['squad 10','sq10']],
+  ['CDS',['cds']],['QRC',['qrc']],['SLTD',['sltd','sinh loi tu dong']],['SShield',['sshield']],['CTQT',['ctqt']],
+  ['OpenAPI',['open api']],['Rewards',['new rewards']],['Sale Apps KHDN',['sale apps khdn','hero app corp','hero app khdn']],
+  ['Transformation Talk',['transformation talk']],['EDoc',['edoc']],['Saha Branch',['saha branch']],
+  ['eGP',['egp']],['MDP',['mdp']],['SAHA SHOP',['saha shop']]
+];
 function cleanTag(s){return norm(String(s).replace(/[.,!?;:()\[\]{}"'`]+$/g,''));}
 function projectOf(p){
   var raw=((p&&(p.msg||p.title))||'')+' '+((p&&p.topic)||'');
@@ -650,6 +660,16 @@ function projectOf(p){
       if(k==='shbtransformationtalktap'&&full.indexOf(k)>-1)return PROJECTS[i][0];
       // Transformation Talk: #transformationtalk, #SHBTransformationTalkTap5 (số tập thay đổi), kể cả gõ sai "Tak"
       if(k==='shbtransformationtalktap'&&tagsInText.some(function(t){return /^(shb)?transformationta[lk]k?(tap\d*)?$/.test(t)||/^shbtransformationta[lk]k?tap/.test(t);}))return PROJECTS[i][0];
+    }
+  }
+  // Không có hashtag khớp -> thử TÊN dự án viết trong nội dung (vd "Squad 3", "Saha Branch", "OpenAPI").
+  // Nguyên từ (không dính chữ/số hai bên: "squad 10" không bị nhận là Squad 1); cho phép thiếu/thừa khoảng trắng hoặc gạch nối
+  // ("SahaShop", "Saha-Shop"). Hashtag luôn được ưu tiên hơn từ khoá.
+  for(var a=0;a<PROJECT_NAMES.length;a++){
+    var phrases=PROJECT_NAMES[a][1];
+    for(var b=0;b<phrases.length;b++){
+      var re=new RegExp('(^|[^a-z0-9])'+phrases[b].replace(/ /g,'[\\s\\-_]*')+'(?![a-z0-9])');
+      if(re.test(full))return PROJECT_NAMES[a][0];
     }
   }
   return 'Khác';
