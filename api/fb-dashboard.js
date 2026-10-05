@@ -632,7 +632,15 @@ var PROJECTS=[
 function cleanTag(s){return norm(String(s).replace(/[.,!?;:()\[\]{}"'`]+$/g,''));}
 function projectOf(p){
   var raw=((p&&(p.msg||p.title))||'')+' '+((p&&p.topic)||'');
-  var tagsInText=(raw.match(/#[^\s#]+/g)||[]).map(function(t){return cleanTag(t.slice(1));});
+  // Hashtag = # + chữ/số/gạch dưới (kể cả có dấu). Gặp dấu khác (. , ! - …) là hết tag nên "#CDS," "#CDS-ban tin"
+  // vẫn ra "cds". Tag có gạch dưới thử 2 cách: nối liền ("#New_Rewards" → newrewards) và đoạn đầu
+  // ("#CDS_BanTin" → cds). So khớp NGUYÊN TAG (không khớp chuỗi con) nên "#sq10" không bị nhận nhầm là Squad 1.
+  var tagsInText=[];
+  (raw.match(/#[\p{L}\p{N}_]+/gu)||[]).forEach(function(t){
+    var body=t.slice(1);
+    tagsInText.push(norm(body.replace(/_/g,'')));
+    if(body.indexOf('_')>0)tagsInText.push(norm(body.split('_')[0]));
+  });
   var full=norm(raw);
   for(var i=0;i<PROJECTS.length;i++){
     var ks=PROJECTS[i][1];
