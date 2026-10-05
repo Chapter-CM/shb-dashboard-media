@@ -1,5 +1,73 @@
 # HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/09/2026)
 
+## 📌 05/10/2026 — Lượt mở "ảo" Email · hiệu năng · bộ lọc facet · hiệu ứng thẻ ghim (Email/Facebook/Jira) — nhánh `claude/zen-noether-4oyfu2`
+
+### Objective
+Đo **lượt mở thật** trong Outlook trên dashboard Email, hết "lượt mở ảo"; đồng thời làm dashboard nhanh, lọc chọn nhiều mục được, thống nhất giao diện 3 dashboard (Email/Facebook/Jira).
+
+### Business Context
+- Pixel `no-store`: **mỗi lần Outlook hiển thị lại thư (bấm sang thư khác rồi quay lại…) là 1 lượt tải mới**. Thí nghiệm trực tiếp 01/10: mở lại Outlook = 1 lượt; mở trên iPhone = 1 lượt (UA `iPhone…Apple`, khác `ms-office`); bấm sang thư khác rồi bấm lại = 3 lượt cách nhau 8–20 giây. Lượt tải ≠ lần đọc; **không đo được lúc đóng thư** (pixel không báo; cơ chế `dwell` đã gỡ vì API Gateway làm số vô nghĩa).
+- UA `Mozilla/4.0 (compatible; ms-office; MSOffice 16)` **giống hệt nhau ở mọi người dùng Outlook máy tính** → UA/IP KHÔNG xác định được người. IP ra internet của SHB đổi giữa nhiều cổng (vd `203.171.23.202` ↔ `14.248.90.156`).
+
+### Current Status
+Đã code + kiểm thử Chromium + push (nhánh trên). **Chưa chắc đã deploy hết lên GitLab** — xem bảng.
+
+| File (repo này) | Copy sang GitLab `cm-dashboard` | Trạng thái |
+|---|---|---|
+| `api/email-dashboard.js` | `api/email-dashboard.js` | Đã deploy 1 bản (ảnh chụp 02/10 có Phiên đọc + 4 chiến dịch); **các bản sau (ẩn chiến dịch, facet, ghim thẻ, perf) cần xác nhận** |
+| `api/email-track.js`, `server/ingest-server.js`, `lib/db-client.js`, `db/*` | cùng đường dẫn | Ghi cột `ip`, tự thêm cột khi pod khởi động, **chống bão request** — cần xác nhận đã deploy (`/healthz?debug=1` có `trackGuard`) |
+| `api/fb-dashboard.js` | `api/fb-dashboard.js` | Mới: thẻ ghim, chọn nhiều dòng — chưa deploy |
+| `reference/cm-dashboard-original/public/index.html` | `public/api/jira/index.html` | Mới: facet, thẻ chip ghim, bỏ thẻ task nổi — chưa deploy |
+| `.gitlab-ci.yml` | (đã có job `db_inspect_opens`, chạy tay) | Đọc-only |
+Sau khi copy: chạy lại pipeline + job `sync_data` để bake lại trang.
+
+### Key Assumptions
+- Ngưỡng là **quy ước do người dùng chọn**, không phải sự thật khách quan; chỉnh bằng 1 hằng số ở đầu `api/email-dashboard.js`.
+- Dữ liệu thật ~95.000 sự kiện (27.819 lượt gửi, 6.840 người) — dùng để dựng bộ test hiệu năng.
+- Tên 4 chiến dịch giữ lại khớp **theo tiền tố** (không có tên đầy đủ trong DB tại thời điểm làm).
+
+### Key Decisions Made
+1. **Lượt mở** (`countOpens`): 2 lần tải liên tiếp cách ≤10 giây = 1; **bản phình** = >15 lượt mở **hoặc** >3 loại UA; lượt mở bản phình = **15 + số cụm mở cách nhau >1 giờ**. Người ≤15 lượt giữ nguyên.
+2. **Phiên đọc** = chỉ số riêng, ngắt sau **15 phút** im lặng (thẻ KPI, cột ở bảng Người nhận/Chiến dịch/Phân khúc/Squad, CSV `So Phien Doc`). Không thay lượt mở.
+3. KPI còn **6 thẻ** (bỏ "Chưa mở", "CTOR"); biểu đồ theo ngày + heatmap dùng đúng định nghĩa lượt mở.
+4. **Ẩn dữ liệu**: chiến dịch có chữ "test" đứng riêng; và **chỉ giữ 4 chiến dịch** (Ban Tin Nhip Dap Chuyen Doi 14 · Lich Phat Song Don Xem Livestream · Du An Chuan Hoa Thong Tin Khach Hang CDS · Transformation Talk 4); chiến dịch **có sự kiện đầu từ 02/10/2026** vẫn hiện. Env: `EMAIL_KEEP_CAMPAIGNS` (rỗng = tắt), `EMAIL_LEGACY_CUTOFF`, `EMAIL_HIDE_TEST_PREFIX=0`.
+5. **Lọc facet** (cả 3 dashboard): mỗi bảng áp mọi bộ lọc TRỪ bộ lọc của chính nó → chọn được nhiều dòng; dòng chọn nổi + lên đầu bảng, dòng không chọn mờ 40% (CSS `:has()`).
+6. **Hiệu ứng thẻ ghim**: Email/Facebook = thẻ bay sang 2 cột bên khi cuộn (≥1400px, dưới đó dùng thanh chip); Jira = **thanh chip cố định** (không có lề trống) bấm được để lọc. Thanh "ĐANG LỌC" không còn che thẻ.
+7. **Hiệu năng**: sửa `O(người×phiên)` ở mục TIERS của `process()` (12s → 0,7s mỗi cú bấm) + lỗi `RangeError` khi >~125k sự kiện (`Math.min.apply`). Số liệu trước/sau giống hệt (so hash, đồng hồ cố định).
+8. Jira: bỏ thẻ task nổi, cột phải liệt kê **toàn bộ task**, bỏ lớp phủ chặn click; sửa lỗi cũ `active` của thẻ KPI/Trạng thái (so mảng với chuỗi).
+9. Chống bão ở `email-track.js` (theo `event_id`: ≥10 UA hoặc >120 lượt/giờ → bỏ ghi). Env `EMAIL_GUARD_OFF`, `EMAIL_GUARD_MAX_UA`, `EMAIL_GUARD_MAX_PER_HOUR`.
+
+### Stakeholders
+Người dùng (Change Management SHB, dung.ha4) · anh Nam Trần Hoàng (hạ tầng/DBA/mạng — IP cổng ra, quyền DDL) · bộ phận mạng SHB · người nhận email (6.7k) · lãnh đạo xem dashboard.
+
+### Risks & Constraints
+- 🔴 **`INGEST_SECRET` đã lộ** (từng nằm nguyên văn trong file này, ảnh chụp console, chat) và **còn trong lịch sử git** → **phải xoay secret** (Deployment `cm-dashboard-ingest` + biến CI `INGEST_SECRET`). Bản này đã che trong file; che file không thu hồi được khóa.
+- 🔴 **Khóa còn nằm trong repo (có từ trước, chưa sửa vì là chức năng đang chạy):** (a) `tools/shb-bookmarklet.txt` nhúng sẵn `INGEST_SECRET` → xoay secret xong **phải tạo lại bookmarklet**; (b) nút đồng bộ trong `api/email-dashboard.js`, `api/fb-dashboard.js`, `reference/.../public/index.html` có **token trigger pipeline GitLab** viết cứng trong JS phía trình duyệt (ai mở dashboard cũng thấy) → nên thu hồi token và chuyển cách kích hoạt sang phía máy chủ.
+- Chống bão **bỏ hẳn** sự kiện khỏi DB (không chỉ ẩn khi hiển thị). Muốn giữ dữ liệu thô để điều tra: `EMAIL_GUARD_OFF=1`.
+- Allowlist 4 chiến dịch khớp theo tiền tố; nếu tên thật lệch → chiến dịch bị ẩn nhầm.
+- `:has()` cần Chrome/Edge ≥105 (trình duyệt cũ chỉ mất phần mờ).
+- GitHub và GitLab là 2 repo độc lập, **không tự đồng bộ** — copy tay (xem `CLAUDE.md` mục 7A).
+- Jira test bằng React/Recharts cài từ npm (CDN bị chặn trong sandbox); bản `vendors/` thật có thể khác chút.
+
+### Open Issues
+- ❓ **Chưa giải thích được** đợt tải 25/09 15:08 của `duy.nvh` (15.226 lượt tải, 81 UA, đỉnh 416 lượt/phút, mail gửi 10:31). Người dùng khẳng định không ai chuyển tiếp. Các giả thuyết đã **bỏ**: máy lỗi lặp, chuyển tiếp, "1 UA = 1 người", ngưỡng thời gian có "thung lũng" (dữ liệu không có). Hiện chỉ **gộp** theo quy tắc bản phình, không giải thích nguyên nhân.
+- 2 lỗi console cũ ở Jira (`Invalid or unexpected token`, 1 request 404) — có từ trước, chưa tìm nguồn.
+- Cột phải Jira chỉ hiện task của người **vừa bấm** (bộ lọc trang vẫn gộp nhiều người).
+- Chưa kiểm tra dashboard Facebook bằng dữ liệu thật; chưa thử thẻ ghim Jira trong iframe portal thật (chừa sẵn 63px).
+- Footer dashboard Email ghi "5 phút" nhưng trang tải lại mỗi 15 phút; "Cập nhật lúc" là giờ máy người xem, không phải giờ bake.
+- Chiến dịch `pilot` đang bị ẩn (không có trong 4 chiến dịch).
+
+### Dependencies
+Copy tay sang GitLab · pipeline `sync_data` (≤1h) · anh Nam (xoay secret, cho biết có nhiều IP cổng ra không) · `mysql2` trên runner.
+
+### Next Actions
+1. **Xoay `INGEST_SECRET`** (ưu tiên).
+2. Copy 5 file ở bảng trên sang GitLab, chạy lại pipeline + `sync_data`, chụp dashboard đối chiếu (đủ 4 chiến dịch? số lượt mở/phiên hợp lý? duy.nvh còn bao nhiêu?).
+3. Kiểm `/healthz?debug=1` có `trackGuard`; quyết định giữ hay tắt chống bão.
+4. Thử bấm lọc nhiều mục trên cả 3 dashboard bằng dữ liệu thật; báo lỗi hiển thị nếu có.
+5. Nếu cần nhanh hơn nữa (<0,2s): đổi sang cập nhật từng phần thay vì vẽ lại cả trang.
+
+
 ## 🔧 14/09 — Fix đầy hộp thư khi gửi campaign lớn + loạt lỗi số liệu dashboard Email — nhánh `claude/ecstatic-hopper-mj1v2x`
 
 **Bối cảnh:** User gửi ~6000 mail/campaign, hòm thư 1.8GB đầy chỉ sau ~300 mail; dashboard báo
@@ -576,7 +644,7 @@ Jira/Portal, ảnh chụp cụ thể), đừng tự suy đoán rồi sửa ngay.
 **Sửa lại kết luận sai ở mục "⚠️ 14/07 chiều" bên dưới** — đã XÁC MINH THẬT (không đoán) bằng cách gọi
 thẳng route `/dbquery` từ trình duyệt (không qua tầng dashboard/mock):
 ```
-https://cm-dashboard-ingest.dev-saha.aws.shb.com.vn/dbquery?secret=500a13c1-4b4a-4da0-a4c7-c4200e51b66a&path=%2Frest%2Fv1%2Ffb_group_posts%3Fselect%3Dpost_id%2Ctitle%2Ccreated_time%26limit%3D50
+https://cm-dashboard-ingest.dev-saha.aws.shb.com.vn/dbquery?secret=<INGEST_SECRET đã che 05/10/2026>&path=%2Frest%2Fv1%2Ffb_group_posts%3Fselect%3Dpost_id%2Ctitle%2Ccreated_time%26limit%3D50
 ```
 → Kết quả trả về `[]` — **bảng `fb_group_posts` HOÀN TOÀN TRỐNG**, không hề có dữ liệu rác nào cả.
 
@@ -666,7 +734,7 @@ thật từ đầu.
 Library) **vẫn trỏ endpoint Vercel** (`https://shb-fb-dashboard.vercel.app/api/ingest`), y hệt lỗi đã
 gặp với `CampaignTracker.bas` trước đó (v4.9 quên đổi). Đã sửa xong (commit `92107c6`):
 - `INGEST` → `https://cm-dashboard.dev-saha.aws.shb.com.vn/api/ingest` (nội bộ).
-- `SECRET` → điền sẵn `500a13c1-4b4a-4da0-a4c7-c4200e51b66a` (trước để placeholder `PASTE_INGEST_SECRET_HERE`).
+- `SECRET` → điền sẵn `<INGEST_SECRET đã che 05/10/2026>` (trước để placeholder `PASTE_INGEST_SECRET_HERE`).
 - `@connect` đổi sang domain nội bộ (Tampermonkey chặn cross-origin nếu không khai báo đúng domain).
 Đã gửi file mới cho user cài lại vào Tampermonkey.
 
@@ -926,7 +994,7 @@ Sau khi gửi test, tab `#email` vẫn hiện "Chưa có dữ liệu".
 - MR `!16` đã merge vào `main` — code phía app đã ĐÚNG, đã verify bằng screenshot + đọc source thật.
 - **Việc DUY NHẤT còn thiếu**: Deployment `cm-dashboard-ingest` (namespace `aws-saha-ms-dev`) chưa
   có biến env `INGEST_SECRET` — đúng khớp tin nhắn Teams user đã gửi anh Nam Trần Hoàng thứ Sáu 17:32
-  (`INGEST_SECRET = 500a13c1-4b4a-4da0-a4c7-c4200e51b66a`), **chưa thấy anh Nam confirm đã làm xong**.
+  (`INGEST_SECRET = <INGEST_SECRET đã che 05/10/2026>`), **chưa thấy anh Nam confirm đã làm xong**.
 
 **Việc đầu tiên phiên sau:**
 1. Hỏi user đã có phản hồi anh Nam về việc thêm `INGEST_SECRET` vào Deployment `cm-dashboard-ingest`
