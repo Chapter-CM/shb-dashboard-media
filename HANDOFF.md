@@ -1,4 +1,73 @@
-# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 14/09/2026)
+# HANDOFF — SHB CM Dashboard (HỢP NHẤT Email + Facebook, cập nhật 06/10/2026)
+
+## 📌 06/10/2026 — Facebook: phân loại Dự án/Squad theo hashtag + tên · bảng Dự án nhiều chỉ số · Email: tab Group mail, gộp Squad, đổi thứ tự — nhánh `claude/zen-noether-4oyfu2`
+
+### Objective
+(1) Bảng **Dự án / Squad** của dashboard Facebook phân loại đúng bài theo `#hashtag` (trước đó ~140/145 bài rơi vào "Khác"). (2) Thêm tab **Group mail** vào bảng Phân khúc của dashboard Email. (3) Một số chỉnh giao diện theo yêu cầu.
+
+### Business Context
+- Nguồn bài Facebook Group đi qua scraper `tools/shb-content-library.*` → `api/fb-ingest.js` → bảng `fb_group_posts`. Hashtag dự án nằm **cuối bài** nên mất khi nội dung bị cắt.
+- **Nguyên nhân gốc đã xác nhận**: raw node Facebook có đủ nội dung (tới >2000 ký tự) nhưng cột `fb_group_posts.title` là `VARCHAR(500)` → MySQL cắt im lặng ~500 ký tự. Đã nâng lên `MEDIUMTEXT` (tự động khi pod ingest khởi động; kiểm tra qua `/healthz?debug=1` + header `x-ingest-secret`, mục `schemaCheck`). **Bài cũ chỉ có đủ nội dung sau khi gom lại** (bookmark "SHB Gom FB" → 🚀 Quét toàn bộ, chọn Tuỳ chỉnh bao trùm toàn bộ).
+- Macro Outlook (`ExpandEntry` trong `CampaignTracker.bas`) bung group mail thành từng thành viên → DB không biết người thuộc group nào → phải có danh sách thành viên group riêng.
+
+### Current Status
+Đã code + kiểm thử Chromium + push nhánh. Dashboard Facebook **đã deploy trên GitLab và chạy đúng** (ảnh 05/10: 17 dự án, Khác 140→60). Các thay đổi sau đó (cột chỉ số, phân trang, tooltip caption) và **toàn bộ phần Email mới** cần copy sang GitLab theo bảng.
+
+| File (repo này) | Copy sang GitLab `cm-dashboard` | Trạng thái |
+|---|---|---|
+| `api/fb-dashboard.js` | `api/fb-dashboard.js` | Gồm: hashtag + tên dự án, Squad 10, alias, tooltip caption, bảng nhiều cột + sort 2 chiều + phân trang 10/trang, đặt trên bảng nội dung — **copy bản mới nhất** |
+| `api/email-dashboard.js` | `api/email-dashboard.js` | Gồm: tab **Group mail**, gộp Squad "Transfomation Talk"+"Transformation Talk 4", bảng Squad/Dự án nằm dưới bảng chiến dịch — **chưa deploy bản này** |
+| `data/group_mail_members.csv` | `data/group_mail_members.csv` | **Đã upload lên GitLab** (692 KiB, 6.852 dòng, 65 group). **KHÔNG có trong GitHub** (chứa email nhân sự, đã `.gitignore`) |
+| `lib/db-client.js` | `lib/db-client.js` | Tự nâng `fb_group_posts.title` → `MEDIUMTEXT` — đã deploy, `schemaCheck` báo `ok` |
+| `db/schema.mysql.sql`, `db/migrate_07_group_title_text.sql` | cùng đường dẫn | `schema.mysql.sql` đã replace; `migrate_07` chỉ là dự phòng nếu tự nâng cột thất bại |
+| `tools/ExportGroupMembers.bas` | (chạy trong Outlook, không deploy) | Macro xuất thành viên group mail → CSV, chỉ đọc |
+| `tools/shb-content-library.console.js`, `.user.js`, `tools/shb-bookmarklet.txt` | (chạy trên trình duyệt, không deploy) | Thêm `SHBCL_findText()`/`SHBCL_rawNode()`; bookmarklet sinh lại, **không còn hardcode secret** (hỏi 1 lần, lưu localStorage) |
+Sau khi copy: chạy lại pipeline + job `sync_data` để bake lại trang.
+
+### Key Assumptions
+- `PROJECTS` / `PROJECT_NAMES` trong `api/fb-dashboard.js` theo bảng "Hashtag Social" (Google Sheet của người dùng). Thêm/sửa dự án = sửa 1 dòng ở đó.
+- Bài không có hashtag khớp và không nhắc tên dự án → "Khác" (hiện ~60 bài; các tag chung `#shb`, `#shbsaha`, `#shbhero`… cố ý để "Khác").
+- Danh sách thành viên group mail là ảnh chụp tại thời điểm xuất; **cũ dần** khi nhân sự đổi — chạy lại macro rồi upload đè CSV.
+- Group mail "Chi nhánh" hiện có 65 group (63 chi nhánh `cn…` + `shbho` + `TrungTamKinhDoanh`).
+
+### Key Decisions Made
+1. **Hashtag ưu tiên, tên dự án dự phòng**: so khớp nguyên tag (chịu `_`, dấu câu, không phân biệt hoa thường/dấu); không khớp thì tìm tên dự án nguyên từ trong nội dung. Từ chung ("rewards") KHÔNG dùng, chỉ "new rewards".
+2. **Transformation Talk** nhận `#transformationtalk`, `#SHBTransformationTalkTap[số]` (kể cả gõ nhầm "Tak").
+3. Bí danh theo bảng: `#squad6`→Squad 6; `#sq10`/`#squad10`→Squad 10 (dự án mới); `#sinhloinhantenh`→SLTD; `#heroappkhdn`→Sale Apps KHDN.
+4. Bảng Dự án (Facebook): cột Bài/Lượt xem/Xem TB-bài/Hiển thị/Tương tác/Cảm xúc/Bình luận/ER; bấm tiêu đề cột xếp, bấm lại đảo chiều; 10 dự án/trang; nằm **trên** bảng nội dung (menu đổi thứ tự theo). Không đưa cột "Người xem" (cộng nhiều bài sẽ đếm trùng).
+5. Tooltip rê chuột vào bài hiện caption (thoát HTML 2 lần + dấu `"`). Không tìm thấy bản cũ trong git → làm lại theo mô tả.
+6. **Group mail** (Email): chọn cách "bảng ánh xạ" (không sửa macro đang chạy thật). Mỗi người tính ở **mỗi** group họ thuộc (93 người thuộc ≥2 group) → tổng các dòng > tổng người nhận. Người không thuộc group nào không hiện. Lọc nhiều group (facet), giữ tab khi vẽ lại. Thiếu CSV → tab tự ẩn. Page +233 KB, vẽ lại 283 ms.
+7. Gộp Squad/Dự án Email qua `INITIATIVE_ALIASES` (hiển thị, không đổi DB); chuẩn hoá tên: bỏ dấu/số/gạch. Tên đích chọn đúng chính tả **"Transformation Talk"** (người dùng gõ "Transfomation").
+8. Email: bảng Squad/Dự án chuyển lên ngay dưới bảng Chiến dịch (trước phễu/thiết bị).
+
+### Stakeholders
+- **dung.ha4** (Change Management, SHB): chủ sản phẩm, tự copy file lên GitLab Web IDE.
+- Admin hạ tầng/DBA: nếu `schemaCheck` báo `ok:false` (thiếu quyền DDL) cần chạy 1 dòng trong `db/migrate_07_group_title_text.sql`.
+- Người gửi email chiến dịch (macro Outlook): không bị ảnh hưởng — macro gửi mail không đổi.
+
+### Risks & Constraints
+- GitHub và GitLab là **2 repo độc lập**, đồng bộ thủ công; không giả định push GitHub = lên GitLab.
+- **Rò rỉ secret**: `INGEST_SECRET` từng nằm trong lịch sử git (bookmarklet cũ), trong ảnh chụp màn hình và đã nhập vào console → **nên đổi secret** (đổi ở biến môi trường pod + token GitLab trigger nếu còn hardcode). Sau khi đổi: bookmark sẽ hỏi lại 1 lần.
+- `data/group_mail_members.csv` chứa email nhân sự: giữ ngoài GitHub, chỉ trên GitLab nội bộ.
+- Scraper chỉ gom được số bài Facebook cho phép tải mỗi lần; nếu log dừng ở số thấp thì cần gom nhiều lần.
+- Macro `ExportGroupMembers.bas` chạy lâu (65 group, ~6.800 dòng; Outlook "Not Responding" là bình thường); theo dõi qua `Desktop\group_mail_progress.txt`. Chưa kiểm chứng trên mọi máy (Outlook khác nhau).
+
+### Open Issues
+- Người dùng chưa xác nhận đã deploy bản `email-dashboard.js` mới (tab Group mail) và chưa gửi ảnh kết quả để đối chiếu số liệu.
+- ~60 bài vẫn ở "Khác": có thể bổ sung hashtag vào bảng "Hashtag Social" nếu muốn gom thêm (`#shbsaha`, `#shbhero`, `#congcubanhangso`, `#khoinhs`, `#chuyendoiso`, `#hrms`…).
+- Bảng "Video / Reel / Live" (Facebook) chưa có tooltip caption như bảng "Tất cả bài".
+
+### Dependencies
+- Pod ingest chạy `lib/db-client.js` mới (đã xác nhận `schemaCheck.ok`).
+- `data/group_mail_members.csv` phải nằm đúng `cm-dashboard/data/` trên GitLab thì job `sync_data` mới nhúng được vào `public/api/email.html`.
+
+### Next Actions
+1. Copy `api/email-dashboard.js` + `api/fb-dashboard.js` mới nhất sang GitLab → pipeline → `sync_data`.
+2. Kiểm tra dashboard Email có tab **Group mail**, dashboard Facebook có bảng Dự án nhiều cột + phân trang; gửi ảnh để đối chiếu.
+3. Đổi `INGEST_SECRET` (và bookmarklet nhập lại secret mới).
+4. Định kỳ chạy lại macro xuất group mail + upload đè CSV khi nhân sự đổi.
+
+---
 
 ## 📌 05/10/2026 — Lượt mở "ảo" Email · hiệu năng · bộ lọc facet · hiệu ứng thẻ ghim (Email/Facebook/Jira) — nhánh `claude/zen-noether-4oyfu2`
 

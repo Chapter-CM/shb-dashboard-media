@@ -1,5 +1,23 @@
 # Danh sách file cần copy sang `cm-dashboard` (nhánh `main`)
 
+> **Cập nhật 06/10/2026** — đợt mới nhất nằm ngay dưới. Chi tiết xem `HANDOFF.md` (mục 06/10/2026).
+
+## Đợt 06/10 — Dự án/Squad Facebook, Group mail Email
+
+| # | Nguồn (repo này) | Đích (`cm-dashboard`) | Lý do |
+|---|---|---|---|
+| 1 | `api/fb-dashboard.js` | `api/fb-dashboard.js` | Phân loại dự án theo hashtag + tên, bảng nhiều cột, sort 2 chiều, phân trang, tooltip caption |
+| 2 | `api/email-dashboard.js` | `api/email-dashboard.js` | Tab Group mail, gộp Squad Transformation Talk, đổi vị trí bảng Squad/Dự án |
+| 3 | `lib/db-client.js` | `lib/db-client.js` | Tự nâng `fb_group_posts.title` lên MEDIUMTEXT (đã deploy) |
+| 4 | `db/schema.mysql.sql`, `db/migrate_07_group_title_text.sql` | `db/...` | Schema mới / dự phòng |
+| 5 | *(file riêng, KHÔNG có trong GitHub)* `group_mail_members.csv` | `data/group_mail_members.csv` | Danh sách thành viên group mail (xuất bằng macro `tools/ExportGroupMembers.bas`) — đã upload |
+
+`tools/*` (macro Outlook, scraper, bookmarklet) chạy trên máy/trình duyệt, KHÔNG deploy lên GitLab.
+Sau khi copy: chạy lại pipeline + job `sync_data`.
+
+---
+
+
 > Cập nhật 20/07/2026 — **1 file mới** cần đồng bộ (fix Lượt tương tác hụt số),
 > nguồn nhánh `claude/luot-tuong-tac-sai-gym1kg`. Danh sách 14/07 giữ bên dưới
 > nếu chưa đồng bộ đợt đó.
