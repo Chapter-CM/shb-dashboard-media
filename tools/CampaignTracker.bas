@@ -1274,6 +1274,36 @@ End Sub
 
 
 ' ================================================================
+' PUBLIC: ShrinkNowAsk - rut gon cho campaign DO NGUOI DUNG CHON (nhap ten/slug)
+' ================================================================
+' Dung khi ShrinkNow chon NHAM campaign cu: xay ra khi Outlook/may bi tat DUNG
+' LUC dang gui (mat dien, treo...) nen campaign moi chua kip ghi vao Registry
+' ("LastCampaign" van la campaign truoc). Macro nay cho nhap thang ten campaign
+' (hoac slug), ghi de "LastCampaign" roi chay ShrinkNow nhu binh thuong
+' (rut gon Sent Items + bat lai watcher/timer neu Outbox con mail).
+' Ten/slug lay o dau: dong 'Slug (DB)' trong hop thoai xac nhan luc gui, hoac
+' ten chien dich dang hien tren dashboard Email (vd "Transformation Talk 5").
+Public Sub ShrinkNowAsk()
+    Dim cur As String
+    On Error Resume Next
+    cur = GetSetting("SHBTracker", "LastCampaign", "slug", "")
+    On Error GoTo 0
+
+    Dim inp As String
+    inp = Trim(InputBox("Nhap TEN hoac SLUG campaign can rut gon." & vbCrLf & vbCrLf & _
+            "Dang nho la: " & cur & vbCrLf & _
+            "(Lay o dong 'Slug (DB)' luc gui, hoac ten chien dich tren dashboard Email)", _
+            "SHB Tracker v" & VER))
+    If Len(inp) = 0 Then Exit Sub
+
+    Dim slug As String: slug = MakeSlug(inp)
+    SaveSetting "SHBTracker", "LastCampaign", "slug", slug
+    SaveSetting "SHBTracker", "LastCampaign", "target", CStr(OutboxPendingCount())
+    ShrinkNow
+End Sub
+
+
+' ================================================================
 ' PUBLIC: SendCampaign
 ' ================================================================
 ' Tim dong VAN BAN THUC SU dau tien trong noi dung mail, bo qua cac
